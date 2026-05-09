@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1800" viewBox="0 0 1200 1800" role="img" aria-label="messenger background">
+  <rect width="1200" height="1800" fill="#f8fbff"/>
+  <rect x="110" y="180" width="980" height="1440" rx="88" fill="#ffffff" stroke="#111318" stroke-width="28"/>
+  <rect x="450" y="180" width="300" height="58" rx="26" fill="#111318"/>
+  <circle cx="535" cy="206" r="10" fill="#1b284a"/>
+  <rect x="650" y="580" width="310" height="78" fill="#fff16a"/>
+  <rect x="510" y="705" width="450" height="142" fill="#fff16a"/>
+  <text x="600" y="1120" text-anchor="middle" font-family="Arial, sans-serif" font-size="220" font-weight="800" fill="#dbe8ff">01</text>
+</svg>

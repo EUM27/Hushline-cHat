@@ -1,0 +1,11 @@
+{
+  "name": "@hushline/shared",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  }
+}
