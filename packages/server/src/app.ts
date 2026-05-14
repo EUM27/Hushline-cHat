@@ -20,6 +20,7 @@ const modelConnectionSchema = z.object({
 });
 
 const advanceBodySchema = messageBodySchema.extend({
+  inputMode: z.enum(["chat", "action", "whisper"]).optional(),
   connections: z.record(z.string(), modelConnectionSchema).optional(),
 });
 
@@ -165,7 +166,10 @@ export function createApp(options: CreateAppOptions = {}) {
     const turnOptions = parsed.data.connections
       ? { connections: parsed.data.connections as Record<string, ModelConnection> }
       : {};
-    const turn = await runTurn(session, parsed.data.content, turnOptions);
+    const turn = await runTurn(session, parsed.data.content, {
+      ...turnOptions,
+      inputMode: parsed.data.inputMode ?? "chat",
+    });
     store.saveSession(turn.state);
 
     return context.json({
@@ -178,7 +182,91 @@ export function createApp(options: CreateAppOptions = {}) {
     });
   });
 
+  // 리롤: 마지막 턴(유저 메시지 + AI 응답들) 삭제 후 같은 입력으로 재생성
+  app.post("/api/sessions/:id/reroll", async (context) => {
+    const session = store.getSession(context.req.param("id"));
+    if (!session) {
+      return context.json({ error: "Session not found" }, 404);
+    }
+
+    const parsed = advanceBodySchema.safeParse(await context.req.json().catch(() => ({})));
+    const connections = parsed.success && parsed.data.connections
+      ? (parsed.data.connections as Record<string, ModelConnection>)
+      : undefined;
+    const inputMode = (parsed.success ? parsed.data.inputMode : undefined) ?? "chat";
+
+    // 마지막 유저 메시지 찾기
+    const lastUserIndex = findLastIndex(session.messages, (m) => m.role === "user");
+    if (lastUserIndex === -1) {
+      return context.json({ error: "No user message to reroll" }, 400);
+    }
+
+    const lastUserMessage = session.messages[lastUserIndex]!;
+    // 유저 메시지 이전 상태로 되돌리기
+    const rolledBackMessages = session.messages.slice(0, lastUserIndex);
+    const rolledBackSession: typeof session = {
+      ...session,
+      messages: rolledBackMessages,
+      scene: {
+        ...session.scene,
+        turnNumber: Math.max(0, session.scene.turnNumber - 1),
+      },
+    };
+
+    // 같은 입력으로 재생성
+    const turn = await runTurn(rolledBackSession, lastUserMessage.content, {
+      ...(connections ? { connections } : {}),
+      inputMode: lastUserMessage.inputMode ?? inputMode,
+    });
+    store.saveSession(turn.state);
+
+    return context.json({
+      session: turn.state,
+      turn: {
+        scene: turn.scene,
+        messages: turn.messages,
+        directorDecision: turn.directorDecision,
+      },
+    });
+  });
+
+  // 삭제: 마지막 턴(유저 메시지 + 그 이후 AI 응답들) 제거
+  app.post("/api/sessions/:id/undo", async (context) => {
+    const session = store.getSession(context.req.param("id"));
+    if (!session) {
+      return context.json({ error: "Session not found" }, 404);
+    }
+
+    // 마지막 유저 메시지 찾기
+    const lastUserIndex = findLastIndex(session.messages, (m) => m.role === "user");
+    if (lastUserIndex === -1) {
+      return context.json({ error: "No messages to undo" }, 400);
+    }
+
+    // 유저 메시지 이전 상태로 되돌리기
+    const rolledBackMessages = session.messages.slice(0, lastUserIndex);
+    const nextSession: typeof session = {
+      ...session,
+      messages: rolledBackMessages,
+      scene: {
+        ...session.scene,
+        turnNumber: Math.max(0, session.scene.turnNumber - 1),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    store.saveSession(nextSession);
+
+    return context.json({ session: nextSession });
+  });
+
   return app;
+}
+
+function findLastIndex<T>(array: T[], predicate: (item: T) => boolean): number {
+  for (let i = array.length - 1; i >= 0; i--) {
+    if (predicate(array[i]!)) return i;
+  }
+  return -1;
 }
 
 function createUserMessage(sessionId: string, content: string): ChatMessage {

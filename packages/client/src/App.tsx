@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { Send, Sparkles } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Send, Sparkles, MessageSquare, Zap, MessageCircle } from "lucide-react";
 import type {
   AdvisorDraft,
   AssetManifest,
   ChatMessage,
+  InputMode,
   ModelConnection,
   ModelOption,
   ModelProviderId,
@@ -29,15 +30,25 @@ interface ConnectionStatus {
   detail: string;
 }
 
+interface ConnectionSlot {
+  key: string;
+  title: string;
+  subtitle: string;
+}
+
 interface PersonaDraft {
   name: string;
 }
 
-type SetupStep = "persona" | "advisors";
+type SetupStep = "scenario" | "persona" | "advisors";
 
 const defaultInput = "";
 const connectionStorageKey = "hushline.modelConnections.v1";
-const secondAdvisorPool: Array<Pick<AdvisorDraft, "anonymousLabel" | "role" | "systemPrompt" | "mbti" | "ocean" | "relationshipTags">> = [
+const sessionStorageKey = "hushline.activeSessionId.v1";
+
+const secondAdvisorPool: Array<
+  Pick<AdvisorDraft, "anonymousLabel" | "role" | "systemPrompt" | "mbti" | "ocean" | "relationshipTags">
+> = [
   {
     anonymousLabel: "[익명 9]",
     role: "주변 단서를 조심스럽게 줍는 익명 관찰자",
@@ -89,12 +100,15 @@ export function App() {
   const [assets, setAssets] = useState<AssetManifest | null>(null);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>([]);
   const [session, setSession] = useState<SessionState | null>(null);
-  const [setupStep, setSetupStep] = useState<SetupStep>("persona");
+  const [setupStep, setSetupStep] = useState<SetupStep>("scenario");
+  const [scenarioList, setScenarioList] = useState<string[]>([]);
+  const [selectedScenario, setSelectedScenario] = useState<string>("");
   const [personaDraft, setPersonaDraft] = useState<PersonaDraft>({
     name: "",
   });
   const [advisorDrafts, setAdvisorDrafts] = useState<AdvisorDraft[]>(() => createAdvisorDrafts());
   const [input, setInput] = useState(defaultInput);
+  const [inputMode, setInputMode] = useState<InputMode>("chat");
   const [connections, setConnections] = useState<Record<string, ModelConnection>>(() =>
     loadConnections(),
   );
@@ -103,6 +117,7 @@ export function App() {
     Record<string, { loading: boolean; error: string | null }>
   >({});
   const [manualSaveAt, setManualSaveAt] = useState<string | null>(null);
+  const [activeSlotKey, setActiveSlotKey] = useState<string>("default");
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [revealedMessageCount, setRevealedMessageCount] = useState(0);
@@ -129,6 +144,35 @@ export function App() {
         setAssets(nextAssets);
         setProviderProfiles(providerPayload.profiles);
       }
+
+      // 시나리오 목록 로드
+      try {
+        const scenarioResponse = await fetch("/api/v2/scenarios");
+        if (scenarioResponse.ok && !cancelled) {
+          const scenarioPayload = (await scenarioResponse.json()) as { scenarios: string[] };
+          setScenarioList(scenarioPayload.scenarios);
+        }
+      } catch { /* 무시 */ }
+
+      // 저장된 세션 복원
+      const savedSessionId = localStorage.getItem(sessionStorageKey);
+      if (savedSessionId && !cancelled) {
+        try {
+          const sessionResponse = await fetch(`/api/v2/sessions/${savedSessionId}`);
+          if (sessionResponse.ok) {
+            const payload = (await sessionResponse.json()) as SessionResponse;
+            if (!cancelled) {
+              setSession(payload.session);
+              setRevealedMessageCount(payload.session.messages.length);
+            }
+          } else {
+            // 세션이 서버에 없으면 로컬 키 제거
+            localStorage.removeItem(sessionStorageKey);
+          }
+        } catch {
+          localStorage.removeItem(sessionStorageKey);
+        }
+      }
     }
 
     boot().catch((reason: unknown) => {
@@ -145,6 +189,12 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(connectionStorageKey, JSON.stringify(connections));
   }, [connections]);
+
+  useEffect(() => {
+    if (session) {
+      localStorage.setItem(sessionStorageKey, session.id);
+    }
+  }, [session?.id]);
 
   useEffect(() => {
     logRef.current?.scrollTo({
@@ -176,6 +226,17 @@ export function App() {
     return () => window.clearTimeout(timeout);
   }, [revealedMessageCount, session]);
 
+  const slots = useMemo<ConnectionSlot[]>(
+    () => buildConnectionSlots(session, advisorDrafts),
+    [session, advisorDrafts],
+  );
+
+  useEffect(() => {
+    if (!slots.some((slot) => slot.key === activeSlotKey)) {
+      setActiveSlotKey(slots[0]?.key ?? "default");
+    }
+  }, [slots, activeSlotKey]);
+
   const isSceneOpen = Boolean(session?.scene.hasEnteredScene);
   const backgroundUrl = findBackgroundUrl(assets, session?.scene.backgroundId);
   const visibleMessages = session?.messages.slice(0, revealedMessageCount) ?? [];
@@ -184,8 +245,7 @@ export function App() {
   const activeCharacter = session?.characters.find(
     (character) => character.id === session.scene.activeSpeakerId,
   );
-  const defaultConnection = connections.default ?? connections.evan;
-  const defaultConnectionStatus = getConnectionStatus(defaultConnection, providerProfiles);
+  const defaultConnectionStatus = getConnectionStatus(connections.default, providerProfiles);
   const latestSpeakerLabel = [...visibleMessages]
     .reverse()
     .find((message) => message.speakerLabel)?.speakerLabel;
@@ -198,6 +258,13 @@ export function App() {
         ? "scene-open"
         : "messenger-open"
     : `setup-open ${setupStep}-step`;
+
+  function handleInputChange(value: string) {
+    setInput(value);
+    // 텍스트 컨벤션 자동 감지 — UI 토글을 따라감
+    const detected = detectInputModeFromText(value);
+    if (detected !== null) setInputMode(detected);
+  }
 
   function handlePersonaContinue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -214,14 +281,14 @@ export function App() {
     setError(null);
 
     try {
-      const response = await fetch("/api/sessions", {
+      const response = await fetch("/api/v2/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          scenarioPackId: selectedScenario || "school-life-anomaly",
           persona: {
             name: personaDraft.name || undefined,
           },
-          advisors: advisorDrafts,
         }),
       });
 
@@ -252,10 +319,10 @@ export function App() {
     const nextVisibleCount = session.messages.length + 1;
 
     try {
-      const response = await fetch(`/api/sessions/${session.id}/advance`, {
+      const response = await fetch(`/api/v2/sessions/${session.id}/advance`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content, connections: activeConnections(connections) }),
+        body: JSON.stringify({ content, connections: activeConnections(connections), inputMode }),
       });
 
       if (!response.ok) {
@@ -273,10 +340,50 @@ export function App() {
     }
   }
 
+  async function handleReroll() {
+    if (!session || isSending) return;
+    setIsSending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v2/sessions/${session.id}/reroll`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ connections: activeConnections(connections), inputMode }),
+      });
+      if (!response.ok) throw new Error("리롤에 실패했습니다.");
+      const payload = (await response.json()) as AdvanceResponse;
+      setSession(payload.session);
+      setRevealedMessageCount(payload.session.messages.length);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "리롤 실패");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  async function handleUndo() {
+    if (!session || isSending) return;
+    setIsSending(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v2/sessions/${session.id}/undo`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("삭제에 실패했습니다.");
+      const payload = (await response.json()) as { session: SessionState };
+      setSession(payload.session);
+      setRevealedMessageCount(payload.session.messages.length);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "삭제 실패");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
   return (
     <main
       className={`app-shell ${shellMode}`}
-      style={{ "--scene-bg": `url("${backgroundUrl}")` } as React.CSSProperties}
+      style={{ "--scene-bg": backgroundUrl } as React.CSSProperties}
     >
       <div className="scene-wash" />
       <section className="stage-layout" aria-label="Hushline Chat">
@@ -300,7 +407,14 @@ export function App() {
             </header>
             <div className="invitation-log" ref={logRef}>
               {visibleMessages.map((message) => (
-                <MessageBubble key={message.id} message={message} session={session} />
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  session={session}
+                  slots={slots}
+                  connections={connections}
+                  providerProfiles={providerProfiles}
+                />
               ))}
               {messageRevealInProgress ? (
                 <div className="typing-pulse" aria-hidden="true">
@@ -312,9 +426,10 @@ export function App() {
             </div>
             {!messageRevealInProgress ? (
               <form className="composer invitation-composer" onSubmit={handleSubmit}>
+                <InputModeToggle mode={inputMode} onChange={setInputMode} />
                 <input
                   value={input}
-                  onChange={(event) => setInput(event.target.value)}
+                  onChange={(event) => handleInputChange(event.target.value)}
                   placeholder={session.scenario.interventionPrompt}
                   aria-label="메시지"
                 />
@@ -341,17 +456,52 @@ export function App() {
 
             <div className="message-log" ref={logRef}>
               {visibleMessages.map((message) => (
-                <MessageBubble key={message.id} message={message} session={session} />
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  session={session}
+                  slots={slots}
+                  connections={connections}
+                  providerProfiles={providerProfiles}
+                />
               ))}
             </div>
 
             {error ? <p className="error-line">{error}</p> : null}
 
+            <div className="turn-actions">
+              <button
+                type="button"
+                className="turn-action-btn"
+                disabled={isSending || messageRevealInProgress || !hasUserMessages(session)}
+                onClick={handleUndo}
+                title="마지막 턴 삭제"
+              >
+                ↩ 삭제
+              </button>
+              <button
+                type="button"
+                className="turn-action-btn"
+                disabled={isSending || messageRevealInProgress || !hasUserMessages(session)}
+                onClick={handleReroll}
+                title="마지막 응답 리롤"
+              >
+                🎲 리롤
+              </button>
+            </div>
+
             <form className="composer" onSubmit={handleSubmit}>
+              <InputModeToggle mode={inputMode} onChange={setInputMode} />
               <input
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder={session.scenario.interventionPrompt}
+                onChange={(event) => handleInputChange(event.target.value)}
+                placeholder={
+                  inputMode === "action"
+                    ? "행동을 입력하세요 (*별표* 또는 버튼)"
+                    : inputMode === "whisper"
+                      ? "혼잣말... ((괄호)로도 입력 가능)"
+                      : session.scenario.interventionPrompt
+                }
                 aria-label="메시지"
                 disabled={messageRevealInProgress}
               />
@@ -363,6 +513,37 @@ export function App() {
                 <Send size={20} />
               </button>
             </form>
+          </section>
+        ) : setupStep === "scenario" ? (
+          <section className="persona-panel" aria-label="시나리오 선택">
+            <div className="persona-copy">
+              <Sparkles size={18} />
+              <span>시나리오 선택</span>
+            </div>
+            <div className="scenario-list">
+              {scenarioList.length === 0 ? (
+                <p className="scenario-empty">시나리오 팩을 불러오는 중...</p>
+              ) : (
+                scenarioList.map((packId) => (
+                  <button
+                    key={packId}
+                    type="button"
+                    className={`scenario-card-btn ${selectedScenario === packId ? "selected" : ""}`}
+                    onClick={() => setSelectedScenario(packId)}
+                  >
+                    <strong>{packId.replace(/-/g, " ")}</strong>
+                  </button>
+                ))
+              )}
+            </div>
+            {error ? <p className="error-line setup-error">{error}</p> : null}
+            <button
+              type="button"
+              disabled={!selectedScenario}
+              onClick={() => setSetupStep("persona")}
+            >
+              다음
+            </button>
           </section>
         ) : setupStep === "persona" ? (
           <section className="persona-panel" aria-label="페르소나 생성">
@@ -419,11 +600,13 @@ export function App() {
 
         <ConnectionPanel
           profiles={providerProfiles}
+          slots={slots}
+          activeSlotKey={activeSlotKey}
+          onSelectSlot={setActiveSlotKey}
           connections={connections}
           modelOptions={modelOptions}
           modelLoadState={modelLoadState}
           saveStatus={manualSaveAt ? `저장됨 ${manualSaveAt}` : "자동 저장됨"}
-          connectionStatus={defaultConnectionStatus}
           onChange={(nextConnections) => {
             setManualSaveAt(null);
             setConnections(nextConnections);
@@ -431,6 +614,8 @@ export function App() {
           onLoadModels={loadModels}
           onSave={saveConnections}
         />
+
+        {session && <DevPanel session={session} />}
       </section>
     </main>
   );
@@ -484,65 +669,292 @@ export function App() {
   }
 }
 
+function DevPanel({ session }: { session: SessionState }) {
+  const [open, setOpen] = useState(false);
+
+  // v2 세션이면 worldState/handouts가 있음
+  const worldState = (session as any).worldState;
+  const handouts = (session as any).handouts;
+  const scene = session.scene;
+
+  return (
+    <aside className={`dev-panel ${open ? "open" : ""}`}>
+      <button
+        type="button"
+        className="dev-panel-toggle"
+        onClick={() => setOpen(!open)}
+        title="개발자 패널"
+      >
+        {open ? "✕" : "🔧"}
+      </button>
+      {open && (
+        <div className="dev-panel-content">
+          <h3>🔧 Dev Panel</h3>
+
+          <section className="dev-section">
+            <h4>World State</h4>
+            <div className="dev-grid">
+              <span>Tension</span><strong>{worldState?.tension ?? scene?.tension ?? "?"}</strong>
+              <span>Danger</span><strong>{worldState?.danger ?? scene?.danger ?? "?"}</strong>
+              <span>Turn</span><strong>{worldState?.turnNumber ?? scene?.turnNumber ?? "?"}</strong>
+              <span>Location</span><strong>{worldState?.locationId ?? scene?.locationId ?? "?"}</strong>
+              <span>Scene Mode</span><strong>{worldState?.sceneMode ?? "?"}</strong>
+            </div>
+          </section>
+
+          {worldState?.mainObjective && (
+            <section className="dev-section">
+              <h4>Main Objective</h4>
+              <p className="dev-objective">{worldState.mainObjective.description} [{worldState.mainObjective.status}]</p>
+            </section>
+          )}
+
+          {worldState?.subObjectives?.length > 0 && (
+            <section className="dev-section">
+              <h4>Sub-Objectives</h4>
+              {worldState.subObjectives.map((obj: any) => (
+                <p key={obj.id} className="dev-sub-obj">
+                  <span className={`dev-status ${obj.status}`}>{obj.status}</span> {obj.description}
+                </p>
+              ))}
+            </section>
+          )}
+
+          {handouts && (
+            <section className="dev-section">
+              <h4>Handouts</h4>
+              {Object.entries(handouts).map(([charId, handout]: [string, any]) => (
+                <details key={charId} className="dev-handout">
+                  <summary>{charId}</summary>
+                  <div className="dev-handout-content">
+                    <p><strong>비밀:</strong> {handout.secret}</p>
+                    <p><strong>욕망:</strong> {handout.desire}</p>
+                    <p><strong>목표:</strong> {handout.objective}</p>
+                    <p><strong>유저 관계:</strong> {handout.relationshipToUser}</p>
+                    <p><strong>Autonomy:</strong> {handout.autonomy}</p>
+                    {handout.knownFacts?.length > 0 && (
+                      <p><strong>알고 있는 사실:</strong> {handout.knownFacts.join(", ")}</p>
+                    )}
+                  </div>
+                </details>
+              ))}
+            </section>
+          )}
+
+          {worldState?.relationshipGraph?.length > 0 && (
+            <section className="dev-section">
+              <h4>Relationship Graph</h4>
+              {worldState.relationshipGraph.map((edge: any, i: number) => (
+                <p key={i} className="dev-edge">
+                  {edge.sourceId} → {edge.targetId}: <strong>{edge.descriptor}</strong> ({edge.intensity}/10)
+                </p>
+              ))}
+            </section>
+          )}
+
+          {worldState?.characterStates && (
+            <section className="dev-section">
+              <h4>Character States</h4>
+              {Object.entries(worldState.characterStates).map(([id, state]: [string, any]) => (
+                <div key={id} className="dev-char-state">
+                  <strong>{id}</strong>
+                  <span>목표: {state.currentObjective}</span>
+                  <span>유저관계: {state.relationshipToUser}</span>
+                  <span>마지막 발화: T{state.lastSpokeTurn}</span>
+                  <span>Autonomy: {state.autonomy}</span>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {worldState?.recentEvents?.length > 0 && (
+            <section className="dev-section">
+              <h4>Recent Events</h4>
+              {worldState.recentEvents.slice(-5).map((evt: any) => (
+                <p key={evt.id} className="dev-event">T{evt.turnNumber}: {evt.description}</p>
+              ))}
+            </section>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function ModelSearchPicker({
+  value,
+  options,
+  loading,
+  onSelect,
+  onLoadModels,
+}: {
+  value: string;
+  options: ModelOption[];
+  loading: boolean;
+  onSelect: (modelId: string) => void;
+  onLoadModels: () => void;
+}) {
+  const [query, setQuery] = useState(value);
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  const filtered = options.filter(
+    (m) =>
+      m.id.toLowerCase().includes(query.toLowerCase()) ||
+      m.label.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  function handleSelect(modelId: string) {
+    setQuery(modelId);
+    onSelect(modelId);
+    setOpen(false);
+  }
+
+  function handleInputChange(v: string) {
+    setQuery(v);
+    setOpen(true);
+    // 직접 입력도 모델 ID로 반영
+    onSelect(v);
+  }
+
+  return (
+    <div className="model-search-picker">
+      <div className="model-picker">
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="모델 ID 검색 또는 직접 입력"
+        />
+        <button type="button" onClick={onLoadModels} disabled={loading}>
+          {loading ? "로드 중" : "목록"}
+        </button>
+      </div>
+      {open && filtered.length > 0 && (
+        <ul className="model-dropdown">
+          {filtered.slice(0, 30).map((m) => (
+            <li
+              key={m.id}
+              onMouseDown={() => handleSelect(m.id)}
+              className={m.id === value ? "selected" : ""}
+            >
+              <span className="model-dropdown-id">{m.id}</span>
+              {m.label !== m.id && <span className="model-dropdown-label">{m.label}</span>}
+            </li>
+          ))}
+          {filtered.length > 30 && (
+            <li className="model-dropdown-more">+{filtered.length - 30}개 더...</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ConnectionPanel({
   profiles,
+  slots,
+  activeSlotKey,
+  onSelectSlot,
   connections,
   modelOptions,
   modelLoadState,
   saveStatus,
-  connectionStatus,
   onChange,
   onLoadModels,
   onSave,
 }: {
   profiles: ProviderProfile[];
+  slots: ConnectionSlot[];
+  activeSlotKey: string;
+  onSelectSlot: (key: string) => void;
   connections: Record<string, ModelConnection>;
   modelOptions: Record<string, ModelOption[]>;
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
   saveStatus: string;
-  connectionStatus: ConnectionStatus;
   onChange: (connections: Record<string, ModelConnection>) => void;
   onLoadModels: (providerId: ModelProviderId, apiKey?: string) => void;
   onSave: () => void;
 }) {
-  const activeConnection = connections.default ?? connections.evan ?? {
-    providerId: profiles[0]?.id ?? ("nanogpt" as ModelProviderId),
-    apiKey: "",
-    model: "",
-  };
-  const selectedProfile = profiles.find((profile) => profile.id === activeConnection.providerId);
-  const selectedModels = modelOptions[activeConnection.providerId] ?? [];
-  const modelChoices = activeConnection.model
-    ? ensureSelectedModel(selectedModels, activeConnection.model)
-    : selectedModels;
-  const currentModelLoadState = modelLoadState[activeConnection.providerId] ?? {
+  const fallbackProviderId = profiles[0]?.id ?? ("nanogpt" as ModelProviderId);
+  const slot = slots.find((candidate) => candidate.key === activeSlotKey) ?? slots[0];
+  const slotKey = slot?.key ?? "default";
+  const currentConnection =
+    connections[slotKey] ??
+    ({
+      providerId: fallbackProviderId,
+      apiKey: "",
+      model: "",
+    } as ModelConnection);
+  const selectedProfile = profiles.find((profile) => profile.id === currentConnection.providerId);
+  const providerModels = modelOptions[currentConnection.providerId] ?? [];
+  const modelChoices = currentConnection.model
+    ? ensureSelectedModel(providerModels, currentConnection.model)
+    : providerModels;
+  const currentModelLoadState = modelLoadState[currentConnection.providerId] ?? {
     loading: false,
     error: null,
   };
+  const slotStatus = getConnectionStatus(connections[slotKey], profiles);
 
-  function updateDefaultConnection(next: Partial<ModelConnection>) {
-    const providerId = next.providerId ?? activeConnection.providerId;
-    const { evan: _legacyEvan, ...restConnections } = connections;
+  function updateSlotConnection(next: Partial<ModelConnection>) {
+    const providerId = next.providerId ?? currentConnection.providerId;
+    const nextModel = next.providerId && next.model === undefined ? "" : next.model ?? currentConnection.model;
     onChange({
-      ...restConnections,
-      default: {
-        ...activeConnection,
+      ...connections,
+      [slotKey]: {
+        ...currentConnection,
         ...next,
         providerId,
-        model: next.providerId && !next.model ? "" : next.model ?? activeConnection.model,
+        model: nextModel,
       },
     });
   }
 
   return (
     <aside className="connection-panel" aria-label="모델 연결">
-      <strong>기본 연결 어댑터</strong>
+      <div className="connection-header">
+        <strong>모델 연결</strong>
+        <span className="connection-hint">
+          {slotKey === "default"
+            ? "슬롯별 키가 없으면 이 연결이 대신 쓰입니다."
+            : "이 캐릭터가 말할 차례일 때 이 연결이 쓰입니다."}
+        </span>
+      </div>
+
+      <div className="slot-tabs" role="tablist">
+        {slots.map((candidate) => {
+          const tabStatus = getConnectionStatus(connections[candidate.key], profiles);
+          const isActive = candidate.key === slotKey;
+          return (
+            <button
+              type="button"
+              key={candidate.key}
+              role="tab"
+              aria-selected={isActive}
+              className={`slot-tab ${isActive ? "active" : ""} ${tabStatus.tone}`}
+              onClick={() => onSelectSlot(candidate.key)}
+            >
+              <span className="slot-tab-title">{candidate.title}</span>
+              <span className="slot-tab-subtitle">{candidate.subtitle}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <label>
         provider
         <select
-          value={activeConnection.providerId}
+          value={currentConnection.providerId}
           onChange={(event) =>
-            updateDefaultConnection({ providerId: event.target.value as ModelProviderId })
+            updateSlotConnection({ providerId: event.target.value as ModelProviderId })
           }
         >
           {profiles.map((profile) => (
@@ -554,26 +966,13 @@ function ConnectionPanel({
       </label>
       <label>
         model
-        <div className="model-picker">
-          <select
-            value={activeConnection.model}
-            onChange={(event) => updateDefaultConnection({ model: event.target.value })}
-          >
-            <option value="">모델 선택</option>
-            {modelChoices.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => onLoadModels(activeConnection.providerId, activeConnection.apiKey)}
-            disabled={currentModelLoadState.loading}
-          >
-            {currentModelLoadState.loading ? "로드 중" : "목록"}
-          </button>
-        </div>
+        <ModelSearchPicker
+          value={currentConnection.model}
+          options={modelChoices}
+          loading={currentModelLoadState.loading}
+          onSelect={(model) => updateSlotConnection({ model })}
+          onLoadModels={() => onLoadModels(currentConnection.providerId, currentConnection.apiKey)}
+        />
       </label>
       <label className="api-key-field">
         API key
@@ -581,8 +980,8 @@ function ConnectionPanel({
           type="password"
           autoComplete="off"
           spellCheck={false}
-          value={activeConnection.apiKey}
-          onChange={(event) => updateDefaultConnection({ apiKey: event.target.value })}
+          value={currentConnection.apiKey}
+          onChange={(event) => updateSlotConnection({ apiKey: event.target.value })}
           placeholder="브라우저에 자동 저장"
         />
       </label>
@@ -592,9 +991,9 @@ function ConnectionPanel({
         </button>
         <span>{saveStatus}</span>
       </div>
-      <div className={`connection-status ${connectionStatus.tone}`}>
-        <strong>{connectionStatus.label}</strong>
-        <span>{connectionStatus.detail}</span>
+      <div className={`connection-status ${slotStatus.tone}`}>
+        <strong>{slotStatus.label}</strong>
+        <span>{slotStatus.detail}</span>
       </div>
       <p>{selectedProfile ? `${selectedProfile.baseUrl}${selectedProfile.endpointPath}` : "dry-run"}</p>
       {currentModelLoadState.error ? (
@@ -612,17 +1011,33 @@ function ensureSelectedModel(models: ModelOption[], selectedModelId: string): Mo
   return [{ id: selectedModelId, label: `${selectedModelId} (저장됨)` }, ...models];
 }
 
-function MessageBubble({ message, session }: { message: ChatMessage; session: SessionState }) {
+function MessageBubble({
+  message,
+  session,
+  slots,
+  connections,
+  providerProfiles,
+}: {
+  message: ChatMessage;
+  session: SessionState;
+  slots: ConnectionSlot[];
+  connections: Record<string, ModelConnection>;
+  providerProfiles: ProviderProfile[];
+}) {
   const character = message.characterId
     ? session.characters.find((candidate) => candidate.id === message.characterId)
     : null;
   const speakerLabel = message.speakerLabel ?? character?.anonymousLabel ?? character?.name;
+  const sourceBadge = getSourceBadge(message, character?.id, slots, connections, providerProfiles);
 
   return (
-    <article className={`message-bubble ${message.role} ${message.speakerKind ?? ""}`}>
+    <article className={`message-bubble ${message.role} ${message.speakerKind ?? ""} ${message.inputMode ? `mode-${message.inputMode}` : ""}`}>
       {speakerLabel ? (
         <div className="bubble-title">
           <strong>{speakerLabel}</strong>
+          {sourceBadge ? (
+            <span className={`source-badge ${sourceBadge.tone}`}>{sourceBadge.label}</span>
+          ) : null}
         </div>
       ) : null}
       <p>{message.content}</p>
@@ -631,6 +1046,33 @@ function MessageBubble({ message, session }: { message: ChatMessage; session: Se
       ) : null}
     </article>
   );
+}
+
+function getSourceBadge(
+  message: ChatMessage,
+  characterId: string | undefined,
+  slots: ConnectionSlot[],
+  connections: Record<string, ModelConnection>,
+  providerProfiles: ProviderProfile[],
+): { tone: "api" | "dry-run"; label: string } | null {
+  if (message.role !== "character" || !message.generationSource) {
+    return null;
+  }
+
+  if (message.generationSource === "dry-run") {
+    return { tone: "dry-run", label: "dry-run" };
+  }
+
+  const slotKey = characterId && slots.some((slot) => slot.key === characterId) ? characterId : "default";
+  const connection = connections[slotKey] ?? connections.default;
+  if (!connection) {
+    return { tone: "api", label: "API" };
+  }
+
+  const providerLabel =
+    providerProfiles.find((profile) => profile.id === connection.providerId)?.label ??
+    connection.providerId;
+  return { tone: "api", label: `${providerLabel}/${connection.model}` };
 }
 
 function getConnectionStatus(
@@ -679,6 +1121,42 @@ function getConnectionStatus(
   };
 }
 
+function buildConnectionSlots(
+  session: SessionState | null,
+  drafts: AdvisorDraft[],
+): ConnectionSlot[] {
+  const characterSlots = session
+    ? session.characters.map<ConnectionSlot>((character) => ({
+        key: character.id,
+        title: character.anonymousLabel ?? character.name,
+        subtitle: character.role,
+      }))
+    : drafts.map<ConnectionSlot>((draft) => ({
+        key: draft.id,
+        title: draft.anonymousLabel,
+        subtitle: draft.role,
+      }));
+
+  return [
+    {
+      key: "default",
+      title: "기본 연결",
+      subtitle: "전체 폴백",
+    },
+    {
+      key: "director",
+      title: "Director",
+      subtitle: "세계의 의지 (JSON 출력)",
+    },
+    {
+      key: "narrator",
+      title: "나레이터",
+      subtitle: "장면 묘사 전용",
+    },
+    ...characterSlots,
+  ];
+}
+
 function createAdvisorDrafts(): AdvisorDraft[] {
   const secondary = secondAdvisorPool[Math.floor(Math.random() * secondAdvisorPool.length)];
   if (!secondary) {
@@ -712,10 +1190,9 @@ function createAdvisorDrafts(): AdvisorDraft[] {
 }
 
 function findBackgroundUrl(assets: AssetManifest | null, backgroundId?: string): string {
-  return (
-    assets?.backgrounds.find((background) => background.id === backgroundId)?.url ??
-    "/assets/backgrounds/messenger-blank.svg"
-  );
+  if (!backgroundId) return "none";
+  const found = assets?.backgrounds.find((background) => background.id === backgroundId)?.url;
+  return found ? `url("${found}")` : "none";
 }
 
 function loadConnections(): Record<string, ModelConnection> {
@@ -724,7 +1201,13 @@ function loadConnections(): Record<string, ModelConnection> {
     if (!raw) {
       return {};
     }
-    return JSON.parse(raw) as Record<string, ModelConnection>;
+    const parsed = JSON.parse(raw) as Record<string, ModelConnection>;
+    // Legacy key migration: `evan` → `default`
+    if (parsed.evan && !parsed.default) {
+      const { evan, ...rest } = parsed;
+      return { default: evan, ...rest };
+    }
+    return parsed;
   } catch {
     return {};
   }
@@ -739,7 +1222,7 @@ function activeConnections(
         connection.providerId && connection.apiKey.trim() && connection.model.trim(),
     ),
   );
-  const primaryConnection = active.default ?? active.evan ?? Object.values(active)[0];
+  const primaryConnection = active.default ?? Object.values(active)[0];
 
   if (primaryConnection && !active.default) {
     return {
@@ -749,4 +1232,92 @@ function activeConnections(
   }
 
   return active;
+}
+
+// ---------------------------------------------------------------------------
+// Input mode toggle component
+// ---------------------------------------------------------------------------
+
+const INPUT_MODE_CONFIG: Array<{
+  mode: InputMode;
+  label: string;
+  icon: React.ReactNode;
+  title: string;
+}> = [
+  {
+    mode: "chat",
+    label: "채팅",
+    icon: <MessageSquare size={14} />,
+    title: "채팅 — 단톡방에 메시지를 보냅니다",
+  },
+  {
+    mode: "action",
+    label: "행동",
+    icon: <Zap size={14} />,
+    title: "행동 — 장면 안에서 실제 행동을 취합니다 (*별표* 로도 입력 가능)",
+  },
+  {
+    mode: "whisper",
+    label: "혼잣말",
+    icon: <MessageCircle size={14} />,
+    title: "혼잣말 — 내면의 독백, 다른 참가자에게 들리지 않습니다 ((괄호) 로도 입력 가능)",
+  },
+];
+
+function InputModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: InputMode;
+  onChange: (mode: InputMode) => void;
+}) {
+  return (
+    <div className="input-mode-toggle" role="group" aria-label="입력 모드">
+      {INPUT_MODE_CONFIG.map((config) => (
+        <button
+          key={config.mode}
+          type="button"
+          className={`input-mode-btn ${config.mode} ${mode === config.mode ? "active" : ""}`}
+          title={config.title}
+          aria-pressed={mode === config.mode}
+          onClick={() => onChange(config.mode)}
+        >
+          {config.icon}
+          <span>{config.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Text convention detector (client-side mirror of server detectInputMode)
+// Returns null if no convention is detected (don't override manual toggle)
+// ---------------------------------------------------------------------------
+
+const CLIENT_ACTION_PATTERNS = [
+  /^\*[^*]+\*$/, // *행동*
+  /^\/\//, // //행동
+  /^\/me\s/i, // /me 행동
+];
+
+const CLIENT_WHISPER_PATTERNS = [
+  /^\(+[^)]+\)+$/, // (혼잣말) 또는 ((혼잣말))
+  /^\[혼잣말\]/,
+  /^\[독백\]/,
+  /^\[내면\]/,
+];
+
+function detectInputModeFromText(text: string): InputMode | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (CLIENT_ACTION_PATTERNS.some((p) => p.test(trimmed))) return "action";
+  if (CLIENT_WHISPER_PATTERNS.some((p) => p.test(trimmed))) return "whisper";
+  // 일반 텍스트는 null — 현재 토글 상태 유지
+  return null;
+}
+
+function hasUserMessages(session: SessionState | null): boolean {
+  if (!session) return false;
+  return session.messages.some((m) => m.role === "user" && !m.isOpeningBeat);
 }

@@ -1,5 +1,14 @@
 export type ProviderKind = "dry-run" | "openai-compatible" | "gemini";
 
+/**
+ * How the user's input should be interpreted by the engine.
+ *
+ * - `chat`    : typed into the group chat — other characters read it as a message
+ * - `action`  : physical action in the scene (*별표* or ⚡ button)
+ * - `whisper` : inner monologue / aside — not visible to other characters
+ */
+export type InputMode = "chat" | "action" | "whisper";
+
 export type ModelProviderId = "nanogpt" | "openrouter";
 
 export type SpeakerKind =
@@ -117,6 +126,8 @@ export interface ChatMessage {
   expression?: ExpressionId;
   generationSource?: "api" | "dry-run";
   fallbackReason?: string;
+  /** How the user intended this message to be read by the engine. */
+  inputMode?: InputMode;
 }
 
 export interface DirectorDecision {
@@ -197,3 +208,6 @@ export interface AssetManifest {
     fullBody: boolean;
   }>;
 }
+
+// ── Engine v2 types ──
+export * from "./engine-v2.js";

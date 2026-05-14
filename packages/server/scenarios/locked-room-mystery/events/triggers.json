@@ -1,0 +1,32 @@
+[
+  {
+    "id": "alibi-conflict",
+    "condition": "turnNumber >= 3 AND 유저가 2명 이상의 증언을 확보함",
+    "description": "두 용의자의 알리바이가 서로 모순됨이 드러난다. 한 명이 거짓말을 하고 있다.",
+    "oneShot": true
+  },
+  {
+    "id": "power-outage",
+    "condition": "tension >= 6",
+    "description": "폭설로 인해 저택 전체가 순간 정전된다. 어둠 속에서 누군가 움직이는 소리.",
+    "oneShot": true
+  },
+  {
+    "id": "evidence-tampering",
+    "condition": "turnNumber >= 6 AND danger >= 4",
+    "description": "누군가 현장의 증거를 훼손하려 한 흔적이 발견된다.",
+    "oneShot": true
+  },
+  {
+    "id": "confession-pressure",
+    "condition": "tension >= 8",
+    "description": "용의자 중 한 명이 극도의 압박에 못 이겨 부분적 진실을 토로한다 (완전한 자백은 아님).",
+    "oneShot": true
+  },
+  {
+    "id": "new-body-discovery",
+    "condition": "turnNumber >= 10 AND 유저가 특정 장소를 아직 조사하지 않음",
+    "description": "저택 어딘가에서 추가 단서(피 묻은 장갑, 숨겨진 메모 등)가 우연히 발견된다.",
+    "oneShot": true
+  }
+]

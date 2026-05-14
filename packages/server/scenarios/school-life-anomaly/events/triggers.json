@@ -1,0 +1,26 @@
+[
+  {
+    "id": "blackout",
+    "condition": "danger >= 5 AND turnNumber >= 3",
+    "description": "복도 전체 정전. 형광등이 하나씩 꺼지며 완전한 암흑이 내려앉는다.",
+    "oneShot": true
+  },
+  {
+    "id": "ceiling-sound",
+    "condition": "tension >= 6",
+    "description": "천장에서 무언가 기어가는 소리. 축축한 것이 떨어질 듯 말 듯.",
+    "oneShot": false
+  },
+  {
+    "id": "room-master-warning",
+    "condition": "유저가 규칙을 어김 (고개 들기, 뒤돌아보기 등)",
+    "description": "방장이 경고 공지를 발송한다. 30초 카운트다운 시작.",
+    "oneShot": false
+  },
+  {
+    "id": "anonymous-disappear",
+    "condition": "turnNumber >= 8 AND danger >= 4",
+    "description": "채팅방 인원 숫자가 1 줄어든다. 누군가 사라졌다.",
+    "oneShot": true
+  }
+]

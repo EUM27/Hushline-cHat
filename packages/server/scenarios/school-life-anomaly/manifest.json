@@ -1,0 +1,9 @@
+{
+  "id": "school-life-anomaly-chat",
+  "title": "학교생활",
+  "subtitle": "이상공간 단톡방",
+  "genre": "horror",
+  "version": "1.0.0",
+  "engineVersion": ">=2.0.0",
+  "uiMode": "messenger-first"
+}

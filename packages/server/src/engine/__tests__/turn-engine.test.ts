@@ -202,16 +202,19 @@ describe("Hushline dry-run turn engine", () => {
       );
 
       expect(result.messages.at(-1)?.characterId).toBe("advisor-2");
-      const requestBody = requestBodies[0];
-      expect(requestBody?.messages[0]?.role).toBe("system");
-      expect(requestBody?.messages[0]?.content).toContain("너는 [익명 9]로 보이는 조언자다");
-      expect(requestBody?.messages[0]?.content).toContain("이전 맥락 없음");
-      expect(requestBody?.messages).toContainEqual({
+      // requestBodies[0] may be narrator (default connection), character is [1] or last
+      const characterRequest = requestBodies.find((body) =>
+        body.messages[0]?.content?.includes("너는 [익명 9]로 보이는 조언자다"),
+      );
+      expect(characterRequest).toBeTruthy();
+      expect(characterRequest?.messages[0]?.role).toBe("system");
+      expect(characterRequest?.messages[0]?.content).toContain("이전 맥락 없음");
+      expect(characterRequest?.messages).toContainEqual({
         role: "user",
         content: "[익명 1]: 가만히 있어. 먼저 확인한다.",
       });
       expect(
-        requestBody?.messages.some(
+        characterRequest?.messages.some(
           (message) =>
             message.role === "assistant" && message.content.includes("가만히 있어"),
         ),

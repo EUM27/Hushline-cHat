@@ -1,0 +1,154 @@
+// ──────────────────────────────────────────────
+// Engine v2 — Narrator Agent
+// ──────────────────────────────────────────────
+// Produces 1-2 sentences of sensory/spatial narration.
+// No dialogue, no character lines.
+// ──────────────────────────────────────────────
+
+import type {
+  InputMode,
+  ModelConnection,
+  PublicContext,
+  ScenarioPack,
+} from "@hushline/shared";
+import { completeWithConnection } from "../providers/adapters/index.js";
+import { sanitizeNarratorOutput } from "./output-sanitizer.js";
+
+export interface NarratorInvocationResult {
+  content: string | null;
+  source: "api" | "fallback" | "skipped";
+  error?: string;
+}
+
+/**
+ * Invoke the Narrator agent.
+ * Returns null content if narration is not needed this turn.
+ */
+export async function invokeNarrator(
+  narratorInstruction: string | null,
+  inputMode: InputMode,
+  publicContext: PublicContext,
+  userInput: string,
+  pack: ScenarioPack,
+  connection?: ModelConnection,
+): Promise<NarratorInvocationResult> {
+  // Skip conditions
+  if (!narratorInstruction && inputMode !== "action") {
+    return { content: null, source: "skipped" };
+  }
+
+  const instruction = narratorInstruction ?? "유저의 행동 결과를 감각적으로 묘사한다.";
+
+  if (!connection?.apiKey || !connection.model) {
+    return {
+      content: makeFallbackNarration(publicContext, inputMode),
+      source: "fallback",
+    };
+  }
+
+  const systemPrompt = buildNarratorSystemPrompt(pack, publicContext, instruction, inputMode);
+  const messages = buildNarratorMessages(publicContext, userInput, inputMode);
+
+  let raw: string;
+  try {
+    raw = await completeWithConnection({
+      connection,
+      systemPrompt,
+      messages: messages.map((m) => ({
+        id: "",
+        sessionId: "",
+        role: "user" as const,
+        content: m,
+        createdAt: "",
+      })),
+    });
+  } catch (reason: unknown) {
+    return {
+      content: makeFallbackNarration(publicContext, inputMode),
+      source: "fallback",
+      error: reason instanceof Error ? reason.message : "Narrator API call failed",
+    };
+  }
+
+  const cleaned = sanitizeNarratorOutput(raw);
+  if (!cleaned) {
+    return {
+      content: makeFallbackNarration(publicContext, inputMode),
+      source: "fallback",
+      error: "Narrator output was empty after sanitization",
+    };
+  }
+
+  return { content: cleaned, source: "api" };
+}
+
+// ──────────────────────────────────────────────
+// Prompt Building
+// ──────────────────────────────────────────────
+
+function buildNarratorSystemPrompt(
+  pack: ScenarioPack,
+  publicContext: PublicContext,
+  instruction: string,
+  inputMode: InputMode,
+): string {
+  const sections = [
+    pack.narratorPrompt,
+    "",
+    "[현재 장면]",
+    `시나리오: ${publicContext.scenarioTitle} — ${publicContext.scenarioSubtitle}`,
+    `위치: ${publicContext.currentLocation}`,
+    `긴장도: ${publicContext.tension} / 위험도: ${publicContext.danger}`,
+    `입력 유형: ${inputMode === "action" ? "행동 지문 — 결과를 묘사하라" : "채팅"}`,
+    "",
+    "[Director 장면 지시]",
+    instruction,
+    "",
+    "[공간 규칙]",
+    ...pack.scenarioCard.spaceRules,
+    "",
+    "[톤 규칙]",
+    ...pack.scenarioCard.toneRules,
+    ...pack.scenarioCard.hardNos.map((r) => `금지: ${r}`),
+  ];
+
+  return sections.join("\n");
+}
+
+function buildNarratorMessages(
+  publicContext: PublicContext,
+  userInput: string,
+  inputMode: InputMode,
+): string[] {
+  const recent = publicContext.publicChatLog
+    .slice(-6)
+    .map((entry) => `${entry.label}: ${entry.content}`)
+    .join("\n");
+
+  const inputLabel = inputMode === "action"
+    ? `[행동] ${userInput}`
+    : `유저: ${userInput}`;
+
+  return [`${recent}\n\n${inputLabel}\n\n위 상황에 맞는 나레이션 1~2문장을 출력하라.`];
+}
+
+// ──────────────────────────────────────────────
+// Fallback
+// ──────────────────────────────────────────────
+
+function makeFallbackNarration(publicContext: PublicContext, inputMode: InputMode): string {
+  if (inputMode === "action") {
+    return "행동의 여파가 어둠 속으로 퍼져 나간다.";
+  }
+
+  const location = publicContext.currentLocation;
+  const tension = publicContext.tension;
+
+  if (tension >= 7) {
+    return "형광등이 한 번 깜빡인다. 복도 끝에서 무언가 스치는 소리.";
+  }
+  if (tension >= 4) {
+    return "먼지 냄새가 짙어진다. 어딘가에서 물방울 떨어지는 소리.";
+  }
+  return "낡은 복도에 정적이 내려앉는다.";
+}
