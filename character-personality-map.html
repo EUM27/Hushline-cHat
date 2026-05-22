@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>창작 캐릭터 성격 맵 v1.3</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; background: #f5f0e8; color: #333; line-height: 1.6; padding: 20px; }
+h1 { text-align: center; margin-bottom: 6px; font-size: 1.4rem; color: #4a3728; }
+.subtitle { text-align: center; font-size: 0.8rem; color: #777; margin-bottom: 20px; }
+.container { max-width: 1100px; margin: 0 auto; }
+
+/* 2단 레이아웃 */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+.section { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.section-title { font-size: 1rem; font-weight: bold; margin-bottom: 10px; color: #4a3728; border-bottom: 2px solid #e8e0d4; padding-bottom: 6px; }
+.form-row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+.form-row label { font-size: 0.8rem; color: #666; min-width: 70px; }
+.form-row input, .form-row select, .form-row textarea { flex: 1; padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 0.85rem; }
+.form-row textarea { min-height: 50px; resize: vertical; }
+.tag-container { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.tag { background: #e8e0f4; color: #5a3d8a; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; display: flex; align-items: center; gap: 3px; }
+.tag .remove-tag { cursor: pointer; font-weight: bold; color: #999; }
+.tag .remove-tag:hover { color: #e44; }
+.btn { padding: 6px 12px; border: none; border-radius: 5px; cursor: pointer; font-size: 0.8rem; transition: all 0.2s; }
+.btn-primary { background: #6b5ce7; color: #fff; }
+.btn-primary:hover { background: #5a4bd6; }
+.btn-secondary { background: #e8e0d4; color: #4a3728; }
+.btn-secondary:hover { background: #d8d0c4; }
+.btn-danger { background: #e74c3c; color: #fff; }
+.btn-danger:hover { background: #c0392b; }
+.btn-sm { padding: 3px 8px; font-size: 0.75rem; }
+
+/* 슬라이더 */
+.slider-group { margin-bottom: 8px; }
+.slider-label { display: flex; justify-content: space-between; font-size: 0.75rem; color: #666; margin-bottom: 2px; }
+.slider-label span:first-child { color: #2980b9; }
+.slider-label span:last-child { color: #e74c3c; }
+.slider-row { display: flex; align-items: center; gap: 6px; }
+.slider-row input[type="range"] { flex: 1; accent-color: #6b5ce7; height: 4px; }
+.slider-value { min-width: 26px; text-align: center; font-size: 0.8rem; font-weight: bold; color: #6b5ce7; }
+
+/* 캐릭터 일람 */
+.char-list { max-height: 350px; overflow-y: auto; }
+.char-card { border: 1px solid #eee; border-radius: 6px; padding: 10px; margin-bottom: 6px; cursor: pointer; transition: all 0.2s; }
+.char-card:hover { border-color: #6b5ce7; background: #faf8ff; }
+.char-card.selected { border-color: #6b5ce7; background: #f0ecff; }
+.char-card-header { display: flex; justify-content: space-between; align-items: center; }
+.char-card-name { font-weight: bold; font-size: 0.9rem; color: #4a3728; }
+.char-card-meta { font-size: 0.7rem; color: #999; }
+.char-card-tags { margin-top: 3px; }
+.toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.filter-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+.filter-row select { padding: 3px 6px; border-radius: 5px; border: 1px solid #ddd; font-size: 0.8rem; }
+
+/* 차트/맵 */
+canvas { width: 100%; max-width: 380px; display: block; margin: 0 auto; }
+.map-container { position: relative; width: 100%; height: 360px; border: 1px solid #eee; border-radius: 8px; background: #fafafa; }
+.map-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #6b5ce7; transform: translate(-50%, -50%); cursor: pointer; transition: all 0.2s; }
+.map-dot:hover { transform: translate(-50%, -50%) scale(1.5); }
+.map-dot-label { position: absolute; transform: translate(-50%, 10px); font-size: 0.65rem; white-space: nowrap; color: #333; }
+.map-axis-label { position: absolute; font-size: 0.7rem; color: #999; }
+
+/* 비교/분석 */
+.comparison-result { background: #f9f7ff; border-radius: 8px; padding: 14px; margin-top: 10px; }
+.compat-bar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin: 3px 0 6px; }
+.compat-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+.mbti-card { display: inline-block; background: #f0ecff; border-radius: 6px; padding: 6px 12px; margin: 3px; font-size: 0.8rem; }
+.mbti-type { font-weight: bold; color: #6b5ce7; }
+.ranking-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.85rem; }
+.ranking-num { font-weight: bold; color: #6b5ce7; min-width: 20px; }
+.hint-box { background: #fff9e6; border: 1px solid #f0e0a0; border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 0.8rem; }
+.overlay-list { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.overlay-chip { background: #e8e0f4; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; display: flex; align-items: center; gap: 3px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🎭 창작 캐릭터 성격 맵 v1.3</h1>
+<p class="subtitle">캐릭터의 성격 경향을 등록하고, 맵·비교·MBTI풍 분류·부족 경향·세계관별 분석·태그별 분석으로 정리하는 보조 도구입니다.</p>
+
+<!-- ===== 상단: 등록폼 + 슬라이더 2단 ===== -->
+<div class="two-col">
+  <!-- 왼쪽: 캐릭터 등록/편집 -->
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">📝 캐릭터 등록·편집</div>
+    <div class="form-row">
+      <label>이름</label>
+      <input type="text" id="charName" placeholder="캐릭터 이름">
+    </div>
+    <div class="form-row">
+      <label>작품·세계관</label>
+      <input type="text" id="charWorld" list="worldList" placeholder="작품/기획 이름">
+      <datalist id="worldList"></datalist>
+    </div>
+    <div class="form-row">
+      <label>입장·역할</label>
+      <input type="text" id="charRole" list="roleList" placeholder="주인공, 조력자, 적대자 등">
+      <datalist id="roleList"></datalist>
+    </div>
+    <div class="form-row">
+      <label>태그</label>
+      <input type="text" id="charTagInput" list="tagList" placeholder="태그 입력 후 Enter">
+      <datalist id="tagList"></datalist>
+      <button class="btn btn-sm btn-secondary" onclick="addTag()">추가</button>
+    </div>
+    <div class="tag-container" id="tagContainer"></div>
+    <div class="form-row" style="margin-top:8px;">
+      <label>메모</label>
+      <textarea id="charMemo" placeholder="자유 메모"></textarea>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <button class="btn btn-primary" onclick="saveCharacter()">저장하기</button>
+      <button class="btn btn-secondary" onclick="resetForm()">새로 입력하기</button>
+    </div>
+  </div>
+
+  <!-- 오른쪽: 성격 슬라이더 -->
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">🎚️ 성격 슬라이더</div>
+    <div id="sliderContainer"></div>
+    <p style="font-size:0.7rem;color:#999;margin-top:6px;">0이 왼쪽, 50이 중앙, 100이 오른쪽입니다.</p>
+  </div>
+</div>
+
+<!-- ===== 캐릭터 일람 (전체 폭) ===== -->
+<div class="section">
+  <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>📋 캐릭터 일람</span>
+    <button class="btn btn-sm btn-secondary" onclick="toggleList()">일람 접기/펼치기</button>
+  </div>
+  <div class="toolbar">
+    <button class="btn btn-sm btn-secondary" onclick="loadSample()">샘플 넣기</button>
+    <button class="btn btn-sm btn-secondary" onclick="exportJSON()">JSON 내보내기</button>
+    <button class="btn btn-sm btn-secondary" onclick="importJSON()">JSON 불러오기</button>
+    <button class="btn btn-sm btn-danger" onclick="deleteAll()">전체 삭제</button>
+    <input type="file" id="jsonFileInput" accept=".json" style="display:none" onchange="handleFileImport(event)">
+  </div>
+  <div class="filter-row">
+    <select id="filterWorld" onchange="renderList()">
+      <option value="">모든 작품</option>
+    </select>
+    <select id="sortOrder" onchange="renderList()">
+      <option value="newest">정렬: 최신순</option>
+      <option value="oldest">오래된순</option>
+      <option value="name-asc">이름: 오름차순</option>
+      <option value="name-desc">이름: 내림차순</option>
+      <option value="world-asc">작품명: 오름차순</option>
+      <option value="role-asc">역할: 오름차순</option>
+    </select>
+  </div>
+  <div class="char-list" id="charList">
+    <p style="color:#999;text-align:center;padding:20px;">아직 캐릭터가 등록되지 않았습니다.</p>
+  </div>
+  <p style="font-size:0.7rem;color:#999;margin-top:6px;">데이터는 이 브라우저 내에 자동 저장됩니다. 다른 기기로 옮길 때는 JSON을 내보내세요.</p>
+</div>
+
+<!-- ===== 중단: 레이더 차트 + 2축 맵 2단 ===== -->
+<div class="two-col">
+  <!-- 왼쪽: 레이더 차트 -->
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">📊 레이더 차트</div>
+    <p style="font-size:0.75rem;color:#777;margin-bottom:8px;">일람 또는 2축 맵에서 표시할 캐릭터를 선택하세요.</p>
+    <canvas id="radarCanvas" width="380" height="380"></canvas>
+    <div style="margin-top:10px;">
+      <label style="font-size:0.8rem;color:#666;">겹쳐 표시:</label>
+      <div class="overlay-list" id="overlayList"></div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <select id="overlaySelect" style="flex:1;padding:3px 6px;border:1px solid #ddd;border-radius:5px;font-size:0.8rem;"><option value="">캐릭터 선택</option></select>
+        <button class="btn btn-sm btn-primary" onclick="addOverlay()">추가</button>
+        <button class="btn btn-sm btn-secondary" onclick="clearOverlay()">해제</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 오른쪽: 2축 맵 -->
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">🗺️ 2축 맵</div>
+    <div class="form-row">
+      <label>가로축</label>
+      <select id="mapAxisX" onchange="renderMap()"></select>
+    </div>
+    <div class="form-row">
+      <label>세로축</label>
+      <select id="mapAxisY" onchange="renderMap()"></select>
+    </div>
+    <div class="map-container" id="mapContainer">
+      <div class="map-axis-label" style="top:50%;left:4px;">←</div>
+      <div class="map-axis-label" style="top:50%;right:4px;">→</div>
+      <div class="map-axis-label" style="top:4px;left:50%;transform:translateX(-50%);">↑</div>
+      <div class="map-axis-label" style="bottom:4px;left:50%;transform:translateX(-50%);">↓</div>
+    </div>
+    <p style="font-size:0.7rem;color:#999;margin-top:4px;">점이나 이름을 클릭하면 레이더 차트에 표시됩니다.</p>
+  </div>
+</div>
+
+<!-- ===== 비교·상성 진단 (전체 폭) ===== -->
+<div class="section">
+  <div class="section-title">⚖️ 캐릭터 비교·상성 진단</div>
+  <div class="form-row">
+    <label>캐릭터 A</label>
+    <select id="compareA"><option value="">선택</option></select>
+    <label>캐릭터 B</label>
+    <select id="compareB"><option value="">선택</option></select>
+  </div>
+  <div class="form-row">
+    <label>관계 타입</label>
+    <select id="relationType">
+      <option value="overall">종합</option>
+      <option value="friend">친구</option>
+      <option value="romance">연애</option>
+      <option value="partner">상봉</option>
+      <option value="rival">라이벌</option>
+      <option value="master">주종·사제</option>
+      <option value="family">가족</option>
+    </select>
+    <button class="btn btn-primary" onclick="compareCharacters()">비교하기</button>
+  </div>
+  <p style="font-size:0.7rem;color:#999;">좋고 나쁨이 아니라, 창작의 볼거리를 찾기 위한 진단입니다.</p>
+  <div id="comparisonResult"></div>
+</div>
+
+<!-- ===== 하단: 힌트 + MBTI 2단 ===== -->
+<div class="two-col">
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">💡 캐릭터 작성 힌트</div>
+    <div id="hintContent">
+      <p style="color:#999;font-size:0.85rem;">3명 이상 등록하면 부족한 성격 경향 제안이 표시됩니다.</p>
+    </div>
+  </div>
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">🧠 MBTI풍 타입 분석</div>
+    <div id="mbtiContent">
+      <p style="color:#999;font-size:0.85rem;">캐릭터를 등록하면 MBTI풍 분류가 표시됩니다.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 세계관별 + 태그별 2단 ===== -->
+<div class="two-col">
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">🌍 세계관별 경향 비교</div>
+    <div id="worldAnalysis">
+      <p style="color:#999;font-size:0.85rem;">등록 후 세계관별 경향이 표시됩니다.</p>
+    </div>
+  </div>
+  <div class="section" style="margin-bottom:0;">
+    <div class="section-title">🏷️ 태그별 분석</div>
+    <div id="tagAnalysis">
+      <p style="color:#999;font-size:0.85rem;">태그를 등록하면 태그별 분석이 표시됩니다.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 간단 랭킹 (전체 폭) ===== -->
+<div class="section">
+  <div class="section-title">🏆 간단 랭킹</div>
+  <div id="rankingContent">
+    <p style="color:#999;font-size:0.85rem;">캐릭터를 등록하면 랭킹이 표시됩니다.</p>
+  </div>
+</div>
+
+</div><!-- /.container -->
+
+<script>
+// === 데이터 모델 ===
+const TRAITS = [
+  { id: 'gentle_fierce', left: '온화함', right: '가혹함' },
+  { id: 'logical_emotional', left: '논리적', right: '감정적' },
+  { id: 'cautious_impulsive', left: '신중함', right: '충동적' },
+  { id: 'extrovert_introvert', left: '외향적', right: '내향적' },
+  { id: 'cooperative_independent', left: '협조적', right: '독립적' },
+  { id: 'realistic_fantasy', left: '현실적', right: '공상적' },
+  { id: 'disciplined_free', left: '규율적', right: '자유분방' },
+  { id: 'honest_contrary', left: '솔직함', right: '청개구리' },
+  { id: 'confident_doubtful', left: '자신감', right: '자기의심' },
+  { id: 'caring_handsoff', left: '잘 챙김', right: '방임적' },
+  { id: 'love_direct_awkward', left: '애정표현 직접적', right: '애정표현 서투름' },
+  { id: 'dependent_selfreliant', left: '의존적', right: '자립적' }
+];
+
+let characters = JSON.parse(localStorage.getItem('charMap_characters') || '[]');
+let editingId = null;
+let currentTags = [];
+let overlayIds = [];
+let selectedCharId = null;
+let listVisible = true;
+
+function init() {
+  renderSliders();
+  renderList();
+  populateSelects();
+  renderMap();
+  updateAnalysis();
+}
+
+function renderSliders() {
+  const container = document.getElementById('sliderContainer');
+  container.innerHTML = TRAITS.map(t => `
+    <div class="slider-group">
+      <div class="slider-label"><span>${t.left}</span><span>${t.right}</span></div>
+      <div class="slider-row">
+        <input type="range" id="slider_${t.id}" min="0" max="100" value="50" oninput="updateSliderVal('${t.id}')">
+        <span class="slider-value" id="val_${t.id}">50</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateSliderVal(id) {
+  document.getElementById('val_' + id).textContent = document.getElementById('slider_' + id).value;
+}
+
+// === 태그 ===
+function addTag() {
+  const input = document.getElementById('charTagInput');
+  const val = input.value.trim();
+  if (val && !currentTags.includes(val)) { currentTags.push(val); renderTags(); }
+  input.value = '';
+}
+function renderTags() {
+  document.getElementById('tagContainer').innerHTML = currentTags.map((t, i) =>
+    `<span class="tag">${t}<span class="remove-tag" onclick="removeTag(${i})">×</span></span>`
+  ).join('');
+}
+function removeTag(i) { currentTags.splice(i, 1); renderTags(); }
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('charTagInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addTag(); }
+  });
+  init();
+});
+
+// === 저장/편집 ===
+function saveCharacter() {
+  const name = document.getElementById('charName').value.trim();
+  if (!name) { alert('이름을 입력하세요.'); return; }
+  const traits = {};
+  TRAITS.forEach(t => { traits[t.id] = parseInt(document.getElementById('slider_' + t.id).value); });
+  const charData = {
+    id: editingId || Date.now().toString(), name,
+    world: document.getElementById('charWorld').value.trim(),
+    role: document.getElementById('charRole').value.trim(),
+    tags: [...currentTags],
+    memo: document.getElementById('charMemo').value.trim(),
+    traits,
+    createdAt: editingId ? (characters.find(c => c.id === editingId)?.createdAt || Date.now()) : Date.now()
+  };
+  if (editingId) { const idx = characters.findIndex(c => c.id === editingId); if (idx >= 0) characters[idx] = charData; }
+  else { characters.push(charData); }
+  save(); resetForm(); renderList(); populateSelects(); updateAnalysis(); selectCharacter(charData.id);
+}
+
+function resetForm() {
+  editingId = null;
+  document.getElementById('charName').value = '';
+  document.getElementById('charWorld').value = '';
+  document.getElementById('charRole').value = '';
+  document.getElementById('charMemo').value = '';
+  currentTags = []; renderTags();
+  TRAITS.forEach(t => { document.getElementById('slider_' + t.id).value = 50; document.getElementById('val_' + t.id).textContent = '50'; });
+}
+
+function editCharacter(id) {
+  const c = characters.find(ch => ch.id === id);
+  if (!c) return;
+  editingId = c.id;
+  document.getElementById('charName').value = c.name;
+  document.getElementById('charWorld').value = c.world || '';
+  document.getElementById('charRole').value = c.role || '';
+  document.getElementById('charMemo').value = c.memo || '';
+  currentTags = [...(c.tags || [])]; renderTags();
+  TRAITS.forEach(t => { const v = c.traits[t.id] ?? 50; document.getElementById('slider_' + t.id).value = v; document.getElementById('val_' + t.id).textContent = v; });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function deleteCharacter(id) {
+  if (!confirm('이 캐릭터를 삭제하시겠습니까?')) return;
+  characters = characters.filter(c => c.id !== id);
+  if (selectedCharId === id) selectedCharId = null;
+  overlayIds = overlayIds.filter(oid => oid !== id);
+  save(); renderList(); populateSelects(); updateAnalysis(); drawRadar();
+}
+
+function save() { localStorage.setItem('charMap_characters', JSON.stringify(characters)); }
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(characters, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'character-personality-map.json'; a.click();
+}
+function importJSON() { document.getElementById('jsonFileInput').click(); }
+function handleFileImport(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => { try { const data = JSON.parse(ev.target.result); if (Array.isArray(data)) { characters = data; save(); renderList(); populateSelects(); updateAnalysis(); alert('불러오기 완료!'); } } catch { alert('유효하지 않은 JSON 파일입니다.'); } };
+  reader.readAsText(file); e.target.value = '';
+}
+function deleteAll() {
+  if (!confirm('모든 캐릭터를 삭제하시겠습니까?')) return;
+  characters = []; selectedCharId = null; overlayIds = [];
+  save(); renderList(); populateSelects(); updateAnalysis(); drawRadar();
+}
+
+function loadSample() {
+  if (characters.length > 0 && !confirm('기존 데이터에 샘플을 추가합니다.')) return;
+  const samples = [
+    { id:'s1', name:'김하늘', world:'별빛학원', role:'주인공', tags:['학생','리더'], memo:'밝고 활발한 학생회장', traits:{gentle_fierce:30,logical_emotional:60,cautious_impulsive:40,extrovert_introvert:20,cooperative_independent:30,realistic_fantasy:55,disciplined_free:35,honest_contrary:25,confident_doubtful:30,caring_handsoff:25,love_direct_awkward:35,dependent_selfreliant:45}, createdAt:Date.now()-3000 },
+    { id:'s2', name:'이서준', world:'별빛학원', role:'라이벌', tags:['학생','천재'], memo:'냉정하지만 속은 따뜻한 전교 1등', traits:{gentle_fierce:60,logical_emotional:20,cautious_impulsive:25,extrovert_introvert:75,cooperative_independent:70,realistic_fantasy:30,disciplined_free:20,honest_contrary:65,confident_doubtful:35,caring_handsoff:60,love_direct_awkward:80,dependent_selfreliant:80}, createdAt:Date.now()-2000 },
+    { id:'s3', name:'박유나', world:'별빛학원', role:'조력자', tags:['학생','예술가'], memo:'감성적인 미술부원', traits:{gentle_fierce:20,logical_emotional:80,cautious_impulsive:55,extrovert_introvert:60,cooperative_independent:40,realistic_fantasy:85,disciplined_free:70,honest_contrary:30,confident_doubtful:60,caring_handsoff:35,love_direct_awkward:45,dependent_selfreliant:40}, createdAt:Date.now()-1000 },
+    { id:'s4', name:'최도현', world:'어둠의 왕국', role:'적대자', tags:['마왕','고독'], memo:'세계를 지배하려는 마왕이지만 외로움을 느낀다', traits:{gentle_fierce:85,logical_emotional:40,cautious_impulsive:60,extrovert_introvert:80,cooperative_independent:90,realistic_fantasy:45,disciplined_free:50,honest_contrary:75,confident_doubtful:55,caring_handsoff:80,love_direct_awkward:90,dependent_selfreliant:85}, createdAt:Date.now() }
+  ];
+  samples.forEach(s => { if (!characters.find(c => c.id === s.id)) characters.push(s); });
+  save(); renderList(); populateSelects(); updateAnalysis();
+}
+</script>
+
+<script>
+// === 일람 ===
+function toggleList() {
+  listVisible = !listVisible;
+  document.getElementById('charList').style.display = listVisible ? 'block' : 'none';
+}
+
+function renderList() {
+  const list = document.getElementById('charList');
+  const filterWorld = document.getElementById('filterWorld').value;
+  const sortOrder = document.getElementById('sortOrder').value;
+  const worlds = [...new Set(characters.map(c => c.world).filter(Boolean))];
+  const worldSelect = document.getElementById('filterWorld');
+  const cur = worldSelect.value;
+  worldSelect.innerHTML = '<option value="">모든 작품</option>' + worlds.map(w => `<option value="${w}">${w}</option>`).join('');
+  worldSelect.value = cur;
+  document.getElementById('worldList').innerHTML = worlds.map(w => `<option value="${w}">`).join('');
+  document.getElementById('roleList').innerHTML = [...new Set(characters.map(c => c.role).filter(Boolean))].map(r => `<option value="${r}">`).join('');
+  document.getElementById('tagList').innerHTML = [...new Set(characters.flatMap(c => c.tags || []))].map(t => `<option value="${t}">`).join('');
+
+  let filtered = filterWorld ? characters.filter(c => c.world === filterWorld) : [...characters];
+  switch (sortOrder) {
+    case 'newest': filtered.sort((a,b) => b.createdAt - a.createdAt); break;
+    case 'oldest': filtered.sort((a,b) => a.createdAt - b.createdAt); break;
+    case 'name-asc': filtered.sort((a,b) => a.name.localeCompare(b.name)); break;
+    case 'name-desc': filtered.sort((a,b) => b.name.localeCompare(a.name)); break;
+    case 'world-asc': filtered.sort((a,b) => (a.world||'').localeCompare(b.world||'')); break;
+    case 'role-asc': filtered.sort((a,b) => (a.role||'').localeCompare(b.role||'')); break;
+  }
+  if (filtered.length === 0) { list.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">아직 캐릭터가 등록되지 않았습니다.</p>'; return; }
+  list.innerHTML = filtered.map(c => `
+    <div class="char-card ${selectedCharId===c.id?'selected':''}" onclick="selectCharacter('${c.id}')">
+      <div class="char-card-header">
+        <span class="char-card-name">${c.name}</span>
+        <span class="char-card-meta">${c.world||''} ${c.role?'/ '+c.role:''}</span>
+      </div>
+      ${c.tags&&c.tags.length?'<div class="char-card-tags">'+c.tags.map(t=>`<span class="tag">${t}</span>`).join('')+'</div>':''}
+      <div style="margin-top:4px;display:flex;gap:4px;">
+        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();editCharacter('${c.id}')">편집</button>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteCharacter('${c.id}')">삭제</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectCharacter(id) { selectedCharId = id; renderList(); drawRadar(); renderMap(); }
+
+function populateSelects() {
+  const opts = characters.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  const def = '<option value="">선택</option>';
+  document.getElementById('compareA').innerHTML = def + opts;
+  document.getElementById('compareB').innerHTML = def + opts;
+  document.getElementById('overlaySelect').innerHTML = def + opts;
+  const axOpts = TRAITS.map(t => `<option value="${t.id}">${t.left} ⇔ ${t.right}</option>`).join('');
+  const axX = document.getElementById('mapAxisX');
+  const axY = document.getElementById('mapAxisY');
+  if (axX.options.length <= 1) { axX.innerHTML = axOpts; axY.innerHTML = axOpts; axX.selectedIndex = 0; axY.selectedIndex = 3; }
+}
+
+// === 레이더 차트 ===
+function drawRadar() {
+  const canvas = document.getElementById('radarCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2, R = Math.min(W,H)/2 - 36;
+  ctx.clearRect(0, 0, W, H);
+  const n = TRAITS.length;
+  const step = (2*Math.PI)/n;
+
+  // 그리드
+  ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
+  for (let lv = 1; lv <= 5; lv++) {
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) { const a = -Math.PI/2 + i*step; const r = R*(lv/5); const x = cx+r*Math.cos(a); const y = cy+r*Math.sin(a); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#ccc';
+  for (let i = 0; i < n; i++) { const a = -Math.PI/2+i*step; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+R*Math.cos(a),cy+R*Math.sin(a)); ctx.stroke(); }
+
+  // 라벨
+  ctx.fillStyle = '#555'; ctx.font = '10px Malgun Gothic, sans-serif'; ctx.textAlign = 'center';
+  for (let i = 0; i < n; i++) { const a = -Math.PI/2+i*step; ctx.fillText(TRAITS[i].left, cx+(R+22)*Math.cos(a), cy+(R+22)*Math.sin(a)+4); }
+
+  // 데이터
+  const toDraw = [];
+  if (selectedCharId) toDraw.push(selectedCharId);
+  overlayIds.forEach(oid => { if (!toDraw.includes(oid)) toDraw.push(oid); });
+  const colors = ['#6b5ce7','#e74c3c','#27ae60','#f39c12','#3498db','#9b59b6','#1abc9c'];
+  toDraw.forEach((cid, ci) => {
+    const c = characters.find(ch => ch.id === cid); if (!c) return;
+    const color = colors[ci%colors.length];
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.fillStyle = color+'30'; ctx.lineWidth = 2;
+    for (let i = 0; i <= n; i++) { const idx = i%n; const a = -Math.PI/2+idx*step; const val = (c.traits[TRAITS[idx].id]??50)/100; const x = cx+R*val*Math.cos(a); const y = cy+R*val*Math.sin(a); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
+    ctx.fill(); ctx.stroke();
+  });
+  // 범례
+  if (toDraw.length > 0) { ctx.font = '11px Malgun Gothic'; toDraw.forEach((cid,ci) => { const c = characters.find(ch=>ch.id===cid); if(!c)return; ctx.fillStyle=colors[ci%colors.length]; ctx.fillRect(8,8+ci*18,10,10); ctx.fillStyle='#333'; ctx.textAlign='left'; ctx.fillText(c.name,22,17+ci*18); }); }
+}
+
+// === 오버레이 ===
+function addOverlay() { const id = document.getElementById('overlaySelect').value; if (id && !overlayIds.includes(id)) { overlayIds.push(id); renderOverlayList(); drawRadar(); } }
+function clearOverlay() { overlayIds = []; renderOverlayList(); drawRadar(); }
+function removeOverlay(id) { overlayIds = overlayIds.filter(o => o !== id); renderOverlayList(); drawRadar(); }
+function renderOverlayList() {
+  document.getElementById('overlayList').innerHTML = overlayIds.map(id => { const c = characters.find(ch=>ch.id===id); return c?`<span class="overlay-chip">${c.name}<span class="remove-tag" onclick="removeOverlay('${id}')">×</span></span>`:''; }).join('');
+}
+
+// === 2축 맵 ===
+function renderMap() {
+  const container = document.getElementById('mapContainer');
+  container.querySelectorAll('.map-dot,.map-dot-label').forEach(el => el.remove());
+  const axisX = document.getElementById('mapAxisX').value || TRAITS[0].id;
+  const axisY = document.getElementById('mapAxisY').value || TRAITS[3].id;
+  const colors = ['#6b5ce7','#e74c3c','#27ae60','#f39c12','#3498db','#9b59b6','#1abc9c','#e67e22'];
+  characters.forEach((c, i) => {
+    const xVal = (c.traits[axisX]??50)/100;
+    const yVal = 1-(c.traits[axisY]??50)/100;
+    const dot = document.createElement('div'); dot.className='map-dot';
+    dot.style.left=(xVal*90+5)+'%'; dot.style.top=(yVal*90+5)+'%'; dot.style.background=colors[i%colors.length];
+    dot.onclick = () => selectCharacter(c.id);
+    const label = document.createElement('div'); label.className='map-dot-label';
+    label.style.left=(xVal*90+5)+'%'; label.style.top=(yVal*90+5)+'%';
+    label.textContent=c.name; label.style.transform='translate(-50%,14px)';
+    label.onclick = () => selectCharacter(c.id);
+    container.appendChild(dot); container.appendChild(label);
+  });
+}
+</script>
+
+<script>
+// === 비교·상성 ===
+function compareCharacters() {
+  const aId = document.getElementById('compareA').value;
+  const bId = document.getElementById('compareB').value;
+  const relType = document.getElementById('relationType').value;
+  const result = document.getElementById('comparisonResult');
+  if (!aId || !bId) { result.innerHTML='<p style="color:#999;">2명의 캐릭터를 선택하세요.</p>'; return; }
+  if (aId === bId) { result.innerHTML='<p style="color:#999;">서로 다른 캐릭터를 선택하세요.</p>'; return; }
+  const a = characters.find(c=>c.id===aId), b = characters.find(c=>c.id===bId);
+  if (!a||!b) return;
+
+  let diffs = TRAITS.map(t => ({trait:t, diff:Math.abs((a.traits[t.id]??50)-(b.traits[t.id]??50))}));
+  const weights = { overall:{}, friend:{cooperative_independent:1.5,honest_contrary:1.3}, romance:{love_direct_awkward:1.5,caring_handsoff:1.3,dependent_selfreliant:1.2}, partner:{cooperative_independent:1.5,confident_doubtful:1.3}, rival:{gentle_fierce:1.5,confident_doubtful:1.3,cooperative_independent:1.2}, master:{confident_doubtful:1.5,dependent_selfreliant:1.5}, family:{caring_handsoff:1.5,love_direct_awkward:1.3} };
+  const w = weights[relType]||{};
+  let weightedDiff = diffs.reduce((s,d)=>s+d.diff*(w[d.trait.id]||1),0) / diffs.reduce((s,d)=>s+(w[d.trait.id]||1),0);
+  const tension = Math.min(100, weightedDiff*2);
+  const harmony = 100 - tension;
+
+  diffs.sort((a,b)=>b.diff-a.diff);
+  const bigDiffs = diffs.slice(0,3);
+  const sims = [...diffs].sort((a,b)=>a.diff-b.diff).slice(0,3);
+
+  let diag = '';
+  if (tension>70) diag='🔥 극적인 긴장감이 있는 관계입니다. 갈등과 성장의 드라마가 기대됩니다.';
+  else if (tension>40) diag='⚡ 적당한 차이가 있어 서로를 자극하는 관계입니다.';
+  else diag='🌸 안정적이고 편안한 관계입니다. 일상적인 따뜻함을 그리기 좋습니다.';
+
+  result.innerHTML = `<div class="comparison-result">
+    <h4 style="margin-bottom:6px;">${a.name} × ${b.name}</h4>
+    <p style="font-size:0.85rem;margin-bottom:10px;">${diag}</p>
+    <div style="margin-bottom:6px;"><span style="font-size:0.8rem;">조화도</span><div class="compat-bar"><div class="compat-fill" style="width:${harmony}%;background:#27ae60;"></div></div>
+    <span style="font-size:0.8rem;">긴장감</span><div class="compat-bar"><div class="compat-fill" style="width:${tension}%;background:#e74c3c;"></div></div></div>
+    <div style="margin-bottom:6px;"><strong style="font-size:0.8rem;">가장 큰 차이:</strong><ul style="font-size:0.8rem;margin-left:14px;">${bigDiffs.map(d=>`<li>${d.trait.left}⇔${d.trait.right}: 차이 ${d.diff}</li>`).join('')}</ul></div>
+    <div><strong style="font-size:0.8rem;">가장 유사한 점:</strong><ul style="font-size:0.8rem;margin-left:14px;">${sims.map(d=>`<li>${d.trait.left}⇔${d.trait.right}: 차이 ${d.diff}</li>`).join('')}</ul></div>
+  </div>`;
+}
+
+// === 분석 ===
+function updateAnalysis() { updateHints(); updateMBTI(); updateWorldAnalysis(); updateTagAnalysis(); updateRanking(); }
+
+function updateHints() {
+  const el = document.getElementById('hintContent');
+  if (characters.length < 3) { el.innerHTML='<p style="color:#999;font-size:0.85rem;">3명 이상 등록하면 부족한 성격 경향 제안이 표시됩니다.</p>'; return; }
+  const suggestions = [];
+  TRAITS.forEach(t => {
+    const vals = characters.map(c => c.traits[t.id]??50);
+    if (!vals.some(v=>v<=20)) suggestions.push(`"${t.left}" 쪽이 극단적인 캐릭터가 없습니다 (값 0~20).`);
+    if (!vals.some(v=>v>=80)) suggestions.push(`"${t.right}" 쪽이 극단적인 캐릭터가 없습니다 (값 80~100).`);
+  });
+  if (suggestions.length===0) el.innerHTML='<div class="hint-box">✅ 다양한 성격 경향이 잘 분포되어 있습니다!</div>';
+  else el.innerHTML=`<div class="hint-box"><strong>💡 부족한 경향 제안:</strong><ul style="margin-top:4px;margin-left:14px;">${suggestions.slice(0,6).map(s=>`<li style="font-size:0.8rem;">${s}</li>`).join('')}</ul></div>`;
+}
+
+function updateMBTI() {
+  const el = document.getElementById('mbtiContent');
+  if (characters.length===0) { el.innerHTML='<p style="color:#999;font-size:0.85rem;">캐릭터를 등록하면 MBTI풍 분류가 표시됩니다.</p>'; return; }
+  const map = characters.map(c => {
+    const t=c.traits;
+    const E_I=(t.extrovert_introvert??50)<50?'E':'I';
+    const S_N=(t.realistic_fantasy??50)<50?'S':'N';
+    const T_F=(t.logical_emotional??50)<50?'T':'F';
+    const J_P=(t.disciplined_free??50)<50?'J':'P';
+    return {name:c.name, type:E_I+S_N+T_F+J_P};
+  });
+  el.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:4px;">${map.map(m=>`<div class="mbti-card"><span class="mbti-type">${m.type}</span> ${m.name}</div>`).join('')}</div>`;
+}
+
+function updateWorldAnalysis() {
+  const el = document.getElementById('worldAnalysis');
+  const worlds = [...new Set(characters.map(c=>c.world).filter(Boolean))];
+  if (worlds.length===0) { el.innerHTML='<p style="color:#999;font-size:0.85rem;">등록 후 세계관별 경향이 표시됩니다.</p>'; return; }
+  let html='';
+  worlds.forEach(world => {
+    const chars = characters.filter(c=>c.world===world);
+    html+=`<div style="margin-bottom:10px;"><strong>${world}</strong> (${chars.length}명)<div style="font-size:0.8rem;margin-top:3px;">`;
+    TRAITS.forEach(t => { const avg=chars.reduce((s,c)=>s+(c.traits[t.id]??50),0)/chars.length; if(avg<35||avg>65){const label=avg<40?t.left:t.right; html+=`<span style="display:inline-block;background:#f0ecff;padding:1px 6px;border-radius:4px;margin:2px;font-size:0.75rem;">${label} (${Math.round(avg)})</span>`;} });
+    html+='</div></div>';
+  });
+  el.innerHTML=html||'<p style="color:#999;">뚜렷한 경향이 없습니다.</p>';
+}
+
+function updateTagAnalysis() {
+  const el = document.getElementById('tagAnalysis');
+  const allTags = [...new Set(characters.flatMap(c=>c.tags||[]))];
+  if (allTags.length===0) { el.innerHTML='<p style="color:#999;font-size:0.85rem;">태그를 등록하면 태그별 분석이 표시됩니다.</p>'; return; }
+  let html='';
+  allTags.forEach(tag => {
+    const chars = characters.filter(c=>(c.tags||[]).includes(tag));
+    html+=`<div style="margin-bottom:8px;"><strong>🏷️ ${tag}</strong> (${chars.length}명: ${chars.map(c=>c.name).join(', ')})<div style="font-size:0.8rem;margin-top:3px;">`;
+    TRAITS.forEach(t => { const avg=chars.reduce((s,c)=>s+(c.traits[t.id]??50),0)/chars.length; if(avg<35||avg>65){const label=avg<40?t.left:t.right; html+=`<span style="display:inline-block;background:#e8f4e8;padding:1px 6px;border-radius:4px;margin:2px;font-size:0.75rem;">${label} (${Math.round(avg)})</span>`;} });
+    html+='</div></div>';
+  });
+  el.innerHTML=html;
+}
+
+function updateRanking() {
+  const el = document.getElementById('rankingContent');
+  if (characters.length===0) { el.innerHTML='<p style="color:#999;font-size:0.85rem;">캐릭터를 등록하면 랭킹이 표시됩니다.</p>'; return; }
+  let html='<div style="font-size:0.8rem;">';
+  TRAITS.forEach(t => {
+    const sorted=[...characters].sort((a,b)=>(a.traits[t.id]??50)-(b.traits[t.id]??50));
+    const ml=sorted[0], mr=sorted[sorted.length-1];
+    html+=`<div class="ranking-item"><span class="ranking-num">${t.left}</span> 1위: <strong>${ml.name}</strong> (${ml.traits[t.id]??50})</div>`;
+    html+=`<div class="ranking-item"><span class="ranking-num">${t.right}</span> 1위: <strong>${mr.name}</strong> (${mr.traits[t.id]??50})</div>`;
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+</script>
+</body>
+</html>

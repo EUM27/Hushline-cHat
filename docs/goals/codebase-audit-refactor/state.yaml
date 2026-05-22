@@ -1,0 +1,218 @@
+# GoalBuddy v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Codebase Audit, Refactor, and Improvement Map"
+  slug: "codebase-audit-refactor"
+  kind: open_ended
+  tranche: "Run successive evidence-backed repo audit, safe refactor, verification, and improvement-mapping slices until the full original outcome is complete."
+  status: active
+  intake:
+    original_request: "전체 코드베이스에 대해 필요한 경우 전체 감사 및 리팩토링을 완료하고, 동시에 개선 및 확장을 위한 다양한 영역을 식별하세요"
+    interpreted_outcome: "Audit the whole codebase, complete safe necessary refactors, and identify concrete improvement and expansion areas."
+    input_shape: vague
+    audience: project_owner
+    authority: requested
+    proof_type: test
+    completion_proof: "Documented audit findings, passing relevant verification commands, reviewed refactoring diffs for each completed safe slice, and a ranked improvement/extension map."
+    likely_misfire: "Treating this as generic cleanup or speculative redesign instead of evidence-backed safe refactoring and ranked extension opportunities."
+    blind_spots_considered:
+      - "Visual board selected."
+      - "Intent target selected: code health and stability first."
+      - "Success proof selected: verification commands pass plus safe refactoring diffs."
+      - "Scope selected: docs, specs, and dirty files are included in audit; dirty-file edits require explicit bounded Worker approval."
+      - "Goal handling selected implicitly by continuing current fresh GoalBuddy board."
+    existing_plan_facts:
+      - "User selected local live board."
+      - "User accepted option 1: prioritize build, tests, structure, duplication, type safety, and high-risk breakage points before product or extension work."
+      - "User accepted option 1 for success proof: verification command pass plus refactoring diff."
+      - "User accepted option 2 for scope: include docs/specs and dirty files in the audit."
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+  continuous_until_full_outcome: true
+  missing_input_or_credentials_do_not_stop_goal: true
+  preserve_and_validate_existing_plan: true
+  intake_misfire_must_be_audited: true
+
+agents:
+  scout: bundled_not_installed
+  worker: bundled_not_installed
+  judge: bundled_not_installed
+
+visual_board:
+  selected: local
+  local:
+    status: live
+    url: "http://goalbuddy.localhost:41737/codebase-audit-refactor/"
+    command: "npx -y goalbuddy board D:\\Hushline cHat\\docs\\goals\\codebase-audit-refactor"
+  github_projects:
+    status: not_requested
+    url: null
+    command: "npx goalbuddy extend github-projects"
+    missing: []
+
+active_task: T001
+
+tasks:
+  - id: T000
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: default
+    objective: "Complete diagnostic intake before filling the audit and implementation task list."
+    inputs:
+      - "User selected local live board."
+      - "User selected code health and stability as the first priority."
+      - "User selected verification command pass plus refactoring diff as success proof."
+      - "User selected docs/specs plus dirty files as audit scope."
+    constraints:
+      - "Only update GoalBuddy control files during intake."
+      - "Do not inspect implementation files or refactor code until the board authorizes it."
+    expected_output:
+      - "Confirmed intent target"
+      - "Confirmed success proof"
+      - "Confirmed scope and non-goals"
+      - "Seeded Scout, Judge, Worker, and final audit tasks"
+    receipt:
+      result: done
+      summary: "Intake completed: local live board, code-health priority, verification-plus-diff proof, docs/specs/dirty files included in audit, dirty-file edits require bounded Worker tasks."
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: active
+    reasoning_hint: default
+    objective: "Map repo purpose, architecture, package layout, local instructions, verification commands, and current dirty-file context."
+    inputs:
+      - "Repository root"
+      - "README and package manifests"
+      - "docs and .kiro specs"
+      - "Current dirty files"
+    constraints:
+      - "Read-only."
+      - "Do not edit implementation, docs, specs, or dirty files."
+      - "Treat existing dirty changes as user-owned."
+      - "Prefer concrete file-path evidence over generic advice."
+    expected_output:
+      - "Repo map"
+      - "Verification command inventory"
+      - "Dirty-file context and risk notes"
+      - "Candidate audit focus areas"
+    receipt: null
+  - id: T002
+    type: scout
+    assignee: Scout
+    status: queued
+    reasoning_hint: default
+    objective: "Audit code health and stability risks across source, tests, docs, and specs."
+    inputs:
+      - "T001 receipt"
+      - "Source files"
+      - "Tests"
+      - "Docs/specs"
+    constraints:
+      - "Read-only."
+      - "Do not edit files."
+      - "Rank issues by impact, confidence, reversibility, and verification strength."
+    expected_output:
+      - "Ranked health findings"
+      - "Missing or weak verification areas"
+      - "Safe refactor candidates"
+      - "Improvement and extension candidates"
+    receipt: null
+  - id: T003
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Choose the first safe implementation slice from Scout findings."
+    inputs:
+      - "T001 receipt"
+      - "T002 receipt"
+    constraints:
+      - "Do not implement."
+      - "Prefer a small high-confidence refactor with strong verification."
+      - "Do not select dirty-file edits unless clearly required and narrowly bounded."
+    expected_output:
+      - "Decision"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred or blocked candidates"
+    receipt: null
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: default
+    objective: "Execute the first safe implementation task selected by Judge."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Behavior is ambiguous."
+      - "Dirty user-owned file needs modification but was not explicitly selected by Judge."
+      - "Verification fails twice with the same normalized signature."
+    receipt: null
+  - id: T005
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit the completed implementation slice and decide whether to continue with another safe slice."
+    inputs:
+      - "T004 receipt"
+      - "Current diff"
+      - "Last verification"
+      - "Original request"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if only one slice is done but broader safe follow-up work remains."
+      - "Require passing relevant verification or a clear blocked receipt."
+    expected_output:
+      - "slice_complete: true | false"
+      - "full_outcome_complete: true | false"
+      - "missing evidence"
+      - "next Worker or Scout task if not complete"
+    receipt: null
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Final audit: prove whether the whole codebase audit/refactor/improvement-map outcome is complete."
+    inputs:
+      - "All task receipts"
+      - "Final dirty diff"
+      - "Final verification results"
+      - "Ranked improvement and extension map"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if required Worker work is still queued or active."
+      - "Reject completion without audit findings, verification evidence, safe refactor receipts, and improvement/extension candidates."
+    expected_output:
+      - "complete | not_complete"
+      - "full_outcome_complete: true | false"
+      - "evidence mapping back to original request"
+      - "residual risk and deferred work"
+    receipt: null
+
+checks:
+  dirty_fingerprint:
+    status_short:
+      - " M .kiro/specs/multi-agent-turn-engine/PROGRESS.md"
+      - "?? character-personality-map.html"
+    conflicts: []
+  last_verification:
+    result: unknown
+    task: null
+    commands: []

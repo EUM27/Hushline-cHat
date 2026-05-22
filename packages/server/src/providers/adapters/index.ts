@@ -1,4 +1,5 @@
 import type { ModelProviderId, ProviderProfile } from "@hushline/shared";
+import { chatGptAdapter } from "./chatgpt";
 import { nanogptAdapter } from "./nanogpt";
 import { openrouterAdapter } from "./openrouter";
 import type { AdapterRequest, ConnectionAdapter } from "./types";
@@ -6,6 +7,7 @@ import type { AdapterRequest, ConnectionAdapter } from "./types";
 export const connectionAdapters: Record<ModelProviderId, ConnectionAdapter> = {
   nanogpt: nanogptAdapter,
   openrouter: openrouterAdapter,
+  chatgpt: chatGptAdapter,
 };
 
 export const providerProfiles: ProviderProfile[] = Object.values(connectionAdapters).map(
@@ -29,4 +31,16 @@ export async function listModelsForProvider(
     throw new Error(`Unsupported provider: ${providerId}`);
   }
   return adapter.listModels(apiKey);
+}
+
+export function isConnectionReady(
+  connection?: import("@hushline/shared").ModelConnection,
+): connection is import("@hushline/shared").ModelConnection {
+  if (!connection?.model) {
+    return false;
+  }
+  if (connection.providerId === "chatgpt") {
+    return true;
+  }
+  return Boolean(connection.apiKey);
 }

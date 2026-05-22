@@ -1,3 +1,5 @@
+import type { CharacterHandoutDefinition, SessionStateV2 } from "./engine-v2.js";
+
 export type ProviderKind = "dry-run" | "openai-compatible" | "gemini";
 
 /**
@@ -9,7 +11,7 @@ export type ProviderKind = "dry-run" | "openai-compatible" | "gemini";
  */
 export type InputMode = "chat" | "action" | "whisper";
 
-export type ModelProviderId = "nanogpt" | "openrouter";
+export type ModelProviderId = "nanogpt" | "openrouter" | "chatgpt";
 
 export type SpeakerKind =
   | "scenario-crowd"
@@ -39,6 +41,15 @@ export interface AdvisorDraft {
     agreeableness: number;
     neuroticism: number;
   };
+  relationshipTags: string[];
+  autonomy?: number;
+  handout?: Partial<CharacterHandoutDefinition>;
+}
+
+export interface PersonaDraft {
+  name: string;
+  shortName?: string;
+  role: string;
   relationshipTags: string[];
 }
 
@@ -192,6 +203,16 @@ export interface SessionState {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Client-facing v2 session DTO while the React app still renders v1-compatible fields.
+ * It keeps canonical v2 state (`scenarioPackId`, `worldState`, `handouts`, `summaries`)
+ * and adds v1 UI aliases (`scenario`, `scene`, `persona`, `characters`, `messages`).
+ */
+export type ClientSessionState = Omit<
+  SessionStateV2,
+  "persona" | "characters" | "messages" | "title" | "createdAt" | "updatedAt"
+> & SessionState;
 
 export interface AssetManifest {
   backgrounds: Array<{

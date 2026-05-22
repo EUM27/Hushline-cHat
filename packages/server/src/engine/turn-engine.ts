@@ -15,7 +15,7 @@ import {
   findCharacterByMention,
 } from "./characters";
 import { defaultScenarioCard } from "./scenarios";
-import { completeWithConnection } from "../providers/adapters";
+import { completeWithConnection, isConnectionReady } from "../providers/adapters";
 
 export interface TurnResult {
   state: SessionState;
@@ -174,7 +174,7 @@ async function makeActorReply(
   inputMode: InputMode,
   connection?: ModelConnection,
 ): Promise<ActorReply> {
-  if (!connection?.apiKey || !connection.model) {
+  if (!isConnectionReady(connection)) {
     return makeDryActorReply(state, characterId, input, isFollowUp);
   }
 
@@ -677,7 +677,7 @@ async function makeNarratorMessage(
   if (inputMode === "whisper") return [];
 
   // API 연결이 있으면 AI 나레이터 호출
-  if (connection?.apiKey && connection.model) {
+  if (isConnectionReady(connection)) {
     try {
       const content = await completeWithConnection({
         connection,

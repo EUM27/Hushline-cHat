@@ -1,0 +1,179 @@
+/* ══════════════════════════════════════════════════════════════════════
+   Hushline Design System — Design Tokens
+   Source of truth: design-system.md §1.1–§1.8
+   
+   Structure:
+   - :root               → Light mode (default)
+   - [data-theme="dark"] → Dark mode (Surface layer only)
+   - Stage tokens        → Always dark, mode-independent
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════
+   §1.1 COLOR TOKENS
+   ═══════════════════════════════════════════════ */
+
+:root {
+  /* ── Brand — Emerald (포인트) ── */
+  --color-brand-emerald-50: #F1F6F3;
+  --color-brand-emerald-100: #E8F0EC;
+  --color-brand-emerald-200: #C5DCD0;
+  --color-brand-emerald-500: #2D5F4F;
+  --color-brand-emerald-700: #1F4538;
+  --color-brand-emerald-900: #0F2A21;
+
+  /* ── Brand — Mustard (강조) ── */
+  --color-brand-mustard-100: #FBF1D2;
+  --color-brand-mustard-500: #E8C547;
+  --color-brand-mustard-700: #B79626;
+  --color-brand-mustard-900: #5C4810;
+
+  /* ── Surface (Light mode) ── */
+  --color-bg-canvas: #FAF8F5;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-surface-alt: #F2EFEA;
+  --color-bg-overlay: rgba(255, 255, 255, 0.6);
+
+  /* ── Text (Light mode) ── */
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #5C5853;
+  --color-text-tertiary: #8B8780;
+  --color-text-on-dark: #F2EFEA;
+  --color-text-on-emerald: #FFFFFF;
+  --color-text-on-mustard: #5C4810;
+
+  /* ── Border (Light mode) ── */
+  --color-border-default: #E8E4DD;
+  --color-border-strong: #C5C0B6;
+  --color-border-focus: #2D5F4F;
+
+  /* ── Semantic ── */
+  --color-state-success: #2D5F4F;
+  --color-state-online: #5DD66E;
+  --color-state-warning: #E8C547;
+  --color-state-danger: #D7553D;
+  --color-state-info: #4A7B8C;
+  --color-state-mood-tension: #D7553D;
+  --color-state-mood-calm: #4A7B8C;
+}
+
+/* ── §1.8 Dark Mode — Surface layer only ── */
+[data-theme="dark"] {
+  --color-bg-canvas: #15140F;
+  --color-bg-surface: #1F1D17;
+  --color-bg-surface-alt: #28251D;
+  --color-bg-overlay: rgba(21, 20, 15, 0.6);
+
+  --color-text-primary: #F2EFEA;
+  --color-text-secondary: #A8A39A;
+  --color-text-tertiary: #7A766E;
+
+  --color-border-default: #3A372F;
+  --color-border-strong: #5C5853;
+}
+
+/* ── Stage Tokens (always dark, mode-independent) ── */
+:root {
+  --color-bg-stage: #1A1A1A;
+  --color-bg-stage-elevated: #2A2A2A;
+  --color-text-on-stage: #F2EFEA;
+}
+
+/* ── §1.7 Mood Enum Colors ── */
+:root {
+  --color-mood-neutral: #8B8780;
+  --color-mood-warm: #E8A87C;
+  --color-mood-cold: #4A7B8C;
+  --color-mood-tense: #B79626;
+  --color-mood-scared: #6B4570;
+  --color-mood-angry: #D7553D;
+  --color-mood-sad: #5C4810;
+  --color-mood-amused: #E8C547;
+  --color-mood-surprised: #F0997B;
+  --color-mood-resigned: #5F5E5A;
+}
+
+/* ═══════════════════════════════════════════════
+   §1.2 TYPOGRAPHY TOKENS
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --font-family-display: "Pretendard Variable", Pretendard, Inter, system-ui, sans-serif;
+  --font-family-body: "Pretendard Variable", Pretendard, system-ui, sans-serif;
+  --font-family-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-family-narrator: "Noto Serif KR", "Nanum Myeongjo", serif;
+
+  --font-display-xl: 800 48px/56px var(--font-family-display);
+  --font-display-lg: 700 32px/40px var(--font-family-display);
+  --font-title-md: 600 18px/26px var(--font-family-body);
+  --font-body-md: 400 14px/22px var(--font-family-body);
+  --font-body-sm: 400 13px/20px var(--font-family-body);
+  --font-label-xs: 600 11px/16px var(--font-family-body);
+  --font-mono-sm: 500 12px/18px var(--font-family-mono);
+  --font-narrator: italic 400 15px/26px var(--font-family-narrator);
+}
+
+/* ═══════════════════════════════════════════════
+   §1.3 SPACING TOKENS (4px base)
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+}
+
+/* ═══════════════════════════════════════════════
+   §1.4 RADIUS / BORDER TOKENS
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-full: 9999px;
+
+  --border-default: 1px solid var(--color-border-default);
+  --border-focus: 2px solid var(--color-border-focus);
+}
+
+/* ═══════════════════════════════════════════════
+   §1.5 SHADOW / ELEVATION TOKENS
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --shadow-card: 0 4px 16px rgba(28, 26, 24, 0.06);
+  --shadow-floating: 0 12px 32px rgba(28, 26, 24, 0.12);
+  --shadow-bubble: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] {
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --shadow-floating: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --shadow-bubble: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* ═══════════════════════════════════════════════
+   §1.6 MOTION TOKENS
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --motion-fast: 120ms ease-out;
+  --motion-base: 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-slow: 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-beat: 680ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+    --motion-beat: 0ms;
+  }
+}

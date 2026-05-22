@@ -16,7 +16,7 @@ import type {
   ActorReply,
   ExpressionId,
 } from "@hushline/shared";
-import { completeWithConnection } from "../providers/adapters/index.js";
+import { completeWithConnection, isConnectionReady } from "../providers/adapters/index.js";
 import { sanitizeCharacterOutput } from "./output-sanitizer.js";
 import { buildCharacterChatContext } from "./context-builder.js";
 
@@ -42,7 +42,7 @@ export async function invokeCharacter(
   pack: ScenarioPack,
   connection?: ModelConnection,
 ): Promise<CharacterInvocationResult> {
-  if (!connection?.apiKey || !connection.model) {
+  if (!isConnectionReady(connection)) {
     return {
       characterId: character.id,
       content: makeFallbackReply(character, userInput),

@@ -1,107 +1,9 @@
 /* ══════════════════════════════════════════════
-   Hushline Design System — CSS Tokens & Layout
-   Based on design-system.md
+   Hushline Design System — Layout & Components
+   Tokens imported from design-tokens.css
    ══════════════════════════════════════════════ */
 
-/* ── 1. Design Tokens ── */
-
-:root {
-  /* Brand — Emerald */
-  --color-brand-emerald-50: #F1F6F3;
-  --color-brand-emerald-100: #E8F0EC;
-  --color-brand-emerald-200: #C5DCD0;
-  --color-brand-emerald-500: #2D5F4F;
-  --color-brand-emerald-700: #1F4538;
-  --color-brand-emerald-900: #0F2A21;
-
-  /* Brand — Mustard */
-  --color-brand-mustard-100: #FBF1D2;
-  --color-brand-mustard-500: #E8C547;
-  --color-brand-mustard-700: #B79626;
-  --color-brand-mustard-900: #5C4810;
-
-  /* Surface */
-  --color-bg-canvas: #FAF8F5;
-  --color-bg-surface: #FFFFFF;
-  --color-bg-surface-alt: #F2EFEA;
-
-  /* Stage (always dark) */
-  --color-bg-stage: #1A1A1A;
-  --color-bg-stage-elevated: #2A2A2A;
-  --color-text-on-stage: #F2EFEA;
-
-  /* Text */
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #5C5853;
-  --color-text-tertiary: #8B8780;
-  --color-text-on-emerald: #FFFFFF;
-  --color-text-on-mustard: #5C4810;
-
-  /* Border */
-  --color-border-default: #E8E4DD;
-  --color-border-strong: #C5C0B6;
-  --color-border-focus: #2D5F4F;
-
-  /* Semantic */
-  --color-state-success: #2D5F4F;
-  --color-state-online: #5DD66E;
-  --color-state-warning: #E8C547;
-  --color-state-danger: #D7553D;
-  --color-state-info: #4A7B8C;
-
-  /* Mood colors */
-  --color-mood-neutral: #8B8780;
-  --color-mood-warm: #E8A87C;
-  --color-mood-cold: #4A7B8C;
-  --color-mood-tense: #B79626;
-  --color-mood-scared: #6B4570;
-  --color-mood-angry: #D7553D;
-  --color-mood-sad: #5C4810;
-  --color-mood-amused: #E8C547;
-  --color-mood-surprised: #F0997B;
-  --color-mood-resigned: #5F5E5A;
-
-  /* Spacing (4px base) */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-8: 48px;
-
-  /* Radius */
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
-  --radius-full: 9999px;
-
-  /* Border */
-  --border-default: 1px solid var(--color-border-default);
-  --border-focus: 2px solid var(--color-border-focus);
-
-  /* Shadow */
-  --shadow-card: 0 4px 16px rgba(28,26,24,0.06);
-  --shadow-floating: 0 12px 32px rgba(28,26,24,0.12);
-  --shadow-bubble: 0 2px 6px rgba(0,0,0,0.08);
-
-  /* Motion */
-  --motion-fast: 120ms ease-out;
-  --motion-base: 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  --motion-slow: 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
-  --motion-beat: 680ms cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* Typography */
-  --font-display-xl: 800 48px/56px Pretendard, Inter, system-ui, sans-serif;
-  --font-display-lg: 700 32px/40px Pretendard, Inter, system-ui, sans-serif;
-  --font-title-md: 600 18px/26px Pretendard, system-ui, sans-serif;
-  --font-body-md: 400 14px/22px Pretendard, system-ui, sans-serif;
-  --font-body-sm: 400 13px/20px Pretendard, system-ui, sans-serif;
-  --font-label-xs: 600 11px/16px Pretendard, system-ui, sans-serif;
-  --font-mono-sm: 500 12px/18px "JetBrains Mono", monospace;
-  --font-narrator: italic 400 15px/26px "Noto Serif KR", serif;
-}
+@import "./design-tokens.css";
 
 /* ── 2. Reset ── */
 
@@ -506,6 +408,17 @@ button, input, select { font: inherit; }
 
 .api-key-field, .connection-actions { grid-column: 1 / -1; }
 .connection-panel label { grid-column: 1 / -1; display: grid; gap: var(--space-1); font: var(--font-label-xs); color: var(--color-text-secondary); }
+.oauth-key-placeholder {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-tertiary);
+  font: var(--font-body-sm);
+}
 .model-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: end; }
 .model-picker input {
   height: 32px;
@@ -855,3 +768,145 @@ button, input, select { font: inherit; }
   font: var(--font-body-sm);
   color: var(--color-text-tertiary);
 }
+
+/* ── 19. UI Layout Updates (520px standardization) ── */
+
+.setup-open .stage-layout, .invitation-open .stage-layout {
+  grid-template-columns: minmax(380px, 480px) minmax(380px, 480px);
+}
+
+.setup-open .persona-panel, .setup-open .advisor-panel, .invitation-open .invitation-panel,
+.setup-open .connection-panel, .invitation-open .connection-panel {
+  width: min(100%, 480px);
+  max-width: 480px;
+  height: min(80vh, 560px);
+  max-height: min(80vh, 560px);
+  justify-self: center;
+}
+
+.setup-open .persona-panel, .setup-open .advisor-panel, .invitation-open .invitation-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── 20. Scenario Dropdown & Detail Box ── */
+
+.scenario-dropdown {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: var(--font-body-sm);
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+}
+.scenario-dropdown:focus { border-color: var(--color-border-focus); }
+
+.scenario-step .persona-panel button {
+  height: 32px;
+  border-radius: var(--radius-sm);
+  font: var(--font-label-xs);
+}
+
+.scenario-detail-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface-alt);
+  border: var(--border-default);
+}
+
+.scenario-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.scenario-detail-meta {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.scenario-badge {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font: var(--font-label-xs);
+  background: var(--color-bg-surface);
+  border: var(--border-default);
+}
+.scenario-badge.genre-badge { color: var(--color-state-info); }
+.scenario-badge.version-badge { color: var(--color-text-tertiary); }
+
+.scenario-detail-title {
+  margin: 0;
+  font: var(--font-title-md);
+  color: var(--color-text-primary);
+}
+
+.scenario-detail-subtitle {
+  margin: 0;
+  font: var(--font-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.scenario-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  max-height: 38vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: var(--space-1);
+}
+
+.scenario-section h3 {
+  margin: 0 0 var(--space-2);
+  font: var(--font-label-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+}
+
+.scenario-description {
+  margin: 0;
+  font: var(--font-body-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.scenario-objective {
+  margin: 0;
+  font: var(--font-body-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.scenario-characters-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-height: 112px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: var(--space-1);
+}
+
+.scenario-char-preview-badge {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 160px;
+  min-width: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  border: var(--border-default);
+}
+.scenario-char-preview-badge strong { font: var(--font-body-sm); color: var(--color-text-primary); }
+.scenario-char-preview-badge span { font: var(--font-label-xs); color: var(--color-text-tertiary); }

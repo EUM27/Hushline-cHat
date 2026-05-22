@@ -260,6 +260,7 @@ export interface CharacterDefinition {
   };
   autonomy: number; // 0.0–1.0
   systemPrompt: string;
+  relationshipTags?: string[];
   handout: CharacterHandoutDefinition;
   relationships: CharacterRelationshipDef[];
   spriteSetId?: string;

@@ -6,20 +6,21 @@
 // ──────────────────────────────────────────────
 
 import type {
-  SessionStateV2,
-  TurnResultV2,
+  AdvisorDraft,
+  ClientSessionState,
   ModelConnection,
   InputMode,
   DirectorOutput,
+  PersonaDraft,
   TurnMessage,
 } from "@hushline/shared";
 
 export interface V2SessionResponse {
-  session: SessionStateV2;
+  session: ClientSessionState;
 }
 
 export interface V2AdvanceResponse {
-  session: SessionStateV2;
+  session: ClientSessionState;
   turn: {
     messages: TurnMessage[];
     directorOutput: DirectorOutput;
@@ -58,6 +59,18 @@ export interface V2ScenarioDetailResponse {
   };
 }
 
+export interface V2PersonaMakerResponse {
+  persona: PersonaDraft;
+  source: "api" | "fallback";
+  error?: string;
+}
+
+export interface V2AdvisorMakerResponse {
+  advisors: AdvisorDraft[];
+  source: "api" | "fallback";
+  error?: string;
+}
+
 // ── Scenario Listing ──
 
 export async function listScenarios(): Promise<string[]> {
@@ -78,14 +91,16 @@ export async function getScenarioDetail(packId: string): Promise<V2ScenarioDetai
 export async function createSessionV2(
   scenarioPackId: string,
   personaName?: string,
+  advisors?: AdvisorDraft[],
   connections?: Record<string, ModelConnection>,
-): Promise<SessionStateV2> {
+): Promise<ClientSessionState> {
   const response = await fetch("/api/v2/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       scenarioPackId,
       persona: personaName ? { name: personaName } : undefined,
+      advisors,
       connections,
     }),
   });
@@ -94,7 +109,36 @@ export async function createSessionV2(
   return payload.session;
 }
 
-export async function getSessionV2(sessionId: string): Promise<SessionStateV2 | null> {
+// ── Draft Makers ──
+
+export async function generatePersonaDraftV2(
+  prompt: string,
+  connection?: ModelConnection,
+): Promise<V2PersonaMakerResponse> {
+  const response = await fetch("/api/v2/persona-maker/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt, connection }),
+  });
+  if (!response.ok) throw new Error("페르소나 초안을 만들 수 없습니다.");
+  return (await response.json()) as V2PersonaMakerResponse;
+}
+
+export async function generateAdvisorDraftsV2(
+  prompt: string,
+  count = 2,
+  connection?: ModelConnection,
+): Promise<V2AdvisorMakerResponse> {
+  const response = await fetch("/api/v2/advisor-maker/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt, count, connection }),
+  });
+  if (!response.ok) throw new Error("조언자 초안을 만들 수 없습니다.");
+  return (await response.json()) as V2AdvisorMakerResponse;
+}
+
+export async function getSessionV2(sessionId: string): Promise<ClientSessionState | null> {
   const response = await fetch(`/api/v2/sessions/${sessionId}`);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("세션을 불러올 수 없습니다.");
@@ -133,7 +177,7 @@ export async function rerollV2(
   return (await response.json()) as V2AdvanceResponse;
 }
 
-export async function undoV2(sessionId: string): Promise<SessionStateV2> {
+export async function undoV2(sessionId: string): Promise<ClientSessionState> {
   const response = await fetch(`/api/v2/sessions/${sessionId}/undo`, {
     method: "POST",
   });

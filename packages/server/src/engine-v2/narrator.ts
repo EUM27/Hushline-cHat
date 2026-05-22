@@ -11,7 +11,7 @@ import type {
   PublicContext,
   ScenarioPack,
 } from "@hushline/shared";
-import { completeWithConnection } from "../providers/adapters/index.js";
+import { completeWithConnection, isConnectionReady } from "../providers/adapters/index.js";
 import { sanitizeNarratorOutput } from "./output-sanitizer.js";
 
 export interface NarratorInvocationResult {
@@ -39,7 +39,7 @@ export async function invokeNarrator(
 
   const instruction = narratorInstruction ?? "유저의 행동 결과를 감각적으로 묘사한다.";
 
-  if (!connection?.apiKey || !connection.model) {
+  if (!isConnectionReady(connection)) {
     return {
       content: makeFallbackNarration(publicContext, inputMode),
       source: "fallback",

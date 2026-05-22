@@ -17,6 +17,10 @@ import type {
   WorldState,
 } from "@hushline/shared";
 
+type TurnRuntimeOptionsV2 = TurnOptionsV2 & {
+  scenarioPack?: ScenarioPack;
+};
+
 import { classifyInput } from "./input-classifier.js";
 import { buildPublicContext, buildPrivateHandout, buildOmniscientContext } from "./context-builder.js";
 import { invokeDirector } from "./director.js";
@@ -40,10 +44,11 @@ import { getFallbackDirectorOutput } from "./output-sanitizer.js";
 export async function runTurnV2(
   session: SessionStateV2,
   rawInput: string,
-  options: TurnOptionsV2 = {},
+  options: TurnRuntimeOptionsV2 = {},
 ): Promise<TurnResultV2> {
-  const pack = reconstructPack(session);
+  const pack = options.scenarioPack ?? reconstructPack(session);
   const connections = options.connections ?? {};
+
 
   // ── Step 1: Input Classification ──
   const { mode: inputMode, content: userContent } = classifyInput(rawInput, options.inputMode);

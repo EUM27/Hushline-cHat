@@ -14,7 +14,7 @@ import type {
   SessionStateV2,
   SubObjective,
 } from "@hushline/shared";
-import { completeWithConnection } from "../providers/adapters/index.js";
+import { completeWithConnection, isConnectionReady } from "../providers/adapters/index.js";
 
 /** How often to auto-summarize (every N turns) */
 export const SUMMARY_INTERVAL = 8;
@@ -64,7 +64,7 @@ export async function generateSummary(
     return true; // In practice, filter by turn number if stored on messages
   }).slice(-(SUMMARY_INTERVAL * 4)); // ~4 messages per turn average
 
-  if (!connection?.apiKey || !connection.model) {
+  if (!isConnectionReady(connection)) {
     return {
       summary: makeFallbackSummary(lastSummaryTurn, currentTurn, recentMessages, session.worldState),
       source: "fallback",

@@ -4,17 +4,18 @@ import type { ChatMessage, ModelConnection } from "@hushline/shared";
 import { assetManifest } from "./assets";
 import { runTurn } from "./engine/turn-engine";
 import { listModelsForProvider, providerProfiles } from "./providers/adapters";
+import { registerOpenAiOAuthRoutes } from "./providers/openai-oauth";
 import { createSqliteStore, type SessionStore } from "./store/sqlite-store";
 
 const messageBodySchema = z.object({
   content: z.string().trim().min(1).max(4000),
 });
 
-const modelProviderIdSchema = z.enum(["nanogpt", "openrouter"]);
+const modelProviderIdSchema = z.enum(["nanogpt", "openrouter", "chatgpt"]);
 
 const modelConnectionSchema = z.object({
   providerId: modelProviderIdSchema,
-  apiKey: z.string().trim().min(1),
+  apiKey: z.string().trim().optional().default(""),
   model: z.string().trim().min(1),
   baseUrl: z.string().trim().url().optional(),
 });
@@ -79,6 +80,8 @@ export function createApp(options: CreateAppOptions = {}) {
       profiles: providerProfiles,
     }),
   );
+
+  registerOpenAiOAuthRoutes(app);
 
   app.post("/api/provider-profiles/:providerId/models", async (context) => {
     const providerId = modelProviderIdSchema.safeParse(context.req.param("providerId"));

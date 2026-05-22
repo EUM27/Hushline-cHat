@@ -61,16 +61,23 @@ export function selectBeat(
 
   const selected = sorted[0] ?? eligible[0]!;
 
+  const stateDelta: GeneratedBeat["stateDelta"] = {};
+  if (selected.effect.stateDelta?.tension !== undefined) {
+    stateDelta.tension = selected.effect.stateDelta.tension;
+  }
+  if (selected.effect.stateDelta?.danger !== undefined) {
+    stateDelta.danger = selected.effect.stateDelta.danger;
+  }
+  if (selected.effect.stateDelta?.factReveals !== undefined) {
+    stateDelta.factReveals = selected.effect.stateDelta.factReveals;
+  }
+
   return {
     deviceId: selected.id,
     beatType: selected.type,
     description: selected.effect.sceneBeat,
     involvedNpcs: selected.effect.npcReactions?.map((r) => r.npcId) ?? [],
-    stateDelta: {
-      tension: selected.effect.stateDelta?.tension,
-      danger: selected.effect.stateDelta?.danger,
-      factReveals: selected.effect.stateDelta?.factReveals,
-    },
+    stateDelta,
   };
 }
 

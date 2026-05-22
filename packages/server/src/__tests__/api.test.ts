@@ -1,12 +1,26 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createApp } from "../app";
 import { createSqliteStore } from "../store/sqlite-store";
 
+function makeJwt(claims: Record<string, unknown>) {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "none", typ: "JWT" })}.${encode(claims)}.`;
+}
+
 describe("Hushline API", () => {
   const originalFetch = globalThis.fetch;
+  const originalAuthFile = process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE;
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    if (originalAuthFile === undefined) {
+      delete process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE;
+    } else {
+      process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE = originalAuthFile;
+    }
   });
 
   test("creates a scenario session with opening beats and advances one dry-run turn", async () => {
@@ -110,7 +124,7 @@ describe("Hushline API", () => {
     );
   });
 
-  test("exposes only NanoGPT and OpenRouter model connection profiles", async () => {
+  test("exposes NanoGPT, OpenRouter, and ChatGPT OAuth model connection profiles", async () => {
     const store = createSqliteStore(":memory:");
     const app = createApp({ store });
 
@@ -121,7 +135,62 @@ describe("Hushline API", () => {
     expect(payload.profiles.map((profile: { id: string }) => profile.id)).toEqual([
       "nanogpt",
       "openrouter",
+      "chatgpt",
     ]);
+  });
+
+  test("loads ChatGPT OAuth models without an API key after browser login", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "hushline-openai-oauth-"));
+    process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE = join(tempDir, "auth.json");
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const idToken = makeJwt({
+      email: "tester@example.com",
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct_123",
+        chatgpt_plan_type: "plus",
+      },
+    });
+    const accessToken = makeJwt({ exp: futureExp });
+    writeFileSync(
+      process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE,
+      JSON.stringify({ tokens: { id_token: idToken, access_token: accessToken, refresh_token: "refresh" } }),
+      "utf8",
+    );
+
+    const app = createApp({ store: createSqliteStore(":memory:") });
+    const requested: Array<{ url: string; accountId: string | null; authorization: string | null }> = [];
+    globalThis.fetch = (async (input, init) => {
+      const headers = new Headers(init?.headers);
+      requested.push({
+        url: String(input),
+        accountId: headers.get("chatgpt-account-id"),
+        authorization: headers.get("authorization"),
+      });
+      return new Response(
+        JSON.stringify({
+          models: [{ slug: "gpt-5.4" }, { slug: "gpt-5.4-thinking" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const response = await app.request("/api/provider-profiles/chatgpt/models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.models).toEqual([
+      { id: "gpt-5.4", label: "gpt-5.4" },
+      { id: "gpt-5.4-thinking", label: "gpt-5.4-thinking" },
+    ]);
+    expect(requested).toHaveLength(1);
+    expect(requested[0]?.url).toContain("https://chatgpt.com/backend-api/codex/models");
+    expect(requested[0]?.accountId).toBe("acct_123");
+    expect(requested[0]?.authorization).toBe(`Bearer ${accessToken}`);
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
   test("loads model options through the selected provider adapter", async () => {

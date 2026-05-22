@@ -9,19 +9,25 @@ import type {
   ModelOption,
   ModelProviderId,
   ProviderProfile,
-  SessionState,
+  ClientSessionState,
 } from "@hushline/shared";
-
-interface SessionResponse {
-  session: SessionState;
-}
-
-interface AdvanceResponse {
-  session: SessionState;
-}
+import { advanceV2, createSessionV2, getScenarioDetail, getSessionV2, listScenarios, rerollV2, undoV2, type V2ScenarioDetailResponse } from "./api-v2";
 
 interface ModelsResponse {
   models: ModelOption[];
+}
+
+interface OpenAiOAuthAccount {
+  connected?: boolean;
+  email?: string;
+  planType?: string;
+}
+
+interface OpenAiOAuthLoginResult {
+  ok: boolean;
+  authorizeUrl?: string;
+  account?: OpenAiOAuthAccount | null;
+  error?: string;
 }
 
 interface ConnectionStatus {
@@ -99,10 +105,13 @@ const secondAdvisorPool: Array<
 export function App() {
   const [assets, setAssets] = useState<AssetManifest | null>(null);
   const [providerProfiles, setProviderProfiles] = useState<ProviderProfile[]>([]);
-  const [session, setSession] = useState<SessionState | null>(null);
+  const [session, setSession] = useState<ClientSessionState | null>(null);
   const [setupStep, setSetupStep] = useState<SetupStep>("scenario");
   const [scenarioList, setScenarioList] = useState<string[]>([]);
+  const [isScenarioListLoading, setIsScenarioListLoading] = useState(true);
+  const [scenarioListError, setScenarioListError] = useState<string | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<string>("");
+  const [selectedScenarioDetail, setSelectedScenarioDetail] = useState<V2ScenarioDetailResponse | null>(null);
   const [personaDraft, setPersonaDraft] = useState<PersonaDraft>({
     name: "",
   });
@@ -116,6 +125,7 @@ export function App() {
   const [modelLoadState, setModelLoadState] = useState<
     Record<string, { loading: boolean; error: string | null }>
   >({});
+  const [oauthStatus, setOauthStatus] = useState<string | null>(null);
   const [manualSaveAt, setManualSaveAt] = useState<string | null>(null);
   const [activeSlotKey, setActiveSlotKey] = useState<string>("default");
   const [isStarting, setIsStarting] = useState(false);
@@ -145,26 +155,14 @@ export function App() {
         setProviderProfiles(providerPayload.profiles);
       }
 
-      // 시나리오 목록 로드
-      try {
-        const scenarioResponse = await fetch("/api/v2/scenarios");
-        if (scenarioResponse.ok && !cancelled) {
-          const scenarioPayload = (await scenarioResponse.json()) as { scenarios: string[] };
-          setScenarioList(scenarioPayload.scenarios);
-        }
-      } catch { /* 무시 */ }
-
       // 저장된 세션 복원
       const savedSessionId = localStorage.getItem(sessionStorageKey);
       if (savedSessionId && !cancelled) {
         try {
-          const sessionResponse = await fetch(`/api/v2/sessions/${savedSessionId}`);
-          if (sessionResponse.ok) {
-            const payload = (await sessionResponse.json()) as SessionResponse;
-            if (!cancelled) {
-              setSession(payload.session);
-              setRevealedMessageCount(payload.session.messages.length);
-            }
+          const savedSession = await getSessionV2(savedSessionId);
+          if (savedSession && !cancelled) {
+            setSession(savedSession);
+            setRevealedMessageCount(savedSession.messages.length);
           } else {
             // 세션이 서버에 없으면 로컬 키 제거
             localStorage.removeItem(sessionStorageKey);
@@ -180,6 +178,34 @@ export function App() {
         setError(reason instanceof Error ? reason.message : "초기화 실패");
       }
     });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsScenarioListLoading(true);
+    setScenarioListError(null);
+
+    listScenarios()
+      .then((scenarios) => {
+        if (!cancelled) {
+          setScenarioList(scenarios);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setScenarioList([]);
+          setScenarioListError(reason instanceof Error ? reason.message : "시나리오 목록을 불러올 수 없습니다.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsScenarioListLoading(false);
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -226,9 +252,36 @@ export function App() {
     return () => window.clearTimeout(timeout);
   }, [revealedMessageCount, session]);
 
+  useEffect(() => {
+    if (!selectedScenario) {
+      setSelectedScenarioDetail(null);
+      return;
+    }
+
+    let cancelled = false;
+    setSelectedScenarioDetail(null);
+    setError(null);
+
+    getScenarioDetail(selectedScenario)
+      .then((detail) => {
+        if (!cancelled) {
+          setSelectedScenarioDetail(detail);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "시나리오 정보를 불러올 수 없습니다.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedScenario]);
+
   const slots = useMemo<ConnectionSlot[]>(
-    () => buildConnectionSlots(session, advisorDrafts),
-    [session, advisorDrafts],
+    () => buildConnectionSlots(session, selectedScenarioDetail),
+    [session, selectedScenarioDetail],
   );
 
   useEffect(() => {
@@ -268,7 +321,28 @@ export function App() {
 
   function handlePersonaContinue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSetupStep("advisors");
+    if (!selectedScenario) return;
+
+    const hasAdvisors = (selectedScenarioDetail?.characters.length ?? 0) > 0;
+    if (!hasAdvisors) {
+      setSetupStep("advisors");
+      return;
+    }
+
+    setIsStarting(true);
+    setError(null);
+
+    createSessionV2(selectedScenario, personaDraft.name || undefined)
+      .then((nextSession) => {
+        setSession(nextSession);
+        setRevealedMessageCount(0);
+      })
+      .catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : "세션 시작 실패");
+      })
+      .finally(() => {
+        setIsStarting(false);
+      });
   }
 
   async function handleStart(event: FormEvent<HTMLFormElement>) {
@@ -281,23 +355,12 @@ export function App() {
     setError(null);
 
     try {
-      const response = await fetch("/api/v2/sessions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          scenarioPackId: selectedScenario || "school-life-anomaly",
-          persona: {
-            name: personaDraft.name || undefined,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("초대장을 열 수 없습니다.");
-      }
-
-      const payload = (await response.json()) as SessionResponse;
-      setSession(payload.session);
+      const nextSession = await createSessionV2(
+        selectedScenario || "school-life-anomaly",
+        personaDraft.name || undefined,
+        advisorDrafts,
+      );
+      setSession(nextSession);
       setRevealedMessageCount(0);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "세션 시작 실패");
@@ -319,17 +382,7 @@ export function App() {
     const nextVisibleCount = session.messages.length + 1;
 
     try {
-      const response = await fetch(`/api/v2/sessions/${session.id}/advance`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content, connections: activeConnections(connections), inputMode }),
-      });
-
-      if (!response.ok) {
-        throw new Error("메시지를 보낼 수 없습니다.");
-      }
-
-      const payload = (await response.json()) as AdvanceResponse;
+      const payload = await advanceV2(session.id, content, inputMode, activeConnections(connections));
       setSession(payload.session);
       setRevealedMessageCount(Math.min(nextVisibleCount, payload.session.messages.length));
     } catch (reason: unknown) {
@@ -345,13 +398,7 @@ export function App() {
     setIsSending(true);
     setError(null);
     try {
-      const response = await fetch(`/api/v2/sessions/${session.id}/reroll`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ connections: activeConnections(connections), inputMode }),
-      });
-      if (!response.ok) throw new Error("리롤에 실패했습니다.");
-      const payload = (await response.json()) as AdvanceResponse;
+      const payload = await rerollV2(session.id, activeConnections(connections), inputMode);
       setSession(payload.session);
       setRevealedMessageCount(payload.session.messages.length);
     } catch (reason: unknown) {
@@ -366,13 +413,9 @@ export function App() {
     setIsSending(true);
     setError(null);
     try {
-      const response = await fetch(`/api/v2/sessions/${session.id}/undo`, {
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("삭제에 실패했습니다.");
-      const payload = (await response.json()) as { session: SessionState };
-      setSession(payload.session);
-      setRevealedMessageCount(payload.session.messages.length);
+      const nextSession = await undoV2(session.id);
+      setSession(nextSession);
+      setRevealedMessageCount(nextSession.messages.length);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "삭제 실패");
     } finally {
@@ -521,35 +564,87 @@ export function App() {
               <span>시나리오 선택</span>
             </div>
             <div className="scenario-list">
-              {scenarioList.length === 0 ? (
+              {isScenarioListLoading ? (
                 <p className="scenario-empty">시나리오 팩을 불러오는 중...</p>
+              ) : scenarioListError ? (
+                <p className="error-line setup-error">{scenarioListError}</p>
+              ) : scenarioList.length === 0 ? (
+                <p className="scenario-empty">사용 가능한 시나리오 팩이 없습니다.</p>
               ) : (
-                scenarioList.map((packId) => (
-                  <button
-                    key={packId}
-                    type="button"
-                    className={`scenario-card-btn ${selectedScenario === packId ? "selected" : ""}`}
-                    onClick={() => setSelectedScenario(packId)}
-                  >
-                    <strong>{packId.replace(/-/g, " ")}</strong>
-                  </button>
-                ))
+                <select
+                  className="scenario-dropdown"
+                  value={selectedScenario}
+                  onChange={(e) => {
+                    setSelectedScenario(e.target.value);
+                  }}
+                >
+                  <option value="" disabled>시나리오를 선택하세요</option>
+                  {scenarioList.map((packId) => (
+                    <option key={packId} value={packId}>
+                      {packId.replace(/-/g, " ")}
+                    </option>
+                  ))}
+                </select>
               )}
             </div>
+            {selectedScenarioDetail && (
+              <div className="scenario-detail-box">
+                <div className="scenario-detail-header">
+                  <div className="scenario-detail-meta">
+                    <span className="scenario-badge genre-badge">{selectedScenarioDetail.manifest.genre}</span>
+                    <span className="scenario-badge version-badge">v{selectedScenarioDetail.manifest.version}</span>
+                  </div>
+                  <h2 className="scenario-detail-title">
+                    {selectedScenarioDetail.scenarioCard.title || selectedScenarioDetail.manifest.title}
+                  </h2>
+                  <p className="scenario-detail-subtitle">
+                    {selectedScenarioDetail.scenarioCard.subtitle || selectedScenarioDetail.manifest.subtitle}
+                  </p>
+                </div>
+                <div className="scenario-detail-body">
+                  <div className="scenario-section">
+                    <h3>시나리오 개요</h3>
+                    <p className="scenario-description">{selectedScenarioDetail.scenarioCard.description}</p>
+                  </div>
+                  <div className="scenario-section">
+                    <h3>핵심 목표</h3>
+                    <p className="scenario-objective">🎯 {selectedScenarioDetail.mainObjective.description}</p>
+                  </div>
+                  <div className="scenario-section">
+                    <h3>등장 인물 ({selectedScenarioDetail.characters.length}명)</h3>
+                    <div className="scenario-characters-preview">
+                      {selectedScenarioDetail.characters.map((char) => (
+                        <div key={char.id} className="scenario-char-preview-badge">
+                          <strong>{char.name}</strong>
+                          <span>{char.role}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {error ? <p className="error-line setup-error">{error}</p> : null}
             <button
               type="button"
-              disabled={!selectedScenario}
+              disabled={!selectedScenario || !selectedScenarioDetail}
               onClick={() => setSetupStep("persona")}
             >
-              다음
+              {selectedScenario && !selectedScenarioDetail ? "불러오는 중..." : "다음"}
             </button>
           </section>
         ) : setupStep === "persona" ? (
-          <section className="persona-panel" aria-label="페르소나 생성">
+          <section className="persona-panel" aria-label="유저 설정">
             <div className="persona-copy">
               <Sparkles size={18} />
-              <span>초대 대기 중</span>
+              <span>유저 기본 설정</span>
+            </div>
+            <div className="advisor-list">
+              <article className="advisor-card">
+                <strong>{personaDraft.name || "{{유저}}"}</strong>
+                <p>사건의 중심에 선 주인공. 선택과 대화로 상황의 흐름을 결정합니다.</p>
+                <span>플레이어</span>
+              </article>
             </div>
             <form onSubmit={handlePersonaContinue}>
               <label>
@@ -563,7 +658,18 @@ export function App() {
                 />
               </label>
               {error ? <p className="error-line setup-error">{error}</p> : null}
-              <button type="submit">다음</button>
+              <div className="advisor-actions" style={{ gridTemplateColumns: "auto 1fr" }}>
+                <button type="button" onClick={() => setSetupStep("scenario")}>
+                  이전
+                </button>
+                <button type="submit" disabled={isStarting}>
+                  {selectedScenarioDetail && selectedScenarioDetail.characters.length > 0
+                    ? isStarting
+                      ? "초대 중..."
+                      : "초대 확인"
+                    : "다음"}
+                </button>
+              </div>
             </form>
           </section>
         ) : (
@@ -606,12 +712,15 @@ export function App() {
           connections={connections}
           modelOptions={modelOptions}
           modelLoadState={modelLoadState}
+          oauthStatus={oauthStatus}
           saveStatus={manualSaveAt ? `저장됨 ${manualSaveAt}` : "자동 저장됨"}
           onChange={(nextConnections) => {
             setManualSaveAt(null);
             setConnections(nextConnections);
           }}
           onLoadModels={loadModels}
+          onOpenChatGptLogin={openChatGptLogin}
+          onCheckChatGptAccount={checkChatGptAccount}
           onSave={saveConnections}
         />
 
@@ -667,9 +776,40 @@ export function App() {
       }),
     );
   }
+
+  async function openChatGptLogin() {
+    setOauthStatus("ChatGPT 연결 준비 중");
+    try {
+      const response = await fetch("/api/openai-oauth/login/start", { method: "POST" });
+      const payload = await parseOpenAiOAuthJson<OpenAiOAuthLoginResult>(response);
+      if (!payload.authorizeUrl) {
+        setOauthStatus("ChatGPT 로그인 URL을 받지 못했습니다.");
+        return;
+      }
+      window.open(payload.authorizeUrl, "_blank", "noopener,noreferrer");
+      setOauthStatus("브라우저에서 ChatGPT 로그인 진행");
+    } catch (reason: unknown) {
+      setOauthStatus(reason instanceof Error ? reason.message : "ChatGPT 연결을 시작하지 못했습니다.");
+    }
+  }
+
+  async function checkChatGptAccount() {
+    try {
+      const response = await fetch("/api/openai-oauth/account", { method: "GET" });
+      const payload = await parseOpenAiOAuthJson<{ ok: boolean; account: OpenAiOAuthAccount }>(response);
+      if (!payload.account.connected) {
+        setOauthStatus("ChatGPT 로그인이 필요합니다.");
+        return;
+      }
+      const plan = payload.account.planType ? ` · ${payload.account.planType}` : "";
+      setOauthStatus(`${payload.account.email ?? "ChatGPT"} 연결됨${plan}`);
+    } catch (reason: unknown) {
+      setOauthStatus(reason instanceof Error ? reason.message : "ChatGPT 연결을 확인하지 못했습니다.");
+    }
+  }
 }
 
-function DevPanel({ session }: { session: SessionState }) {
+function DevPanel({ session }: { session: ClientSessionState }) {
   const [open, setOpen] = useState(false);
 
   // v2 세션이면 worldState/handouts가 있음
@@ -866,9 +1006,12 @@ function ConnectionPanel({
   connections,
   modelOptions,
   modelLoadState,
+  oauthStatus,
   saveStatus,
   onChange,
   onLoadModels,
+  onOpenChatGptLogin,
+  onCheckChatGptAccount,
   onSave,
 }: {
   profiles: ProviderProfile[];
@@ -878,9 +1021,12 @@ function ConnectionPanel({
   connections: Record<string, ModelConnection>;
   modelOptions: Record<string, ModelOption[]>;
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
+  oauthStatus: string | null;
   saveStatus: string;
   onChange: (connections: Record<string, ModelConnection>) => void;
   onLoadModels: (providerId: ModelProviderId, apiKey?: string) => void;
+  onOpenChatGptLogin: () => void;
+  onCheckChatGptAccount: () => void;
   onSave: () => void;
 }) {
   const fallbackProviderId = profiles[0]?.id ?? ("nanogpt" as ModelProviderId);
@@ -902,6 +1048,7 @@ function ConnectionPanel({
     loading: false,
     error: null,
   };
+  const usesChatGptOAuth = currentConnection.providerId === "chatgpt";
   const slotStatus = getConnectionStatus(connections[slotKey], profiles);
 
   function updateSlotConnection(next: Partial<ModelConnection>) {
@@ -976,16 +1123,30 @@ function ConnectionPanel({
       </label>
       <label className="api-key-field">
         API key
-        <input
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          value={currentConnection.apiKey}
-          onChange={(event) => updateSlotConnection({ apiKey: event.target.value })}
-          placeholder="브라우저에 자동 저장"
-        />
+        {usesChatGptOAuth ? (
+          <span className="oauth-key-placeholder">브라우저 ChatGPT 로그인 사용</span>
+        ) : (
+          <input
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={currentConnection.apiKey}
+            onChange={(event) => updateSlotConnection({ apiKey: event.target.value })}
+            placeholder="브라우저에 자동 저장"
+          />
+        )}
       </label>
       <div className="connection-actions">
+        {usesChatGptOAuth ? (
+          <>
+            <button type="button" onClick={onOpenChatGptLogin}>
+              ChatGPT 연결
+            </button>
+            <button type="button" onClick={onCheckChatGptAccount}>
+              연결 확인
+            </button>
+          </>
+        ) : null}
         <button type="button" onClick={onSave}>
           저장
         </button>
@@ -998,6 +1159,9 @@ function ConnectionPanel({
       <p>{selectedProfile ? `${selectedProfile.baseUrl}${selectedProfile.endpointPath}` : "dry-run"}</p>
       {currentModelLoadState.error ? (
         <p className="connection-error">{currentModelLoadState.error}</p>
+      ) : null}
+      {usesChatGptOAuth && oauthStatus ? (
+        <p className="connection-error">{oauthStatus}</p>
       ) : null}
     </aside>
   );
@@ -1019,7 +1183,7 @@ function MessageBubble({
   providerProfiles,
 }: {
   message: ChatMessage;
-  session: SessionState;
+  session: ClientSessionState;
   slots: ConnectionSlot[];
   connections: Record<string, ModelConnection>;
   providerProfiles: ProviderProfile[];
@@ -1090,6 +1254,21 @@ function getConnectionStatus(
   const providerLabel =
     profiles.find((profile) => profile.id === connection.providerId)?.label ?? connection.providerId;
 
+  if (connection.providerId === "chatgpt") {
+    if (!connection.model) {
+      return {
+        tone: "warning",
+        label: "모델 선택 필요",
+        detail: "ChatGPT 연결 후 모델을 불러와 선택하세요.",
+      };
+    }
+    return {
+      tone: "ready",
+      label: "ChatGPT OAuth 적용 중",
+      detail: `${providerLabel} / ${connection.model}`,
+    };
+  }
+
   if (!connection.apiKey && !connection.model) {
     return {
       tone: "idle",
@@ -1122,8 +1301,8 @@ function getConnectionStatus(
 }
 
 function buildConnectionSlots(
-  session: SessionState | null,
-  drafts: AdvisorDraft[],
+  session: ClientSessionState | null,
+  scenarioDetail: V2ScenarioDetailResponse | null,
 ): ConnectionSlot[] {
   const characterSlots = session
     ? session.characters.map<ConnectionSlot>((character) => ({
@@ -1131,11 +1310,13 @@ function buildConnectionSlots(
         title: character.anonymousLabel ?? character.name,
         subtitle: character.role,
       }))
-    : drafts.map<ConnectionSlot>((draft) => ({
-        key: draft.id,
-        title: draft.anonymousLabel,
-        subtitle: draft.role,
-      }));
+    : scenarioDetail
+      ? scenarioDetail.characters.map<ConnectionSlot>((char) => ({
+          key: char.id,
+          title: char.anonymousLabel ?? char.name,
+          subtitle: char.role,
+        }))
+      : [];
 
   return [
     {
@@ -1219,7 +1400,9 @@ function activeConnections(
   const active = Object.fromEntries(
     Object.entries(connections).filter(
       ([, connection]) =>
-        connection.providerId && connection.apiKey.trim() && connection.model.trim(),
+        connection.providerId
+        && connection.model.trim()
+        && (connection.providerId === "chatgpt" || connection.apiKey.trim()),
     ),
   );
   const primaryConnection = active.default ?? Object.values(active)[0];
@@ -1232,6 +1415,23 @@ function activeConnections(
   }
 
   return active;
+}
+
+async function parseOpenAiOAuthJson<T extends { ok?: boolean; error?: string }>(response: Response): Promise<T> {
+  const bodyText = await response.text();
+  if (!bodyText.trim()) {
+    throw new Error(`OpenAI OAuth 응답이 비어 있습니다: ${response.status}`);
+  }
+  let payload: T;
+  try {
+    payload = JSON.parse(bodyText) as T;
+  } catch {
+    throw new Error(`OpenAI OAuth 응답 JSON 파싱 실패: ${response.status}`);
+  }
+  if (!response.ok || payload.ok === false) {
+    throw new Error(payload.error ?? `OpenAI OAuth 요청 실패: ${response.status}`);
+  }
+  return payload;
 }
 
 // ---------------------------------------------------------------------------
@@ -1317,7 +1517,7 @@ function detectInputModeFromText(text: string): InputMode | null {
   return null;
 }
 
-function hasUserMessages(session: SessionState | null): boolean {
+function hasUserMessages(session: ClientSessionState | null): boolean {
   if (!session) return false;
   return session.messages.some((m) => m.role === "user" && !m.isOpeningBeat);
 }

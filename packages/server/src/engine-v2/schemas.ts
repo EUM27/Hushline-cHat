@@ -85,6 +85,7 @@ export const characterDefinitionSchema = z.object({
   ocean: oceanSchema,
   autonomy: z.number().min(0).max(1).default(0.5),
   systemPrompt: z.string().min(1).max(4000),
+  relationshipTags: z.array(z.string().max(100)).optional(),
   handout: characterHandoutSchema,
   relationships: z.array(characterRelationshipDefSchema).default([]),
   spriteSetId: z.string().optional(),
