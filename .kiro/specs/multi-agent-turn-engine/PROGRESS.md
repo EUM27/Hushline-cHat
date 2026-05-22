@@ -60,7 +60,7 @@
 ### 미구현 (다음 세션에서 계속)
 
 #### Phase 1: 정보 시스템 완성
-- [ ] VisibilityGraph를 파이프라인에 연결
+- [x] VisibilityGraph를 파이프라인/Character private handout에 연결
 - [ ] NpcFactRevealEngine을 Character Agent pre-generation에 연결
 - [ ] RuntimeGenerationContract (pre/post 검증 미들웨어)
 - [ ] DirectorOutput에 reveal_permissions 필드 추가
@@ -353,3 +353,35 @@ from_st_lab_to_hushline:
     hushline: "pipeline.ts에서 2명일 때 순차 호출로 변경 권장"
     status: "❌ 현재 Promise.all 병렬. 순차로 변경 검토."
 ```
+
+---
+
+### 2026-05-23 작업 기록 — A/C 정리
+
+#### 완료
+- [x] A: 현재 작업 상태 검증 후 기준 커밋 생성
+  - `corepack pnpm -r run check`
+  - `corepack pnpm --filter @hushline/client build`
+  - `corepack pnpm --filter @hushline/server test`
+- [x] C: VisibilityGraph 결과를 Character Agent private handout 경로에 연결
+  - `buildPrivateHandout()`가 `worldState.factVisibility`를 읽고 `getAgentKnowledge()`로 현재 character에게 보이는 fact만 합친다.
+  - 기존 `characterStates[charId].knownFacts`는 유지하고 visible fact content를 dedupe해서 병합한다.
+  - `blockedFrom` fact는 handout에 들어가지 않도록 테스트 추가.
+
+#### 자동 검증
+- server test: 25 pass / 0 fail
+- 신규 테스트: `packages/server/src/engine-v2/__tests__/visibility-context.test.ts`
+
+#### 내일 수동 테스트 기준
+- 상세 체크리스트: `docs/manual-test-checklist.md`
+- 특히 확인할 것:
+  1. v2 세션 생성/advance/reroll/undo 정상 동작
+  2. provider/slot별 모델 라우팅과 default fallback
+  3. Director/Narrator/Character 역할 분리
+  4. VisibilityGraph 기반 정보 격리: 특정 캐릭터에게만 보이는 fact가 다른 캐릭터 대사에 새지 않는지
+  5. CSS 스크롤/패널 레이아웃 회귀
+
+#### 남은 Phase 1
+- [ ] NpcFactRevealEngine을 Character Agent pre-generation에 연결
+- [ ] DirectorOutput reveal permissions 설계/검증
+- [ ] Reveal budget 차감/리셋

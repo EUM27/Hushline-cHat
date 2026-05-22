@@ -19,10 +19,16 @@ import type {
   TurnMessage,
   RelationshipEdge,
   EventTrigger,
+  FactVisibility,
 } from "@hushline/shared";
+import { getAgentKnowledge } from "./visibility-graph.js";
 
 const PUBLIC_CHAT_LOG_SIZE = 20;
 const CHARACTER_CONTEXT_SIZE = 12;
+
+type WorldStateWithVisibility = WorldState & {
+  factVisibility?: FactVisibility[];
+};
 
 // ──────────────────────────────────────────────
 // Public Context (Narrator + Characters see this)
@@ -89,16 +95,27 @@ export function buildPrivateHandout(
     (edge) => edge.sourceId === characterId,
   );
 
+  const visibleFacts = getVisibleFactContents(worldState, characterId);
+
   return {
     characterId,
     secret: charDef.handout.secret,
     desire: charDef.handout.desire,
     objective: charState.currentObjective || charDef.handout.objective,
     relationshipToUser: charState.relationshipToUser,
-    knownFacts: charState.knownFacts,
+    knownFacts: mergeKnownFacts(charState.knownFacts, visibleFacts),
     myRelationships,
     autonomy: charState.autonomy,
   };
+}
+
+function getVisibleFactContents(worldState: WorldState, characterId: string): string[] {
+  const facts = (worldState as WorldStateWithVisibility).factVisibility ?? [];
+  return getAgentKnowledge(facts, characterId).map((fact) => fact.content);
+}
+
+function mergeKnownFacts(existingFacts: string[], visibleFactContents: string[]): string[] {
+  return [...new Set([...existingFacts, ...visibleFactContents])].slice(-30);
 }
 
 // ──────────────────────────────────────────────
