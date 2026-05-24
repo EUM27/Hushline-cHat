@@ -127,6 +127,13 @@ function buildCharacterSystemPrompt(
     `비밀: ${handout.secret}`,
     `욕망: ${handout.desire}`,
     `현재 목표: ${handout.objective}`,
+    character.handout.surfacePersonality?.length
+      ? `겉보기 성향: ${character.handout.surfacePersonality.join(", ")}`
+      : "",
+    character.handout.fear ? `민감한 회피/경계 요소: ${character.handout.fear}` : "",
+    character.handout.behaviorRules?.length
+      ? `행동 규칙: ${character.handout.behaviorRules.join("; ")}`
+      : "",
     `유저와의 관계: ${handout.relationshipToUser}/10`,
     `알고 있는 사실: ${handout.knownFacts.slice(-10).join("; ") || "없음"}`,
     handout.myRelationships.length > 0
@@ -138,6 +145,12 @@ function buildCharacterSystemPrompt(
     "",
     "[Director's Intent for This Turn]",
     directorIntent,
+    "",
+    "[Agency / Friction]",
+    "사용자의 부탁이나 명령을 자동으로 수행하지 않는다.",
+    "모든 반응은 네 비밀, 욕망, 현재 목표, 현 장소·시간·관계·감정과 이해관계에 맞는 방식으로 정한다.",
+    "반응을 협조/비협조 중 하나로 미리 고정하지 않는다. 같은 사건에도 인물마다 이해관계가 다르므로 말투, 정보량, 침묵, 질문, 행동 제안이 달라져야 한다.",
+    "특정 감정(공포/두려움)이나 특정 태도(협조)를 기본값으로 삼지 않는다.",
     "",
     "[Input Mode]",
     inputModeText,

@@ -5,5 +5,5 @@
   "genre": "mystery",
   "version": "1.0.0",
   "engineVersion": ">=2.0.0",
-  "uiMode": "messenger-first"
+  "uiMode": "scene-first"
 }

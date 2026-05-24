@@ -13,6 +13,7 @@ function makeJwt(claims: Record<string, unknown>) {
 describe("Hushline API", () => {
   const originalFetch = globalThis.fetch;
   const originalAuthFile = process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE;
+  const originalBrokerUrl = process.env.HUSHLINE_OPENAI_OAUTH_BROKER_URL;
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
@@ -20,6 +21,11 @@ describe("Hushline API", () => {
       delete process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE;
     } else {
       process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE = originalAuthFile;
+    }
+    if (originalBrokerUrl === undefined) {
+      delete process.env.HUSHLINE_OPENAI_OAUTH_BROKER_URL;
+    } else {
+      process.env.HUSHLINE_OPENAI_OAUTH_BROKER_URL = originalBrokerUrl;
     }
   });
 
@@ -190,6 +196,71 @@ describe("Hushline API", () => {
     expect(requested[0]?.url).toContain("https://chatgpt.com/backend-api/codex/models");
     expect(requested[0]?.accountId).toBe("acct_123");
     expect(requested[0]?.authorization).toBe(`Bearer ${accessToken}`);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test("delegates ChatGPT OAuth login and models to an existing local broker", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "hushline-openai-oauth-empty-"));
+    process.env.HUSHLINE_OPENAI_OAUTH_AUTH_FILE = join(tempDir, "auth.json");
+    process.env.HUSHLINE_OPENAI_OAUTH_BROKER_URL = "http://localhost:1455";
+    const app = createApp({ store: createSqliteStore(":memory:") });
+    const requested: Array<{ url: string; method: string }> = [];
+
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input);
+      requested.push({ url, method: init?.method ?? "GET" });
+      if (url.endsWith("/api/openai-oauth/account")) {
+        return new Response(
+          JSON.stringify({ ok: true, account: { connected: true, email: "tester@example.com" } }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.endsWith("/api/openai-oauth/login/start")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            authorizeUrl: "https://auth.openai.com/oauth/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.endsWith("/api/openai-oauth/models")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            data: [
+              { id: "gpt-5.4", name: "gpt-5.4" },
+              { id: "gpt-5.4-thinking", name: "gpt-5.4-thinking" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("unexpected", { status: 500 });
+    }) as typeof fetch;
+
+    const loginResponse = await app.request("/api/openai-oauth/login/start", { method: "POST" });
+    expect(loginResponse.status).toBe(200);
+    const loginPayload = await loginResponse.json();
+    expect(loginPayload.authorizeUrl).toContain("localhost%3A1455%2Fauth%2Fcallback");
+
+    const modelsResponse = await app.request("/api/provider-profiles/chatgpt/models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(modelsResponse.status).toBe(200);
+    const modelsPayload = await modelsResponse.json();
+    expect(modelsPayload.models).toEqual([
+      { id: "gpt-5.4", label: "gpt-5.4" },
+      { id: "gpt-5.4-thinking", label: "gpt-5.4-thinking" },
+    ]);
+    expect(requested.map((request) => request.url)).toEqual([
+      "http://localhost:1455/api/openai-oauth/account",
+      "http://localhost:1455/api/openai-oauth/login/start",
+      "http://localhost:1455/api/openai-oauth/account",
+      "http://localhost:1455/api/openai-oauth/models",
+    ]);
     rmSync(tempDir, { recursive: true, force: true });
   });
 

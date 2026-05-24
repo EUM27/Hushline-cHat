@@ -631,6 +631,8 @@ function toClientSession(session: SessionStateV2, scenarioPack?: ScenarioPack) {
       backgroundIds: scenarioCard?.backgroundIds ?? [],
       initialLocationId: scenarioCard?.initialLocationId ?? session.worldState.locationId,
       initialBackgroundId: scenarioCard?.initialBackgroundId ?? session.worldState.backgroundId,
+      initialSceneMode: scenarioCard?.initialSceneMode ?? session.worldState.sceneMode,
+      uiMode: scenarioPack?.manifest.uiMode ?? (session.worldState.sceneMode === "messenger" ? "messenger-first" : "scene-first"),
       interventionPrompt: scenarioCard?.interventionPrompt ?? "",
       openingBeats: scenarioCard?.openingBeats ?? [],
     },

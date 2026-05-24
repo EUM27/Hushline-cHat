@@ -112,12 +112,16 @@ export function validateDirectorOutput(raw: string): DirectorOutput | null {
 /**
  * Get a safe fallback DirectorOutput when API fails or output is invalid.
  */
-export function getFallbackDirectorOutput(characterIds: string[]): DirectorOutput {
+export function getFallbackDirectorOutput(
+  characterIds: string[],
+  recentSpeakerIds: string[] = [],
+): DirectorOutput {
+  const speakerId = pickLeastRecentSpeaker(characterIds, recentSpeakerIds);
   return {
     ...FALLBACK_DIRECTOR_OUTPUT,
-    speakers: characterIds.slice(0, 1),
-    characterIntents: characterIds.length > 0
-      ? { [characterIds[0]!]: "상황에 맞게 자연스럽게 반응한다." }
+    speakers: speakerId ? [speakerId] : [],
+    characterIntents: speakerId
+      ? { [speakerId]: "최근 발화자와 다른 관점에서, 자신의 이해관계와 비밀을 지키며 짧게 반응한다." }
       : {},
   };
 }
@@ -196,4 +200,25 @@ function looksLikeNarration(text: string): boolean {
   const dialogueScore = dialogueMarkers.filter((p) => p.test(text)).length;
 
   return narrationScore >= 2 && narrationScore > dialogueScore;
+}
+
+function pickLeastRecentSpeaker(
+  characterIds: string[],
+  recentSpeakerIds: string[],
+): string | undefined {
+  if (characterIds.length === 0) return undefined;
+
+  const recentIndex = new Map<string, number>();
+  for (const [index, id] of recentSpeakerIds.entries()) {
+    if (!recentIndex.has(id)) {
+      recentIndex.set(id, index);
+    }
+  }
+
+  return [...characterIds].sort((a, b) => {
+    const aRank = recentIndex.has(a) ? recentIndex.get(a)! : Number.POSITIVE_INFINITY;
+    const bRank = recentIndex.has(b) ? recentIndex.get(b)! : Number.POSITIVE_INFINITY;
+    if (aRank !== bRank) return bRank - aRank;
+    return characterIds.indexOf(a) - characterIds.indexOf(b);
+  })[0];
 }

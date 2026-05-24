@@ -13,7 +13,8 @@ const openAiOAuthUpstreamUrl = "https://chatgpt.com/backend-api/codex";
 const openAiOAuthOriginator = "codex_cli_rs";
 const openAiOAuthClientVersion = "0.111.0";
 const openAiOAuthDefaultModel = "gpt-5.4";
-const openAiOAuthDefaultLoginPort = 1456;
+const openAiOAuthDefaultLoginPort = 1455;
+const openAiOAuthDefaultBrokerUrl = "http://localhost:5173";
 
 type OpenAiOAuthTokens = {
   id_token?: string;
@@ -34,6 +35,16 @@ type OpenAiOAuthLoginSession = {
   createdAt: number;
 };
 
+type OpenAiOAuthBrokerPayload = {
+  ok?: boolean;
+  error?: string;
+  authorizeUrl?: string;
+  account?: unknown;
+  data?: unknown;
+  models?: unknown;
+  choices?: unknown;
+};
+
 let openAiOAuthLoginSession: OpenAiOAuthLoginSession | null = null;
 let openAiOAuthCallbackServer: Server | null = null;
 let openAiOAuthCallbackServerStart: Promise<Server> | null = null;
@@ -47,6 +58,10 @@ function getAuthFilePath() {
 function getLoginPort() {
   const parsed = Number(process.env.HUSHLINE_OPENAI_OAUTH_LOGIN_PORT ?? openAiOAuthDefaultLoginPort);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : openAiOAuthDefaultLoginPort;
+}
+
+function getBrokerUrl() {
+  return (process.env.HUSHLINE_OPENAI_OAUTH_BROKER_URL ?? openAiOAuthDefaultBrokerUrl).replace(/\/+$/u, "");
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -129,6 +144,97 @@ export function getOpenAiOAuthAccount() {
     planType,
     accountId,
   };
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 1_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getExternalOpenAiOAuthBrokerUrl() {
+  if (process.env.HUSHLINE_OPENAI_OAUTH_DISABLE_EXTERNAL_BROKER === "1") {
+    return null;
+  }
+
+  try {
+    const brokerUrl = getBrokerUrl();
+    const response = await fetchWithTimeout(`${brokerUrl}/api/openai-oauth/account`, {
+      method: "GET",
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const payload = toRecord(await response.json().catch(() => ({})));
+    return payload.ok === true ? brokerUrl : null;
+  } catch {
+    return null;
+  }
+}
+
+async function requestExternalOpenAiOAuthBroker(
+  brokerUrl: string,
+  path: string,
+  init: RequestInit = {},
+): Promise<OpenAiOAuthBrokerPayload> {
+  const response = await fetch(`${brokerUrl}${path}`, init);
+  const bodyText = await response.text();
+  const payload = toRecord(bodyText ? JSON.parse(bodyText) : {}) as OpenAiOAuthBrokerPayload;
+  if (!response.ok || payload.ok === false) {
+    throw new Error(typeof payload.error === "string" ? payload.error : `ChatGPT OAuth broker request failed: ${response.status}`);
+  }
+  return payload;
+}
+
+async function startExternalOpenAiOAuthLogin(brokerUrl: string) {
+  return requestExternalOpenAiOAuthBroker(brokerUrl, "/api/openai-oauth/login/start", {
+    method: "POST",
+  });
+}
+
+async function getExternalOpenAiOAuthAccount(brokerUrl: string) {
+  return requestExternalOpenAiOAuthBroker(brokerUrl, "/api/openai-oauth/account", {
+    method: "GET",
+  });
+}
+
+function modelOptionsFromBrokerPayload(payload: OpenAiOAuthBrokerPayload): ModelOption[] {
+  const rawModels = Array.isArray(payload.data)
+    ? payload.data
+    : Array.isArray(payload.models)
+      ? payload.models
+      : [];
+  return rawModels
+    .map((model) => {
+      const record = toRecord(model);
+      const id = typeof record.id === "string"
+        ? record.id
+        : typeof record.slug === "string"
+          ? record.slug
+          : "";
+      const label = typeof record.name === "string"
+        ? record.name
+        : typeof record.label === "string"
+          ? record.label
+          : id;
+      return id ? { id, label } : null;
+    })
+    .filter((model): model is ModelOption => Boolean(model));
+}
+
+async function listExternalOpenAiOAuthModels(brokerUrl: string): Promise<ModelOption[]> {
+  const payload = await requestExternalOpenAiOAuthBroker(brokerUrl, "/api/openai-oauth/models", {
+    method: "GET",
+  });
+  const models = modelOptionsFromBrokerPayload(payload);
+  if (models.length === 0) {
+    throw new Error("ChatGPT OAuth broker returned an empty model list.");
+  }
+  return models;
 }
 
 async function refreshOpenAiOAuthTokens(tokens: OpenAiOAuthTokens): Promise<OpenAiOAuthTokens> {
@@ -291,6 +397,11 @@ function ensureOpenAiOAuthCallbackServer() {
 }
 
 export async function startOpenAiOAuthLogin() {
+  const brokerUrl = await getExternalOpenAiOAuthBrokerUrl();
+  if (brokerUrl) {
+    return startExternalOpenAiOAuthLogin(brokerUrl);
+  }
+
   await ensureOpenAiOAuthCallbackServer();
   const { codeVerifier, codeChallenge } = createPkceCodes();
   const loginPort = getLoginPort();
@@ -322,6 +433,13 @@ async function openAiOAuthFetch(path: string, init?: RequestInit) {
 }
 
 export async function listOpenAiOAuthModels(): Promise<ModelOption[]> {
+  if (!getOpenAiOAuthAccount().connected) {
+    const brokerUrl = await getExternalOpenAiOAuthBrokerUrl();
+    if (brokerUrl) {
+      return listExternalOpenAiOAuthModels(brokerUrl);
+    }
+  }
+
   if (openAiOAuthModelCache && openAiOAuthModelCache.expiresAt > Date.now()) {
     return openAiOAuthModelCache.data;
   }
@@ -382,20 +500,51 @@ function buildOpenAiOAuthResponseBody(body: Record<string, unknown>) {
   };
 }
 
+function buildOpenAiOAuthChatCompletionBody(request: AdapterRequest) {
+  return {
+    model: request.connection.model || openAiOAuthDefaultModel,
+    messages: [
+      { role: "system", content: request.systemPrompt },
+      ...request.messages.map((message) => ({
+        role: message.role === "user" ? "user" : "assistant",
+        content: message.content,
+      })),
+    ],
+  };
+}
+
+function extractChatCompletionContent(payload: OpenAiOAuthBrokerPayload) {
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const firstChoice = toRecord(choices[0]);
+  const message = toRecord(firstChoice.message);
+  return typeof message.content === "string" ? message.content : "";
+}
+
+async function completeExternalOpenAiOAuth(brokerUrl: string, request: AdapterRequest) {
+  const payload = await requestExternalOpenAiOAuthBroker(brokerUrl, "/api/openai-oauth/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildOpenAiOAuthChatCompletionBody(request)),
+  });
+  const content = extractChatCompletionContent(payload);
+  if (!content.trim()) {
+    throw new Error("ChatGPT OAuth broker returned an empty completion.");
+  }
+  return content;
+}
+
 export async function completeOpenAiOAuth(request: AdapterRequest): Promise<string> {
+  if (!getOpenAiOAuthAccount().connected) {
+    const brokerUrl = await getExternalOpenAiOAuthBrokerUrl();
+    if (brokerUrl) {
+      return completeExternalOpenAiOAuth(brokerUrl, request);
+    }
+  }
+
   const response = await openAiOAuthFetch("/responses", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(buildOpenAiOAuthResponseBody({
-      model: request.connection.model || openAiOAuthDefaultModel,
-      messages: [
-        { role: "system", content: request.systemPrompt },
-        ...request.messages.map((message) => ({
-          role: message.role === "user" ? "user" : "assistant",
-          content: message.content,
-        })),
-      ],
-    })),
+    body: JSON.stringify(buildOpenAiOAuthResponseBody(buildOpenAiOAuthChatCompletionBody(request))),
   });
   const bodyText = await response.text();
   if (!response.ok) {
@@ -444,8 +593,20 @@ export function registerOpenAiOAuthRoutes(app: Hono) {
     }
   });
 
-  app.get("/api/openai-oauth/account", (context) => {
-    return context.json({ ok: true, account: getOpenAiOAuthAccount(), authFileExists: existsSync(getAuthFilePath()) });
+  app.get("/api/openai-oauth/account", async (context) => {
+    try {
+      const account = getOpenAiOAuthAccount();
+      if (!account.connected) {
+        const brokerUrl = await getExternalOpenAiOAuthBrokerUrl();
+        if (brokerUrl) {
+          const payload = await getExternalOpenAiOAuthAccount(brokerUrl);
+          return context.json({ ...payload, broker: brokerUrl });
+        }
+      }
+      return context.json({ ok: true, account, authFileExists: existsSync(getAuthFilePath()) });
+    } catch (error) {
+      return context.json({ ok: false, error: normalizeOpenAiOAuthError(error, "ChatGPT 연결을 확인하지 못했습니다.") }, 500);
+    }
   });
 
   app.get("/api/openai-oauth/models", async (context) => {

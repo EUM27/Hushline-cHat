@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Sparkles, MessageSquare, Zap, MessageCircle } from "lucide-react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Send, Sparkles, MessageSquare, Zap, MessageCircle, Plus, RotateCcw, Undo2 } from "lucide-react";
 import type {
   AdvisorDraft,
   AssetManifest,
@@ -51,6 +51,7 @@ type SetupStep = "scenario" | "persona" | "advisors";
 const defaultInput = "";
 const connectionStorageKey = "hushline.modelConnections.v1";
 const sessionStorageKey = "hushline.activeSessionId.v1";
+const enterToSendStorageKey = "hushline.enterToSend.v1";
 
 const secondAdvisorPool: Array<
   Pick<AdvisorDraft, "anonymousLabel" | "role" | "systemPrompt" | "mbti" | "ocean" | "relationshipTags">
@@ -118,6 +119,7 @@ export function App() {
   const [advisorDrafts, setAdvisorDrafts] = useState<AdvisorDraft[]>(() => createAdvisorDrafts());
   const [input, setInput] = useState(defaultInput);
   const [inputMode, setInputMode] = useState<InputMode>("chat");
+  const [enterToSend, setEnterToSend] = useState(() => loadEnterToSend());
   const [connections, setConnections] = useState<Record<string, ModelConnection>>(() =>
     loadConnections(),
   );
@@ -127,6 +129,7 @@ export function App() {
   >({});
   const [oauthStatus, setOauthStatus] = useState<string | null>(null);
   const [manualSaveAt, setManualSaveAt] = useState<string | null>(null);
+  const [connectionSaveError, setConnectionSaveError] = useState<string | null>(null);
   const [activeSlotKey, setActiveSlotKey] = useState<string>("default");
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -213,8 +216,18 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(connectionStorageKey, JSON.stringify(connections));
+    persistConnections(connections, {
+      onSuccess: () => {
+        setConnectionSaveError(null);
+        setManualSaveAt(formatKoreanTime());
+      },
+      onError: (message) => setConnectionSaveError(message),
+    });
   }, [connections]);
+
+  useEffect(() => {
+    localStorage.setItem(enterToSendStorageKey, enterToSend ? "1" : "0");
+  }, [enterToSend]);
 
   useEffect(() => {
     if (session) {
@@ -319,6 +332,19 @@ export function App() {
     if (detected !== null) setInputMode(detected);
   }
 
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.nativeEvent.isComposing || event.key !== "Enter") {
+      return;
+    }
+    if (event.shiftKey) {
+      return;
+    }
+    if (enterToSend || event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
   function handlePersonaContinue(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedScenario) return;
@@ -332,7 +358,7 @@ export function App() {
     setIsStarting(true);
     setError(null);
 
-    createSessionV2(selectedScenario, personaDraft.name || undefined)
+    createSessionV2(selectedScenario, personaDraft.name || undefined, undefined, activeConnections(connections))
       .then((nextSession) => {
         setSession(nextSession);
         setRevealedMessageCount(0);
@@ -359,6 +385,7 @@ export function App() {
         selectedScenario || "school-life-anomaly",
         personaDraft.name || undefined,
         advisorDrafts,
+        activeConnections(connections),
       );
       setSession(nextSession);
       setRevealedMessageCount(0);
@@ -423,6 +450,39 @@ export function App() {
     }
   }
 
+  async function handleRestartSession() {
+    if (!session || isStarting || isSending) return;
+    setIsStarting(true);
+    setError(null);
+    try {
+      const restartAdvisors = advisorDraftsFromSession(session);
+      const nextSession = await createSessionV2(
+        session.scenario.id,
+        session.persona.name || undefined,
+        restartAdvisors.length > 0 ? restartAdvisors : undefined,
+        activeConnections(connections),
+      );
+      setSession(nextSession);
+      setRevealedMessageCount(0);
+      localStorage.setItem(sessionStorageKey, nextSession.id);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "재시작 실패");
+    } finally {
+      setIsStarting(false);
+    }
+  }
+
+  function handleNewGame() {
+    setSession(null);
+    setRevealedMessageCount(0);
+    setInput("");
+    setError(null);
+    setSetupStep("scenario");
+    setSelectedScenario("");
+    setSelectedScenarioDetail(null);
+    localStorage.removeItem(sessionStorageKey);
+  }
+
   return (
     <main
       className={`app-shell ${shellMode}`}
@@ -454,8 +514,6 @@ export function App() {
                   key={message.id}
                   message={message}
                   session={session}
-                  slots={slots}
-                  connections={connections}
                   providerProfiles={providerProfiles}
                 />
               ))}
@@ -467,20 +525,35 @@ export function App() {
                 </div>
               ) : null}
             </div>
-            {!messageRevealInProgress ? (
-              <form className="composer invitation-composer" onSubmit={handleSubmit}>
-                <InputModeToggle mode={inputMode} onChange={setInputMode} />
-                <input
-                  value={input}
-                  onChange={(event) => handleInputChange(event.target.value)}
-                  placeholder={session.scenario.interventionPrompt}
-                  aria-label="메시지"
-                />
-                <button type="submit" disabled={isSending} aria-label="보내기">
-                  <Send size={20} />
-                </button>
-              </form>
-            ) : null}
+            <TurnActions
+              canModifyTurn={hasUserMessages(session)}
+              isStarting={isStarting}
+              isSending={isSending}
+              messageRevealInProgress={messageRevealInProgress}
+              onNewGame={handleNewGame}
+              onRestart={handleRestartSession}
+              onUndo={handleUndo}
+              onReroll={handleReroll}
+            />
+            <form className="composer invitation-composer" onSubmit={handleSubmit}>
+              <ComposerOptions
+                mode={inputMode}
+                enterToSend={enterToSend}
+                onModeChange={setInputMode}
+                onEnterToSendChange={setEnterToSend}
+              />
+              <textarea
+                value={input}
+                onChange={(event) => handleInputChange(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
+                placeholder={session.scenario.interventionPrompt}
+                aria-label="메시지"
+                rows={1}
+              />
+              <button type="submit" disabled={isSending} aria-label="보내기">
+                <Send size={20} />
+              </button>
+            </form>
           </section>
         ) : session ? (
           <section className="chat-frame" aria-label="채팅">
@@ -503,8 +576,6 @@ export function App() {
                   key={message.id}
                   message={message}
                   session={session}
-                  slots={slots}
-                  connections={connections}
                   providerProfiles={providerProfiles}
                 />
               ))}
@@ -512,32 +583,28 @@ export function App() {
 
             {error ? <p className="error-line">{error}</p> : null}
 
-            <div className="turn-actions">
-              <button
-                type="button"
-                className="turn-action-btn"
-                disabled={isSending || messageRevealInProgress || !hasUserMessages(session)}
-                onClick={handleUndo}
-                title="마지막 턴 삭제"
-              >
-                ↩ 삭제
-              </button>
-              <button
-                type="button"
-                className="turn-action-btn"
-                disabled={isSending || messageRevealInProgress || !hasUserMessages(session)}
-                onClick={handleReroll}
-                title="마지막 응답 리롤"
-              >
-                🎲 리롤
-              </button>
-            </div>
+            <TurnActions
+              canModifyTurn={hasUserMessages(session)}
+              isStarting={isStarting}
+              isSending={isSending}
+              messageRevealInProgress={messageRevealInProgress}
+              onNewGame={handleNewGame}
+              onRestart={handleRestartSession}
+              onUndo={handleUndo}
+              onReroll={handleReroll}
+            />
 
             <form className="composer" onSubmit={handleSubmit}>
-              <InputModeToggle mode={inputMode} onChange={setInputMode} />
-              <input
+              <ComposerOptions
+                mode={inputMode}
+                enterToSend={enterToSend}
+                onModeChange={setInputMode}
+                onEnterToSendChange={setEnterToSend}
+              />
+              <textarea
                 value={input}
                 onChange={(event) => handleInputChange(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder={
                   inputMode === "action"
                     ? "행동을 입력하세요 (*별표* 또는 버튼)"
@@ -546,11 +613,11 @@ export function App() {
                       : session.scenario.interventionPrompt
                 }
                 aria-label="메시지"
-                disabled={messageRevealInProgress}
+                rows={1}
               />
               <button
                 type="submit"
-                disabled={isSending || !session || messageRevealInProgress}
+                disabled={isSending || !session}
                 aria-label="보내기"
               >
                 <Send size={20} />
@@ -713,7 +780,7 @@ export function App() {
           modelOptions={modelOptions}
           modelLoadState={modelLoadState}
           oauthStatus={oauthStatus}
-          saveStatus={manualSaveAt ? `저장됨 ${manualSaveAt}` : "자동 저장됨"}
+          saveStatus={connectionSaveError ?? (manualSaveAt ? `저장됨 ${manualSaveAt}` : "브라우저에 자동 저장됨")}
           onChange={(nextConnections) => {
             setManualSaveAt(null);
             setConnections(nextConnections);
@@ -768,13 +835,12 @@ export function App() {
   }
 
   function saveConnections() {
-    localStorage.setItem(connectionStorageKey, JSON.stringify(connections));
-    setManualSaveAt(
-      new Date().toLocaleTimeString("ko-KR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    );
+    const saved = persistConnections(connections, {
+      onSuccess: () => setConnectionSaveError(null),
+      onError: (message) => setConnectionSaveError(message),
+    });
+    if (!saved) return;
+    setManualSaveAt(formatKoreanTime());
   }
 
   async function openChatGptLogin() {
@@ -978,8 +1044,8 @@ function ModelSearchPicker({
         </button>
       </div>
       {open && filtered.length > 0 && (
-        <ul className="model-dropdown">
-          {filtered.slice(0, 30).map((m) => (
+        <ul className="model-dropdown" onMouseDown={(event) => event.preventDefault()}>
+          {filtered.map((m) => (
             <li
               key={m.id}
               onMouseDown={() => handleSelect(m.id)}
@@ -989,9 +1055,6 @@ function ModelSearchPicker({
               {m.label !== m.id && <span className="model-dropdown-label">{m.label}</span>}
             </li>
           ))}
-          {filtered.length > 30 && (
-            <li className="model-dropdown-more">+{filtered.length - 30}개 더...</li>
-          )}
         </ul>
       )}
     </div>
@@ -1049,7 +1112,9 @@ function ConnectionPanel({
     error: null,
   };
   const usesChatGptOAuth = currentConnection.providerId === "chatgpt";
-  const slotStatus = getConnectionStatus(connections[slotKey], profiles);
+  const inheritedApiKey = getSharedProviderApiKey(connections, currentConnection.providerId, slotKey);
+  const effectiveApiKey = currentConnection.apiKey.trim() || inheritedApiKey;
+  const slotStatus = getConnectionStatus(connections[slotKey], profiles, inheritedApiKey);
 
   function updateSlotConnection(next: Partial<ModelConnection>) {
     const providerId = next.providerId ?? currentConnection.providerId;
@@ -1118,22 +1183,31 @@ function ConnectionPanel({
           options={modelChoices}
           loading={currentModelLoadState.loading}
           onSelect={(model) => updateSlotConnection({ model })}
-          onLoadModels={() => onLoadModels(currentConnection.providerId, currentConnection.apiKey)}
+          onLoadModels={() => onLoadModels(currentConnection.providerId, effectiveApiKey)}
         />
       </label>
       <label className="api-key-field">
-        API key
+        {slotKey === "default" ? "API key" : "API key override"}
         {usesChatGptOAuth ? (
           <span className="oauth-key-placeholder">브라우저 ChatGPT 로그인 사용</span>
         ) : (
-          <input
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            value={currentConnection.apiKey}
-            onChange={(event) => updateSlotConnection({ apiKey: event.target.value })}
-            placeholder="브라우저에 자동 저장"
-          />
+          <>
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={currentConnection.apiKey}
+              onChange={(event) => updateSlotConnection({ apiKey: event.target.value })}
+              placeholder={slotKey === "default" ? "브라우저에 자동 저장" : "비우면 같은 provider 키를 공유"}
+            />
+            {slotKey !== "default" && !currentConnection.apiKey.trim() ? (
+              <small className="shared-key-hint">
+                {inheritedApiKey
+                  ? "기본/다른 슬롯의 같은 provider API key를 공유합니다."
+                  : "같은 provider의 기본 API key를 먼저 입력하세요."}
+              </small>
+            ) : null}
+          </>
         )}
       </label>
       <div className="connection-actions">
@@ -1175,24 +1249,88 @@ function ensureSelectedModel(models: ModelOption[], selectedModelId: string): Mo
   return [{ id: selectedModelId, label: `${selectedModelId} (저장됨)` }, ...models];
 }
 
+function TurnActions({
+  canModifyTurn,
+  isStarting,
+  isSending,
+  messageRevealInProgress,
+  onNewGame,
+  onRestart,
+  onUndo,
+  onReroll,
+}: {
+  canModifyTurn: boolean;
+  isStarting: boolean;
+  isSending: boolean;
+  messageRevealInProgress: boolean;
+  onNewGame: () => void;
+  onRestart: () => void;
+  onUndo: () => void;
+  onReroll: () => void;
+}) {
+  const sessionBusy = isStarting || isSending || messageRevealInProgress;
+  const turnBusy = isSending || messageRevealInProgress || !canModifyTurn;
+
+  return (
+    <div className="turn-actions">
+      <button
+        type="button"
+        className="turn-action-btn"
+        disabled={sessionBusy}
+        onClick={onNewGame}
+        title="현재 세션을 닫고 시나리오 선택으로 돌아가기"
+      >
+        <Plus size={14} aria-hidden="true" />
+        <span>새 게임</span>
+      </button>
+      <button
+        type="button"
+        className="turn-action-btn"
+        disabled={sessionBusy}
+        onClick={onRestart}
+        title="같은 시나리오를 처음부터 다시 시작"
+      >
+        <RotateCcw size={14} aria-hidden="true" />
+        <span>처음부터</span>
+      </button>
+      <button
+        type="button"
+        className="turn-action-btn"
+        disabled={turnBusy}
+        onClick={onUndo}
+        title="마지막 턴 삭제"
+      >
+        <Undo2 size={14} aria-hidden="true" />
+        <span>삭제</span>
+      </button>
+      <button
+        type="button"
+        className="turn-action-btn"
+        disabled={turnBusy}
+        onClick={onReroll}
+        title="마지막 응답 리롤"
+      >
+        <Sparkles size={14} aria-hidden="true" />
+        <span>리롤</span>
+      </button>
+    </div>
+  );
+}
+
 function MessageBubble({
   message,
   session,
-  slots,
-  connections,
   providerProfiles,
 }: {
   message: ChatMessage;
   session: ClientSessionState;
-  slots: ConnectionSlot[];
-  connections: Record<string, ModelConnection>;
   providerProfiles: ProviderProfile[];
 }) {
   const character = message.characterId
     ? session.characters.find((candidate) => candidate.id === message.characterId)
     : null;
   const speakerLabel = message.speakerLabel ?? character?.anonymousLabel ?? character?.name;
-  const sourceBadge = getSourceBadge(message, character?.id, slots, connections, providerProfiles);
+  const sourceBadge = getSourceBadge(message, providerProfiles);
 
   return (
     <article className={`message-bubble ${message.role} ${message.speakerKind ?? ""} ${message.inputMode ? `mode-${message.inputMode}` : ""}`}>
@@ -1204,7 +1342,7 @@ function MessageBubble({
           ) : null}
         </div>
       ) : null}
-      <p>{message.content}</p>
+      <MessageContent content={message.content} />
       {message.generationSource === "dry-run" && message.fallbackReason ? (
         <small className="fallback-reason">{message.fallbackReason}</small>
       ) : null}
@@ -1212,11 +1350,86 @@ function MessageBubble({
   );
 }
 
+function MessageContent({ content }: { content: string }) {
+  if (!looksLikeRichHtml(content)) {
+    return <div className="message-content">{content}</div>;
+  }
+
+  return (
+    <div
+      className="message-content rich-html"
+      dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }}
+    />
+  );
+}
+
+function looksLikeRichHtml(content: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(content);
+}
+
+function sanitizeRichHtml(raw: string): string {
+  const parser = new DOMParser();
+  const document = parser.parseFromString(`<div>${raw}</div>`, "text/html");
+  const root = document.body.firstElementChild;
+  if (!root) return "";
+
+  root.querySelectorAll("script, iframe, object, embed, link, meta, base, form, input, button, select, textarea, svg, math").forEach((element) => {
+    element.remove();
+  });
+
+  root.querySelectorAll("*").forEach((element) => {
+    for (const attr of Array.from(element.attributes)) {
+      const name = attr.name.toLowerCase();
+      const value = attr.value.trim();
+      const lowerValue = value.toLowerCase();
+      if (name.startsWith("on") || name === "srcdoc") {
+        element.removeAttribute(attr.name);
+        continue;
+      }
+      if ((name === "href" || name === "src") && /^(javascript:|data:text\/html)/i.test(lowerValue)) {
+        element.removeAttribute(attr.name);
+        continue;
+      }
+      if (name === "style") {
+        const cleaned = sanitizeCssText(value);
+        if (cleaned) {
+          element.setAttribute("style", cleaned);
+        } else {
+          element.removeAttribute(attr.name);
+        }
+      }
+    }
+  });
+
+  root.querySelectorAll("style").forEach((element) => {
+    element.textContent = scopeCssToMessage(sanitizeCssText(element.textContent ?? ""));
+  });
+
+  return root.innerHTML;
+}
+
+function sanitizeCssText(value: string): string {
+  return value
+    .replace(/@import\s+[^;]+;?/gi, "")
+    .replace(/javascript\s*:/gi, "")
+    .replace(/expression\s*\([^)]*\)/gi, "")
+    .trim();
+}
+
+function scopeCssToMessage(value: string): string {
+  return value.replace(/(^|})\s*([^@{}][^{}]*)\s*{/g, (_match, closeBrace: string, selectorBlock: string) => {
+    const selectors = selectorBlock
+      .split(",")
+      .map((selector) => selector.trim())
+      .filter(Boolean)
+      .map((selector) => `.message-content.rich-html ${selector}`)
+      .join(", ");
+    return selectors ? `${closeBrace} ${selectors} {` : `${closeBrace} {`;
+  });
+}
+
 function getSourceBadge(
   message: ChatMessage,
-  characterId: string | undefined,
-  slots: ConnectionSlot[],
-  connections: Record<string, ModelConnection>,
   providerProfiles: ProviderProfile[],
 ): { tone: "api" | "dry-run"; label: string } | null {
   if (message.role !== "character" || !message.generationSource) {
@@ -1227,21 +1440,20 @@ function getSourceBadge(
     return { tone: "dry-run", label: "dry-run" };
   }
 
-  const slotKey = characterId && slots.some((slot) => slot.key === characterId) ? characterId : "default";
-  const connection = connections[slotKey] ?? connections.default;
-  if (!connection) {
+  if (!message.generationModel) {
     return { tone: "api", label: "API" };
   }
 
   const providerLabel =
-    providerProfiles.find((profile) => profile.id === connection.providerId)?.label ??
-    connection.providerId;
-  return { tone: "api", label: `${providerLabel}/${connection.model}` };
+    providerProfiles.find((profile) => profile.id === message.generationModel?.providerId)?.label ??
+    message.generationModel.providerId;
+  return { tone: "api", label: `${providerLabel}/${message.generationModel.model}` };
 }
 
 function getConnectionStatus(
   connection: ModelConnection | undefined,
   profiles: ProviderProfile[],
+  inheritedApiKey = "",
 ): ConnectionStatus {
   if (!connection) {
     return {
@@ -1264,12 +1476,14 @@ function getConnectionStatus(
     }
     return {
       tone: "ready",
-      label: "ChatGPT OAuth 적용 중",
+      label: "API 적용 중",
       detail: `${providerLabel} / ${connection.model}`,
     };
   }
 
-  if (!connection.apiKey && !connection.model) {
+  const effectiveApiKey = connection.apiKey.trim() || inheritedApiKey;
+
+  if (!effectiveApiKey && !connection.model) {
     return {
       tone: "idle",
       label: "dry-run",
@@ -1277,11 +1491,11 @@ function getConnectionStatus(
     };
   }
 
-  if (!connection.apiKey) {
+  if (!effectiveApiKey) {
     return {
       tone: "warning",
       label: "API key 필요",
-      detail: `${providerLabel} 모델은 선택됐지만 키가 비어 있습니다.`,
+      detail: `${providerLabel} 모델은 선택됐지만 공유할 키가 없습니다. 기본 연결에 같은 provider 키를 넣거나 이 슬롯에 override 키를 입력하세요.`,
     };
   }
 
@@ -1295,7 +1509,7 @@ function getConnectionStatus(
 
   return {
     tone: "ready",
-    label: "API 적용 중",
+    label: inheritedApiKey && !connection.apiKey.trim() ? "공유 API key 적용 중" : "API 적용 중",
     detail: `${providerLabel} / ${connection.model}`,
   };
 }
@@ -1370,6 +1584,41 @@ function createAdvisorDrafts(): AdvisorDraft[] {
   ];
 }
 
+function advisorDraftsFromSession(session: ClientSessionState): AdvisorDraft[] {
+  return session.characters
+    .filter((character) => character.profileKind === "advisor-slot")
+    .map((character): AdvisorDraft => {
+      const handout = session.handouts[character.id];
+      const draft: AdvisorDraft = {
+        id: character.id,
+        anonymousLabel: character.anonymousLabel ?? character.name,
+        role: character.role,
+        systemPrompt: character.systemPrompt,
+        mbti: character.mbti,
+        ocean: { ...character.ocean },
+        relationshipTags: [...character.relationshipTags],
+      };
+
+      if (handout) {
+        draft.handout = {
+          secret: handout.secret,
+          desire: handout.desire,
+          objective: handout.objective,
+          initialRelationshipToUser: handout.relationshipToUser,
+        };
+      }
+
+      return draft;
+    });
+}
+
+function formatKoreanTime(): string {
+  return new Date().toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function findBackgroundUrl(assets: AssetManifest | null, backgroundId?: string): string {
   if (!backgroundId) return "none";
   const found = assets?.backgrounds.find((background) => background.id === backgroundId)?.url;
@@ -1394,16 +1643,63 @@ function loadConnections(): Record<string, ModelConnection> {
   }
 }
 
+function persistConnections(
+  connections: Record<string, ModelConnection>,
+  callbacks?: { onSuccess?: () => void; onError?: (message: string) => void },
+): boolean {
+  try {
+    const serialized = JSON.stringify(connections);
+    localStorage.setItem(connectionStorageKey, serialized);
+
+    const stored = localStorage.getItem(connectionStorageKey);
+    if (stored !== serialized) {
+      callbacks?.onError?.("브라우저 저장 확인 실패: API 키/모델이 저장되지 않았습니다.");
+      return false;
+    }
+
+    callbacks?.onSuccess?.();
+    return true;
+  } catch (reason: unknown) {
+    callbacks?.onError?.(
+      reason instanceof Error
+        ? `브라우저 저장 실패: ${reason.message}`
+        : "브라우저 저장 실패: localStorage를 사용할 수 없습니다.",
+    );
+    return false;
+  }
+}
+
+function loadEnterToSend(): boolean {
+  try {
+    const raw = localStorage.getItem(enterToSendStorageKey);
+    return raw === null ? true : raw === "1";
+  } catch {
+    return true;
+  }
+}
+
 function activeConnections(
   connections: Record<string, ModelConnection>,
 ): Record<string, ModelConnection> {
   const active = Object.fromEntries(
-    Object.entries(connections).filter(
-      ([, connection]) =>
-        connection.providerId
-        && connection.model.trim()
-        && (connection.providerId === "chatgpt" || connection.apiKey.trim()),
-    ),
+    Object.entries(connections)
+      .map(([slotKey, connection]) => {
+        const apiKey = connection.apiKey.trim()
+          || getSharedProviderApiKey(connections, connection.providerId, slotKey);
+        return [
+          slotKey,
+          {
+            ...connection,
+            apiKey,
+          },
+        ] as const;
+      })
+      .filter(
+        ([, connection]) =>
+          connection.providerId
+          && connection.model.trim()
+          && (connection.providerId === "chatgpt" || connection.apiKey.trim()),
+      ),
   );
   const primaryConnection = active.default ?? Object.values(active)[0];
 
@@ -1415,6 +1711,30 @@ function activeConnections(
   }
 
   return active;
+}
+
+function getSharedProviderApiKey(
+  connections: Record<string, ModelConnection>,
+  providerId: ModelProviderId,
+  currentSlotKey?: string,
+): string {
+  const defaultConnection = connections.default;
+  if (
+    currentSlotKey !== "default"
+    && defaultConnection?.providerId === providerId
+    && defaultConnection.apiKey.trim()
+  ) {
+    return defaultConnection.apiKey.trim();
+  }
+
+  for (const [slotKey, connection] of Object.entries(connections)) {
+    if (slotKey === currentSlotKey) continue;
+    if (connection.providerId === providerId && connection.apiKey.trim()) {
+      return connection.apiKey.trim();
+    }
+  }
+
+  return "";
 }
 
 async function parseOpenAiOAuthJson<T extends { ok?: boolean; error?: string }>(response: Response): Promise<T> {
@@ -1463,6 +1783,32 @@ const INPUT_MODE_CONFIG: Array<{
     title: "혼잣말 — 내면의 독백, 다른 참가자에게 들리지 않습니다 ((괄호) 로도 입력 가능)",
   },
 ];
+
+function ComposerOptions({
+  mode,
+  enterToSend,
+  onModeChange,
+  onEnterToSendChange,
+}: {
+  mode: InputMode;
+  enterToSend: boolean;
+  onModeChange: (mode: InputMode) => void;
+  onEnterToSendChange: (enabled: boolean) => void;
+}) {
+  return (
+    <div className="composer-options">
+      <InputModeToggle mode={mode} onChange={onModeChange} />
+      <label className="enter-send-toggle">
+        <input
+          type="checkbox"
+          checked={enterToSend}
+          onChange={(event) => onEnterToSendChange(event.target.checked)}
+        />
+        <span>Enter 전송</span>
+      </label>
+    </div>
+  );
+}
 
 function InputModeToggle({
   mode,

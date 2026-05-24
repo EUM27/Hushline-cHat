@@ -2,7 +2,7 @@
 // Engine v2 — Shared Types & Interfaces
 // ──────────────────────────────────────────────
 
-import type { InputMode, ModelConnection, ExpressionId } from "./index.js";
+import type { GenerationModelSnapshot, InputMode, ModelConnection, ExpressionId } from "./index.js";
 
 // ── Agent Slots ──
 
@@ -308,6 +308,7 @@ export interface TurnMessage {
   inputMode?: InputMode;
   expression?: ExpressionId;
   generationSource?: "api" | "dry-run";
+  generationModel?: GenerationModelSnapshot;
   fallbackReason?: string;
 }
 

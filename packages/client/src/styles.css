@@ -10,7 +10,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; font: var(--font-body-md); color: var(--color-text-primary); background: var(--color-bg-canvas); }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 
 /* ── 3. App Shell ── */
 
@@ -112,7 +112,9 @@ button, input, select { font: inherit; }
 .chat-frame {
   grid-column: 2;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  height: 100%;
+  min-height: 0;
   border-radius: var(--radius-xl);
   background: var(--color-bg-stage);
   box-shadow: var(--shadow-floating);
@@ -136,6 +138,7 @@ button, input, select { font: inherit; }
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
 }
 
 .chat-meta span {
@@ -169,6 +172,7 @@ button, input, select { font: inherit; }
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-5) var(--space-4);
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -239,7 +243,46 @@ button, input, select { font: inherit; }
 .source-badge.api { background: var(--color-brand-emerald-100); color: var(--color-brand-emerald-700); }
 .source-badge.dry-run { background: rgba(255,255,255,0.08); color: var(--color-text-tertiary); }
 
-.message-bubble p { margin: 0; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; line-height: 1.6; }
+.message-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.message-content.rich-html {
+  white-space: normal;
+}
+
+.message-content.rich-html :where(p, ul, ol, blockquote, pre, table) {
+  margin: 0 0 var(--space-2);
+}
+
+.message-content.rich-html :where(p, ul, ol, blockquote, pre, table):last-child {
+  margin-bottom: 0;
+}
+
+.message-content.rich-html :where(ul, ol) {
+  padding-left: 1.25rem;
+}
+
+.message-content.rich-html :where(pre, code) {
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+.message-content.rich-html pre {
+  overflow-x: auto;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: rgba(0,0,0,0.25);
+}
+
+.message-content.rich-html img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
 
 .fallback-reason {
   display: block;
@@ -271,6 +314,9 @@ button, input, select { font: inherit; }
 }
 
 .turn-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   height: 28px;
   padding: 0 var(--space-3);
   border: 1px solid rgba(255,255,255,0.12);
@@ -281,34 +327,46 @@ button, input, select { font: inherit; }
   cursor: pointer;
   transition: background var(--motion-fast), border-color var(--motion-fast);
 }
+.turn-action-btn svg { flex: 0 0 auto; }
 .turn-action-btn:hover:not(:disabled) { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.25); color: var(--color-text-on-stage); }
 .turn-action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* ── 10. Composer ── */
 
 .composer {
+  position: sticky;
+  bottom: 0;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   background: var(--color-bg-stage-elevated);
+  z-index: 2;
 }
 
-.composer input {
-  height: 44px;
-  padding: 0 var(--space-4);
+.composer .input-mode-toggle {
+  justify-self: start;
+}
+
+.composer textarea {
+  min-height: 44px;
+  max-height: 132px;
+  padding: 12px var(--space-4);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: var(--radius-md);
   background: rgba(255,255,255,0.06);
   color: var(--color-text-on-stage);
   outline: none;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.35;
   transition: border-color var(--motion-fast);
 }
-.composer input:focus { border-color: var(--color-brand-emerald-500); }
-.composer input:disabled { opacity: 0.5; }
-.composer input::placeholder { color: var(--color-text-tertiary); }
+.composer textarea:focus { border-color: var(--color-brand-emerald-500); }
+.composer textarea:disabled { opacity: 0.5; }
+.composer textarea::placeholder { color: var(--color-text-tertiary); }
 
-.composer button {
+.composer > button[type="submit"] {
   display: grid;
   place-items: center;
   width: 44px;
@@ -320,24 +378,33 @@ button, input, select { font: inherit; }
   cursor: pointer;
   transition: background var(--motion-fast);
 }
-.composer button:hover { background: var(--color-brand-mustard-700); }
-.composer button:disabled { opacity: 0.4; cursor: not-allowed; }
+.composer > button[type="submit"]:hover { background: var(--color-brand-mustard-700); }
+.composer > button[type="submit"]:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── 11. Input Mode Toggle ── */
 
+.composer-options {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .input-mode-toggle {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-self: center;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .input-mode-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  height: 22px;
-  padding: 0 var(--space-2);
+  gap: 3px;
+  height: 24px;
+  padding: 0 7px;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -347,10 +414,29 @@ button, input, select { font: inherit; }
   white-space: nowrap;
   transition: all var(--motion-fast);
 }
+.input-mode-btn svg {
+  width: 12px;
+  height: 12px;
+}
 .input-mode-btn:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
 .input-mode-btn.active.chat { border-color: var(--color-brand-emerald-500); color: var(--color-brand-emerald-200); background: rgba(45,95,79,0.15); }
 .input-mode-btn.active.action { border-color: var(--color-brand-mustard-500); color: var(--color-brand-mustard-500); background: rgba(232,197,71,0.1); }
 .input-mode-btn.active.whisper { border-color: var(--color-mood-scared); color: #b48cff; background: rgba(107,69,112,0.12); }
+
+.enter-send-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: rgba(255,255,255,0.5);
+  font: var(--font-label-xs);
+  white-space: nowrap;
+}
+.enter-send-toggle input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--color-brand-emerald-500);
+}
 
 /* ── 12. Connection Panel (right) ── */
 
@@ -450,8 +536,9 @@ button, input, select { font: inherit; }
   left: 0;
   right: 0;
   z-index: 100;
-  max-height: 200px;
+  max-height: min(360px, 45vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
   margin: var(--space-1) 0 0;
   padding: 0;
   list-style: none;
@@ -471,7 +558,6 @@ button, input, select { font: inherit; }
 .model-dropdown li.selected { background: var(--color-brand-emerald-100); }
 .model-dropdown-id { font: var(--font-body-sm); color: var(--color-text-primary); }
 .model-dropdown-label { font: var(--font-label-xs); color: var(--color-text-tertiary); }
-.model-dropdown-more { font: var(--font-label-xs); color: var(--color-text-tertiary); text-align: center; padding: var(--space-2); }
 .model-picker button:disabled { opacity: 0.5; cursor: wait; }
 .connection-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .connection-actions span { font: var(--font-label-xs); color: var(--color-text-tertiary); }
@@ -566,6 +652,9 @@ button, input, select { font: inherit; }
   .scenario-card h1 { font-size: clamp(2.5rem, 12vw, 4rem); }
   .chat-frame { grid-column: 1; order: 3; min-height: 60vh; }
   .connection-panel { grid-column: 1; order: 4; grid-template-columns: 1fr; }
+  .scene-open .stage-layout { height: 100svh; min-height: 100svh; overflow: hidden; padding: var(--space-2); }
+  .scene-open .scenario-card { display: none; }
+  .scene-open .chat-frame { order: 1; height: calc(100svh - (var(--space-2) * 2)); min-height: 0; }
   .messenger-open .stage-layout { grid-template-columns: minmax(0, 420px); align-items: center; }
   .messenger-open .connection-panel { grid-column: 1; }
   .persona-panel, .advisor-panel { grid-column: 1; }
@@ -576,7 +665,7 @@ button, input, select { font: inherit; }
   .chat-frame { min-height: calc(100svh - 16px); border-radius: var(--radius-lg); }
   .scene-open .scenario-card { display: none; }
   .composer { grid-template-columns: 1fr auto; }
-  .input-mode-toggle { display: none; }
+  .input-mode-btn { height: 22px; padding: 0 6px; }
 }
 
 /* ── 17. Dev Panel ── */

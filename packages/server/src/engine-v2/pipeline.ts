@@ -7,8 +7,10 @@
 
 import type {
   DirectorOutput,
+  GenerationModelSnapshot,
   InputMode,
   ModelConnection,
+  PublicContext,
   ScenarioPack,
   SessionStateV2,
   TurnMessage,
@@ -27,7 +29,6 @@ import { invokeDirector } from "./director.js";
 import { invokeNarrator } from "./narrator.js";
 import { invokeCharacter } from "./character.js";
 import { applyDirectorOutput, markCharacterSpoke } from "./state-manager.js";
-import { getFallbackDirectorOutput } from "./output-sanitizer.js";
 
 /**
  * Run a complete turn through the v2 pipeline.
@@ -72,8 +73,14 @@ export async function runTurnV2(
 
   // ── Step 4: Narrator Invocation (conditional) ──
   const narratorConnection = getConnection(connections, "narrator");
+  const narratorInstruction = buildNarratorInstruction(
+    directorOutput,
+    inputMode,
+    publicContext,
+    pack,
+  );
   const narratorResult = await invokeNarrator(
-    directorOutput.narratorInstruction,
+    narratorInstruction,
     inputMode,
     publicContext,
     userContent,
@@ -106,12 +113,14 @@ export async function runTurnV2(
           session.persona.name,
           pack,
           charConnection,
-        );
+        ).then((result) => ({ result, connection: charConnection }));
       }),
     );
 
-    for (const result of characterResults) {
-      if (!result) continue;
+    for (const characterResult of characterResults) {
+      if (!characterResult) continue;
+      const { result, connection } = characterResult;
+      const generationModel = result.source === "api" ? snapshotGenerationModel(connection) : undefined;
       characterMessages.push({
         id: crypto.randomUUID(),
         sessionId: session.id,
@@ -122,6 +131,7 @@ export async function runTurnV2(
           ?? session.characters.find((c) => c.id === result.characterId)?.name
           ?? result.characterId,
         generationSource: result.source === "api" ? "api" : "dry-run",
+        ...(generationModel ? { generationModel } : {}),
         ...(result.error ? { fallbackReason: result.error } : {}),
         createdAt: new Date().toISOString(),
       });
@@ -152,6 +162,7 @@ export async function runTurnV2(
 
   // Narrator message (if any)
   if (narratorResult.content) {
+    const generationModel = narratorResult.source === "api" ? snapshotGenerationModel(narratorConnection) : undefined;
     turnMessages.push({
       id: crypto.randomUUID(),
       sessionId: session.id,
@@ -159,6 +170,7 @@ export async function runTurnV2(
       content: narratorResult.content,
       speakerLabel: "[나레이터]",
       generationSource: narratorResult.source === "api" ? "api" : "dry-run",
+      ...(generationModel ? { generationModel } : {}),
       ...(narratorResult.error ? { fallbackReason: narratorResult.error } : {}),
       createdAt: new Date().toISOString(),
     });
@@ -166,6 +178,18 @@ export async function runTurnV2(
 
   // Character messages
   turnMessages.push(...characterMessages);
+
+  const systemContent = buildSystemMessageContent(directorOutput);
+  if (systemContent) {
+    turnMessages.push({
+      id: crypto.randomUUID(),
+      sessionId: session.id,
+      role: "system",
+      content: systemContent,
+      speakerLabel: "[시스템]",
+      createdAt: new Date().toISOString(),
+    });
+  }
 
   return {
     worldState: nextWorldState,
@@ -183,6 +207,104 @@ function getConnection(
   slot: string,
 ): ModelConnection | undefined {
   return connections[slot] ?? connections.default;
+}
+
+function snapshotGenerationModel(connection: ModelConnection | undefined): GenerationModelSnapshot | undefined {
+  if (!connection?.model) {
+    return undefined;
+  }
+
+  return {
+    providerId: connection.providerId,
+    model: connection.model,
+  };
+}
+
+function buildNarratorInstruction(
+  directorOutput: DirectorOutput,
+  inputMode: InputMode,
+  publicContext: PublicContext,
+  pack: ScenarioPack,
+): string | null {
+  if (directorOutput.narratorInstruction) {
+    return directorOutput.narratorInstruction;
+  }
+
+  if (directorOutput.event) {
+    return `다음 장면 사건을 캐릭터 대사 없이 감각적 장면 서술 1~2문장으로 보여준다: ${directorOutput.event}`;
+  }
+
+  if (inputMode === "action") {
+    return null;
+  }
+
+  if (!shouldCreateSceneNarration(publicContext, pack)) {
+    return null;
+  }
+
+  return [
+    "현재 장면에서 유저 입력 직후의 공간, 분위기, 인물들의 비언어적 반응을 1~2문장으로 묘사한다.",
+    "캐릭터 대사는 쓰지 말고, 새 단서나 외부 사건을 만들지 말며, 현재 위치와 직전 입력에 붙인다.",
+  ].join(" ");
+}
+
+function shouldCreateSceneNarration(publicContext: PublicContext, pack: ScenarioPack): boolean {
+  if (pack.manifest.uiMode === "scene-first") {
+    return true;
+  }
+
+  if (pack.manifest.uiMode === "messenger-first" && publicContext.sceneMode === "messenger") {
+    return false;
+  }
+
+  return publicContext.sceneMode !== "messenger";
+}
+
+function buildSystemMessageContent(directorOutput: DirectorOutput): string | null {
+  const lines: string[] = [];
+
+  const stateChanges = formatStateDelta(directorOutput.stateDelta);
+  if (stateChanges.length > 0) {
+    lines.push(`상태 변화: ${stateChanges.join(", ")}`);
+  }
+
+  if (directorOutput.subObjectiveUpdate) {
+    const objective = directorOutput.subObjectiveUpdate.description ?? directorOutput.subObjectiveUpdate.id ?? "목표";
+    lines.push(`목표 ${directorOutput.subObjectiveUpdate.action}: ${objective}`);
+  }
+
+  if (directorOutput.relationshipUpdate) {
+    lines.push(
+      `관계 변화: ${directorOutput.relationshipUpdate.sourceId} → ${directorOutput.relationshipUpdate.targetId} `
+      + `${directorOutput.relationshipUpdate.descriptor} (${directorOutput.relationshipUpdate.intensityDelta >= 0 ? "+" : ""}${directorOutput.relationshipUpdate.intensityDelta})`,
+    );
+  }
+
+  if (directorOutput.directives.length > 0) {
+    lines.push(`연출: ${directorOutput.directives.map((directive) => directive.effect).join(", ")}`);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
+function formatStateDelta(delta: DirectorOutput["stateDelta"]): string[] {
+  const changes: string[] = [];
+  if (typeof delta.tension === "number" && delta.tension !== 0) {
+    changes.push(`긴장 ${delta.tension > 0 ? "+" : ""}${delta.tension}`);
+  }
+  if (typeof delta.danger === "number" && delta.danger !== 0) {
+    changes.push(`위험 ${delta.danger > 0 ? "+" : ""}${delta.danger}`);
+  }
+  if (delta.locationId) {
+    changes.push(`위치 ${delta.locationId}`);
+  }
+  if (delta.backgroundId) {
+    changes.push(`배경 ${delta.backgroundId}`);
+  }
+  if (delta.sceneMode) {
+    changes.push(`모드 ${delta.sceneMode}`);
+  }
+  return changes;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { createAppV2 } from "../app-v2";
 import { createSqliteStoreV2 } from "../store/sqlite-store-v2";
@@ -6,6 +6,12 @@ import { createSqliteStoreV2 } from "../store/sqlite-store-v2";
 const scenariosDir = resolve(import.meta.dir, "../../scenarios");
 
 describe("Hushline API v2", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   test("default scenario directory points at packaged scenario packs", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:") });
 
@@ -32,6 +38,30 @@ describe("Hushline API v2", () => {
     expect(detailPayload.characters.length).toBeGreaterThan(0);
     expect(detailPayload.directorPrompt).toBeUndefined();
     expect(detailPayload.narratorPrompt).toBeUndefined();
+  });
+
+  test("exposes scene-first UI metadata for non-chat lodge scenarios", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const detailResponse = await app.request("/api/v2/scenarios/locked-room-mystery");
+    expect(detailResponse.status).toBe(200);
+    const detailPayload = await detailResponse.json();
+    expect(detailPayload.manifest.uiMode).toBe("scene-first");
+    expect(detailPayload.scenarioCard.initialSceneMode).toBe("dialogue");
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.session.scenario.uiMode).toBe("scene-first");
+    expect(created.session.scenario.initialSceneMode).toBe("dialogue");
+    expect(created.session.worldState.sceneMode).toBe("dialogue");
   });
 
   test("keeps v1-compatible session shape after create advance reroll and undo", async () => {
@@ -83,6 +113,206 @@ describe("Hushline API v2", () => {
     const undone = await undoResponse.json();
     expect(undone.session.scene.sessionId).toBe(created.session.id);
     expect(undone.session.messages.some((message: { role: string }) => message.role === "user")).toBe(false);
+  });
+
+  test("can return a flexible multi-message turn when the director asks for narration, characters, and scene state", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+    const responses = [
+      JSON.stringify({
+        speakers: ["advisor-1", "advisor-2"],
+        silence: false,
+        event: "복도 끝 조명이 한 번 깜빡이고, 대화창의 알림음이 겹친다.",
+        narratorInstruction: "사용자의 메시지 직후 복도와 채팅방의 변화를 짧게 묘사한다.",
+        characterIntents: {
+          "advisor-1": "먼저 본 것을 조심스럽게 말한다.",
+          "advisor-2": "다른 각도에서 의심을 제기한다.",
+        },
+        stateDelta: { tension: 1 },
+        subObjectiveUpdate: null,
+        relationshipUpdate: null,
+        directives: [],
+        delay: null,
+      }),
+      "복도 끝 조명이 한 번 꺼졌다 켜지고, 채팅방에는 짧은 정적이 내려앉는다.",
+      "나도 봤어. 방금 창문 쪽에 뭔가 비쳤어.",
+      "잠깐, 그게 사람이었다고 단정하면 안 돼.",
+    ];
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() ?? "" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "school-life-anomaly",
+        persona: { name: "정해원" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content: "다들 지금 뭐가 보이는지 각자 말해줘",
+        inputMode: "chat",
+        connections: {
+          default: {
+            providerId: "openrouter",
+            apiKey: "test-key",
+            model: "test/model",
+          },
+        },
+      }),
+    });
+
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+    const roles = advanced.turn.messages.map((message: { role: string }) => message.role);
+    expect(roles).toEqual(["user", "narrator", "character", "character", "system"]);
+    expect(advanced.turn.messages.filter((message: { role: string }) => message.role === "character")).toHaveLength(2);
+    expect(advanced.turn.messages.find((message: { role: string }) => message.role === "system")?.content).toContain("긴장 +1");
+  });
+
+  test("scene-first turns include narration even when the director only selects speakers", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+    const responses = [
+      JSON.stringify({
+        speakers: ["ha-jinwoo"],
+        silence: false,
+        event: null,
+        narratorInstruction: null,
+        characterIntents: {
+          "ha-jinwoo": "문가의 흔적을 보고 방어적으로 반응한다.",
+        },
+        stateDelta: {},
+        subObjectiveUpdate: null,
+        relationshipUpdate: null,
+        directives: [],
+        delay: null,
+      }),
+      "서재 문 아래의 어두운 틈으로 찬 바람이 얇게 밀려들고, 황동 데드볼트에는 희미한 긁힌 자국이 빛난다.",
+      "그 정도 흠집은 오래된 문이면 어디에나 있습니다.",
+    ];
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() ?? "" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content: "문 아래쪽을 확인해볼게.",
+        inputMode: "chat",
+        connections: {
+          default: {
+            providerId: "openrouter",
+            apiKey: "test-key",
+            model: "test/model",
+          },
+        },
+      }),
+    });
+
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+    const roles = advanced.turn.messages.map((message: { role: string }) => message.role);
+    expect(roles).toEqual(["user", "narrator", "character"]);
+    expect(advanced.turn.messages[1].content).toContain("데드볼트");
+    expect(advanced.turn.messages[2].content).toContain("흠집");
+  });
+
+  test("records the model used when a character message is generated", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+    const responses = [
+      JSON.stringify({
+        speakers: ["advisor-1"],
+        silence: false,
+        event: null,
+        narratorInstruction: null,
+        characterIntents: {
+          "advisor-1": "현재 상황에 짧게 반응한다.",
+        },
+        stateDelta: {},
+        subObjectiveUpdate: null,
+        relationshipUpdate: null,
+        directives: [],
+        delay: null,
+      }),
+      "그 모델로 생성된 대사.",
+    ];
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() ?? "" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "school-life-anomaly",
+        persona: { name: "정해원" },
+      }),
+    });
+    const created = await createdResponse.json();
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content: "여기 누구 있어?",
+        inputMode: "chat",
+        connections: {
+          default: {
+            providerId: "openrouter",
+            apiKey: "director-key",
+            model: "director/model",
+          },
+          "advisor-1": {
+            providerId: "openrouter",
+            apiKey: "character-key",
+            model: "character/model",
+          },
+        },
+      }),
+    });
+
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+    const characterMessage = advanced.turn.messages.find((message: { role: string }) => message.role === "character");
+    expect(characterMessage.generationSource).toBe("api");
+    expect(characterMessage.generationModel).toEqual({
+      providerId: "openrouter",
+      model: "character/model",
+    });
+    expect(JSON.stringify(characterMessage)).not.toContain("character-key");
   });
 
   test("does not let onboarding advisor drafts overwrite named fixed-cast characters", async () => {

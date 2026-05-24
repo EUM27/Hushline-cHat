@@ -106,6 +106,8 @@ export interface ScenarioCard {
   backgroundIds: string[];
   initialLocationId: string;
   initialBackgroundId: string;
+  initialSceneMode?: import("./engine-v2.js").SceneMode;
+  uiMode?: import("./engine-v2.js").ScenarioManifest["uiMode"];
   interventionPrompt: string;
   openingBeats: ScenarioOpeningBeat[];
 }
@@ -136,6 +138,7 @@ export interface ChatMessage {
   isOpeningBeat?: boolean;
   expression?: ExpressionId;
   generationSource?: "api" | "dry-run";
+  generationModel?: GenerationModelSnapshot;
   fallbackReason?: string;
   /** How the user intended this message to be read by the engine. */
   inputMode?: InputMode;
@@ -177,6 +180,11 @@ export interface ModelConnection {
   apiKey: string;
   model: string;
   baseUrl?: string;
+}
+
+export interface GenerationModelSnapshot {
+  providerId: ModelProviderId;
+  model: string;
 }
 
 export interface ProviderProfile {
