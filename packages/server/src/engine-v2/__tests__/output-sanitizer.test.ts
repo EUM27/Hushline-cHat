@@ -28,6 +28,15 @@ describe("character output sanitizer", () => {
 
     expect(cleaned).toBe("경찰이 그렇게 빨리 온다고요? 이 눈에? 말이 된다고 생각해요?");
   });
+
+  test("removes wrapping dialogue quotes from a single character response", () => {
+    const cleaned = sanitizeCharacterOutput(
+      "\"봐도 모르겠냐. 숨도 안 쉬고 피도 식었어.\"",
+      minimalCharacter("kwak-sangcheol", "곽상철", "상철"),
+    );
+
+    expect(cleaned).toBe("봐도 모르겠냐. 숨도 안 쉬고 피도 식었어.");
+  });
 });
 
 function minimalCharacter(id: string, name: string, shortName: string): CharacterDefinition {

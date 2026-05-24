@@ -314,7 +314,7 @@ export function App() {
   const defaultConnectionStatus = getConnectionStatus(connections.default, providerProfiles);
   const latestSpeakerLabel = [...visibleMessages]
     .reverse()
-    .find((message) => message.speakerLabel)?.speakerLabel;
+    .find((message) => message.role === "character" && message.speakerLabel)?.speakerLabel;
   const activeSpeakerLabel =
     activeCharacter?.anonymousLabel ?? activeCharacter?.name ?? latestSpeakerLabel ?? "단톡방";
   const shellMode = session

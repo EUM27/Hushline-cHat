@@ -75,7 +75,7 @@
       "role": "system",
       "speakerKind": "room-master",
       "speakerLabel": "[시스템]",
-      "content": "백화장 살인사건이 발생했습니다. 현장이 훼손되기 전, 어떤 행동을 취하시겠습니까?"
+      "content": "현장이 훼손되기 전, 먼저 통제할 곳을 정해야 한다."
     }
   ]
 }

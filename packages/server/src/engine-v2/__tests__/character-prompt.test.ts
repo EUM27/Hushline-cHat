@@ -73,6 +73,7 @@ describe("character prompt boundaries", () => {
     expect(capturedSystemPrompt).toContain("짧은 추임새");
     expect(capturedSystemPrompt).toContain("혼잣말");
     expect(capturedSystemPrompt).toContain("다른 캐릭터의 행동이나 대사는 쓰지 않는다");
+    expect(capturedSystemPrompt).toContain("무리하게 점잖게 정제하지 않는다");
   });
 });
 

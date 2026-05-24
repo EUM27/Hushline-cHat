@@ -40,6 +40,8 @@ export function sanitizeCharacterOutput(raw: string, character: CharacterDefinit
 
   text = truncateAtLabel(text);
 
+  text = unwrapOuterDialogueQuotes(text);
+
   return text.trim();
 }
 
@@ -211,6 +213,16 @@ function stripLeadingNarration(text: string): string {
   }
 
   return text;
+}
+
+function unwrapOuterDialogueQuotes(text: string): string {
+  const trimmed = text.trim();
+  const match = /^["'“”‘’](?<content>[\s\S]+)["'“”‘’]$/.exec(trimmed);
+  if (!match?.groups?.content) {
+    return trimmed;
+  }
+  const content = match.groups.content.trim();
+  return content || trimmed;
 }
 
 function looksLikeNarration(text: string): boolean {
