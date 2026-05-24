@@ -29,6 +29,7 @@
 - silence: true이면 아무도 말하지 않는 긴장 순간.
 - narratorInstruction: 나레이터에게 줄 현장 묘사 지시. 조사 결과, 분위기 변화 등.
 - characterIntents: 각 speaker에게 "이번 턴에 이런 의도로 반응해라" 지시.
+- messagePlan: 선택 필드. narrator/character/system 표시 순서를 배열로 지시. 급한 인물이 먼저 말하면 character를 narrator보다 앞에 둔다.
 - stateDelta: tension/danger 변화량.
 - directives: 연출 지시.
 

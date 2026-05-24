@@ -25,17 +25,20 @@ export function sanitizeCharacterOutput(raw: string, character: CharacterDefinit
   if (!text) return "";
 
   // Strip leading label (up to 3 attempts)
-  for (let i = 0; i < 3; i++) {
-    const next = removeLeadingLabel(text, character);
-    if (next === text) break;
-    text = next.trim();
-  }
+  text = stripOwnLeadingLabelsOrRejectForeign(text, character);
+  if (!text) return "";
 
   // Truncate at any label mid-text
   text = truncateAtLabel(text);
 
   // Strip leading narration
   text = stripLeadingNarration(text);
+
+  // Narration stripping can expose a leading speaker label.
+  text = stripOwnLeadingLabelsOrRejectForeign(text, character);
+  if (!text) return "";
+
+  text = truncateAtLabel(text);
 
   return text.trim();
 }
@@ -130,29 +133,55 @@ export function getFallbackDirectorOutput(
 // Internal Helpers
 // ──────────────────────────────────────────────
 
-function removeLeadingLabel(text: string, character: CharacterDefinition): string {
-  // [라벨]: or [라벨] at start
-  const bracketPattern = /^\s*\[[^\]\n]{1,40}\]\s*[:：>\-]?\s*/;
-  if (bracketPattern.test(text)) {
-    return text.replace(bracketPattern, "");
-  }
-
-  // name: at start
-  const names = new Set(
-    [character.name, character.shortName, character.anonymousLabel]
-      .filter((v): v is string => Boolean(v))
-      .flatMap((v) => [v, v.replace(/^\[/, "").replace(/\]$/, "")]),
-  );
-
-  for (const name of names) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const namePattern = new RegExp(`^\\s*${escaped}\\s*[:：>\\-]\\s*`);
-    if (namePattern.test(text)) {
-      return text.replace(namePattern, "");
+function stripOwnLeadingLabelsOrRejectForeign(text: string, character: CharacterDefinition): string {
+  let next = text.trim();
+  for (let i = 0; i < 3; i++) {
+    const label = parseLeadingSpeakerLabel(next);
+    if (!label) break;
+    if (!isOwnSpeakerLabel(label.label, character)) {
+      return "";
     }
+    next = next.slice(label.endIndex).trim();
+  }
+  return next;
+}
+
+function parseLeadingSpeakerLabel(text: string): { label: string; endIndex: number } | null {
+  const bracketMatch = /^\s*\[([^\]\n]{1,40})\]\s*[:：>\-]?\s*/.exec(text);
+  if (bracketMatch?.[1]) {
+    return {
+      label: bracketMatch[1],
+      endIndex: bracketMatch[0].length,
+    };
   }
 
-  return text;
+  const plainMatch = /^\s*([A-Za-z가-힣0-9_][A-Za-z가-힣0-9_\s]{0,39})\s*[:：]\s*/.exec(text);
+  if (plainMatch?.[1]) {
+    return {
+      label: plainMatch[1],
+      endIndex: plainMatch[0].length,
+    };
+  }
+
+  return null;
+}
+
+function isOwnSpeakerLabel(label: string, character: CharacterDefinition): boolean {
+  const normalized = normalizeSpeakerLabel(label);
+  const ownLabels = [character.name, character.shortName, character.anonymousLabel]
+    .filter((value): value is string => Boolean(value))
+    .flatMap((value) => [value, value.replace(/^\[/, "").replace(/\]$/, "")])
+    .map(normalizeSpeakerLabel);
+
+  return ownLabels.includes(normalized);
+}
+
+function normalizeSpeakerLabel(label: string): string {
+  return label
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/\s+/g, "")
+    .trim();
 }
 
 /**
@@ -160,7 +189,7 @@ function removeLeadingLabel(text: string, character: CharacterDefinition): strin
  * This catches both foreign labels AND the character repeating its own label.
  */
 function truncateAtLabel(text: string): string {
-  const labelPattern = /\n\s*\[[^\]\n]{1,40}\]\s*[:：]?\s*/g;
+  const labelPattern = /\n\s*(?:\[[^\]\n]{1,40}\]|[A-Za-z가-힣0-9_][A-Za-z가-힣0-9_\s]{0,39})\s*[:：]\s*/g;
   const match = labelPattern.exec(text);
   if (match && match.index > 0) {
     return text.slice(0, match.index).trim();

@@ -245,6 +245,74 @@ describe("Hushline API v2", () => {
     expect(advanced.turn.messages[2].content).toContain("흠집");
   });
 
+  test("can compose a turn with character dialogue before narration when the director plans that rhythm", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+    const responses = [
+      JSON.stringify({
+        speakers: ["kwak-sangcheol"],
+        silence: false,
+        event: null,
+        narratorInstruction: "곽상철의 말이 먼저 튀어나온 뒤 복도의 정적을 짧게 잡는다.",
+        characterIntents: {
+          "kwak-sangcheol": "사망 여부를 거칠게 단정하고 현장 접근을 막는다.",
+        },
+        messagePlan: [
+          { kind: "character", speakerId: "kwak-sangcheol" },
+          { kind: "narrator" },
+        ],
+        stateDelta: {},
+        subObjectiveUpdate: null,
+        relationshipUpdate: null,
+        directives: [],
+        delay: null,
+      }),
+      "곽상철의 짧은 말 뒤로 복도에 서 있던 사람들이 반 박자 늦게 숨을 삼킨다.",
+      "봐도 모르겠냐. 숨도 안 쉬잖아.",
+    ];
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() ?? "" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content: "여기 누구 사망고지 가능하신 분 안 계시겠죠.",
+        inputMode: "chat",
+        connections: {
+          default: {
+            providerId: "openrouter",
+            apiKey: "test-key",
+            model: "test/model",
+          },
+        },
+      }),
+    });
+
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+    const roles = advanced.turn.messages.map((message: { role: string }) => message.role);
+    expect(roles).toEqual(["user", "character", "narrator"]);
+    expect(advanced.turn.messages[1].characterId).toBe("kwak-sangcheol");
+    expect(advanced.turn.messages[2].role).toBe("narrator");
+  });
+
   test("records the model used when a character message is generated", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
     const responses = [

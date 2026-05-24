@@ -1330,13 +1330,18 @@ function MessageBubble({
     ? session.characters.find((candidate) => candidate.id === message.characterId)
     : null;
   const speakerLabel = message.speakerLabel ?? character?.anonymousLabel ?? character?.name;
+  const visibleSpeakerLabel = getVisibleSpeakerLabel(message, speakerLabel);
   const sourceBadge = getSourceBadge(message, providerProfiles);
+  const semanticLabel = getSemanticMessageLabel(message);
 
   return (
-    <article className={`message-bubble ${message.role} ${message.speakerKind ?? ""} ${message.inputMode ? `mode-${message.inputMode}` : ""}`}>
-      {speakerLabel ? (
+    <article
+      className={`message-bubble ${message.role} ${message.speakerKind ?? ""} ${message.inputMode ? `mode-${message.inputMode}` : ""}`}
+      aria-label={semanticLabel}
+    >
+      {visibleSpeakerLabel ? (
         <div className="bubble-title">
-          <strong>{speakerLabel}</strong>
+          <strong>{visibleSpeakerLabel}</strong>
           {sourceBadge ? (
             <span className={`source-badge ${sourceBadge.tone}`}>{sourceBadge.label}</span>
           ) : null}
@@ -1348,6 +1353,23 @@ function MessageBubble({
       ) : null}
     </article>
   );
+}
+
+function getVisibleSpeakerLabel(message: ChatMessage, speakerLabel?: string): string | null {
+  if (message.role === "narrator" || message.role === "system") {
+    return null;
+  }
+  return speakerLabel ?? null;
+}
+
+function getSemanticMessageLabel(message: ChatMessage): string | undefined {
+  if (message.role === "narrator") {
+    return "나레이터";
+  }
+  if (message.role === "system") {
+    return "시스템";
+  }
+  return undefined;
 }
 
 function MessageContent({ content }: { content: string }) {

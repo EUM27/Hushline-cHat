@@ -138,12 +138,18 @@ export const directorDirectiveSchema = z.object({
   intensity: z.number().min(0).max(1).optional(),
 });
 
+export const directorMessagePlanItemSchema = z.object({
+  kind: z.enum(["narrator", "character", "system"]),
+  speakerId: z.string().min(1).optional(),
+});
+
 export const directorOutputSchema = z.object({
   speakers: z.array(z.string().min(1)).min(0).max(3),
   silence: z.boolean().default(false),
   event: z.string().nullable().default(null),
   narratorInstruction: z.string().nullable().default(null),
   characterIntents: z.record(z.string(), z.string()).default({}),
+  messagePlan: z.array(directorMessagePlanItemSchema).max(8).optional(),
   stateDelta: directorStateDeltaSchema.default({}),
   subObjectiveUpdate: directorSubObjectiveUpdateSchema.nullable().default(null),
   relationshipUpdate: directorRelationshipUpdateSchema.nullable().default(null),

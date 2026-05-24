@@ -161,9 +161,10 @@ export async function runTurnV2(
   });
 
   // Narrator message (if any)
+  let narratorMessage: TurnMessage | null = null;
   if (narratorResult.content) {
     const generationModel = narratorResult.source === "api" ? snapshotGenerationModel(narratorConnection) : undefined;
-    turnMessages.push({
+    narratorMessage = {
       id: crypto.randomUUID(),
       sessionId: session.id,
       role: "narrator",
@@ -173,29 +174,80 @@ export async function runTurnV2(
       ...(generationModel ? { generationModel } : {}),
       ...(narratorResult.error ? { fallbackReason: narratorResult.error } : {}),
       createdAt: new Date().toISOString(),
-    });
+    };
   }
 
-  // Character messages
-  turnMessages.push(...characterMessages);
-
   const systemContent = buildSystemMessageContent(directorOutput);
+  let systemMessage: TurnMessage | null = null;
   if (systemContent) {
-    turnMessages.push({
+    systemMessage = {
       id: crypto.randomUUID(),
       sessionId: session.id,
       role: "system",
       content: systemContent,
       speakerLabel: "[시스템]",
       createdAt: new Date().toISOString(),
-    });
+    };
   }
+
+  turnMessages.push(...composeSceneMessages(directorOutput, narratorMessage, characterMessages, systemMessage));
 
   return {
     worldState: nextWorldState,
     messages: turnMessages,
     directorOutput,
   };
+}
+
+function composeSceneMessages(
+  directorOutput: DirectorOutput,
+  narratorMessage: TurnMessage | null,
+  characterMessages: TurnMessage[],
+  systemMessage: TurnMessage | null,
+): TurnMessage[] {
+  const plan = directorOutput.messagePlan;
+  if (!plan || plan.length === 0) {
+    return [
+      ...(narratorMessage ? [narratorMessage] : []),
+      ...characterMessages,
+      ...(systemMessage ? [systemMessage] : []),
+    ];
+  }
+
+  const result: TurnMessage[] = [];
+  const remainingCharacters = new Map(characterMessages.map((message) => [message.characterId, message]));
+  let narratorUsed = false;
+  let systemUsed = false;
+
+  for (const item of plan) {
+    if (item.kind === "narrator" && narratorMessage && !narratorUsed) {
+      result.push(narratorMessage);
+      narratorUsed = true;
+      continue;
+    }
+    if (item.kind === "system" && systemMessage && !systemUsed) {
+      result.push(systemMessage);
+      systemUsed = true;
+      continue;
+    }
+    if (item.kind === "character" && item.speakerId) {
+      const message = remainingCharacters.get(item.speakerId);
+      if (message) {
+        result.push(message);
+        remainingCharacters.delete(item.speakerId);
+      }
+    }
+  }
+
+  if (result.length === 0) {
+    return [
+      ...(narratorMessage ? [narratorMessage] : []),
+      ...characterMessages,
+      ...(systemMessage ? [systemMessage] : []),
+    ];
+  }
+
+  return result;
 }
 
 // ──────────────────────────────────────────────

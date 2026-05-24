@@ -113,12 +113,18 @@ export interface DirectorDirective {
   intensity?: number; // 0–1
 }
 
+export interface DirectorMessagePlanItem {
+  kind: "narrator" | "character" | "system";
+  speakerId?: string;
+}
+
 export interface DirectorOutput {
   speakers: string[]; // 1–2 character IDs
   silence: boolean; // true = skip all character invocations
   event: string | null; // narrative event description
   narratorInstruction: string | null; // scene direction for narrator
   characterIntents: Record<string, string>; // characterId → intent string
+  messagePlan?: DirectorMessagePlanItem[]; // optional display order for this turn
   stateDelta: DirectorStateDelta;
   subObjectiveUpdate: DirectorSubObjectiveUpdate | null;
   relationshipUpdate: DirectorRelationshipUpdate | null;

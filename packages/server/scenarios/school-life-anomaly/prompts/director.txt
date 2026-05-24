@@ -32,6 +32,7 @@
 - silence: true이면 아무도 말하지 않는 침묵 턴. 긴장 연출에 사용.
 - narratorInstruction: 나레이터에게 줄 장면 지시. 감각 묘사 방향만 지시. null이면 나레이션 없음.
 - characterIntents: 각 speaker에게 "이번 턴에 이런 의도로 말해라" 지시. 캐릭터의 비밀/욕망을 고려해서 지시.
+- messagePlan: 선택 필드. narrator/character/system 표시 순서를 배열로 지시. 나레이션과 대사를 1:1 고정하지 말고 장면 리듬에 맞게 생략/선행시킨다.
 - stateDelta: tension/danger 변화량 (절대값 아님, 델타).
 - directives: 클라이언트 연출 지시 (fade_to_black, screen_shake, silence_pause 등).
 - delay: 메시지 표시 전 대기 시간(ms). 침묵 연출에 활용.

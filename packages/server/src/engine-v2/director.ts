@@ -104,6 +104,8 @@ export function buildDirectorSystemPrompt(
     "",
     SPEAKER_SELECTION_RULES,
     "",
+    TURN_COMPOSITION_RULES,
+    "",
     "[World State]",
     `시나리오: ${pack.scenarioCard.title} — ${pack.scenarioCard.subtitle}`,
     `장르: ${pack.manifest.genre}`,
@@ -223,6 +225,15 @@ const SPEAKER_SELECTION_RULES = [
   "모든 반응은 현재 장소·시간·관계·감정과 인물의 objective/이해관계에 맞는 방식으로 각자 다르게 나타나야 한다. 특정 감정(공포/두려움)이나 특정 태도(협조)를 기본값으로 하드코딩하지 않는다.",
 ].join("\n");
 
+const TURN_COMPOSITION_RULES = [
+  "[전역 규칙 — 턴 리듬과 메시지 순서]",
+  "나레이터와 캐릭터 발화는 1:1 고정 세트가 아니다.",
+  "성격이 급하거나 압박이 높은 인물은 나레이션보다 먼저 치고 올라올 수 있다.",
+  "말보다 상태·표정·침묵이 중요한 beat는 캐릭터 발화 없이 narratorInstruction과 messagePlan의 narrator만 사용해도 된다.",
+  "messagePlan을 사용하면 표시 순서를 명시한다. 예: [{\"kind\":\"character\",\"speakerId\":\"kwak-sangcheol\"},{\"kind\":\"narrator\"}]",
+  "messagePlan을 생략하면 서버가 기본 순서로 조립한다. 순서가 의미 있는 턴에서는 반드시 messagePlan을 넣는다.",
+].join("\n");
+
 export function normalizeDirectorOutput(
   output: DirectorOutput,
   characters: CharacterDefinition[],
@@ -230,10 +241,20 @@ export function normalizeDirectorOutput(
   userInput: string,
 ): DirectorOutput {
   const characterIds = characters.map((character) => character.id);
-  const uniqueSpeakers = [...new Set(output.speakers)].filter((id) => characterIds.includes(id));
+  const plannedSpeakers = (output.messagePlan ?? [])
+    .filter((item) => item.kind === "character" && item.speakerId)
+    .map((item) => item.speakerId!)
+    .filter((id) => characterIds.includes(id));
+  const uniqueSpeakers = [...new Set([...output.speakers, ...plannedSpeakers])].filter((id) => characterIds.includes(id));
+  const { messagePlan: _messagePlan, ...outputWithoutMessagePlan } = output;
 
   if (output.silence) {
-    return { ...output, speakers: [] };
+    const normalizedMessagePlan = normalizeMessagePlan(output.messagePlan, [], output);
+    return {
+      ...outputWithoutMessagePlan,
+      speakers: [],
+      ...(normalizedMessagePlan ? { messagePlan: normalizedMessagePlan } : {}),
+    };
   }
 
   let speakers = uniqueSpeakers;
@@ -266,11 +287,45 @@ export function normalizeDirectorOutput(
     }
   }
 
+  const normalizedMessagePlan = normalizeMessagePlan(output.messagePlan, speakers, output);
   return {
-    ...output,
+    ...outputWithoutMessagePlan,
     speakers,
     characterIntents,
+    ...(normalizedMessagePlan ? { messagePlan: normalizedMessagePlan } : {}),
   };
+}
+
+function normalizeMessagePlan(
+  messagePlan: DirectorOutput["messagePlan"],
+  speakers: string[],
+  output: DirectorOutput,
+): DirectorOutput["messagePlan"] {
+  if (!messagePlan || messagePlan.length === 0) {
+    return undefined;
+  }
+
+  const speakerSet = new Set(speakers);
+  const normalized = messagePlan.filter((item) => {
+    if (item.kind === "character") {
+      return Boolean(item.speakerId && speakerSet.has(item.speakerId));
+    }
+    if (item.kind === "narrator") {
+      return Boolean(output.narratorInstruction || output.event);
+    }
+    return hasSystemMessage(output);
+  });
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function hasSystemMessage(output: DirectorOutput): boolean {
+  return Boolean(
+    output.subObjectiveUpdate
+    || output.relationshipUpdate
+    || output.directives.length > 0
+    || Object.keys(output.stateDelta).length > 0,
+  );
 }
 
 function findExplicitTargets(userInput: string, characters: CharacterDefinition[]): Set<string> {

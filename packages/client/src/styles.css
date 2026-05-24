@@ -208,9 +208,23 @@ button, input, select, textarea { font: inherit; }
 .message-bubble.narrator {
   font: var(--font-narrator);
   background: transparent;
-  border: 1px dashed rgba(255,255,255,0.15);
-  color: rgba(255,255,255,0.7);
+  border: 0;
+  box-shadow: none;
+  color: rgba(255,255,255,0.72);
   max-width: 90%;
+  padding: var(--space-2) var(--space-3);
+}
+
+.message-bubble.system {
+  background: transparent;
+  box-shadow: none;
+  border-left: 2px solid rgba(255,255,255,0.16);
+  border-radius: 0;
+  color: var(--color-text-tertiary);
+  font: var(--font-body-sm);
+  font-style: italic;
+  max-width: 90%;
+  padding: var(--space-1) var(--space-3);
 }
 
 .message-bubble.room-master {
