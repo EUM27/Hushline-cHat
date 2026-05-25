@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Sparkles, MessageSquare, Zap, MessageCircle, Plus, RotateCcw, Undo2 } from "lucide-react";
+import { Send, Sparkles, MessageSquare, Zap, MessageCircle, Plus, RotateCcw, Undo2, SkipForward } from "lucide-react";
 import type {
   AdvisorDraft,
   AssetManifest,
@@ -13,6 +13,7 @@ import type {
 } from "@hushline/shared";
 import { advanceV2, createSessionV2, getScenarioDetail, getSessionV2, listScenarios, rerollV2, undoV2, type V2ScenarioDetailResponse } from "./api-v2";
 import { appendOptimisticUserMessage } from "./optimistic-session";
+import { calculateRevealDelay } from "./reveal-timing";
 
 interface ModelsResponse {
   models: ModelOption[];
@@ -257,8 +258,8 @@ export function App() {
       return;
     }
 
-    const currentMessage = session.messages[revealedMessageCount];
-    const delay = currentMessage?.isOpeningBeat ? 1250 : 650;
+    const currentMessage = session.messages[Math.max(0, revealedMessageCount - 1)];
+    const delay = currentMessage ? calculateRevealDelay(currentMessage) : 650;
     const timeout = window.setTimeout(() => {
       setRevealedMessageCount((current) => Math.min(current + 1, session.messages.length));
     }, delay);
@@ -442,6 +443,11 @@ export function App() {
     }
   }
 
+  function handleSkipReveal() {
+    if (!session) return;
+    setRevealedMessageCount(session.messages.length);
+  }
+
   async function handleUndo() {
     if (!session || isSending) return;
     setIsSending(true);
@@ -541,6 +547,7 @@ export function App() {
               onRestart={handleRestartSession}
               onUndo={handleUndo}
               onReroll={handleReroll}
+              onSkipReveal={handleSkipReveal}
             />
             <form className="composer invitation-composer" onSubmit={handleSubmit}>
               <ComposerOptions
@@ -599,6 +606,7 @@ export function App() {
               onRestart={handleRestartSession}
               onUndo={handleUndo}
               onReroll={handleReroll}
+              onSkipReveal={handleSkipReveal}
             />
 
             <form className="composer" onSubmit={handleSubmit}>
@@ -1265,6 +1273,7 @@ function TurnActions({
   onRestart,
   onUndo,
   onReroll,
+  onSkipReveal,
 }: {
   canModifyTurn: boolean;
   isStarting: boolean;
@@ -1274,12 +1283,24 @@ function TurnActions({
   onRestart: () => void;
   onUndo: () => void;
   onReroll: () => void;
+  onSkipReveal: () => void;
 }) {
   const sessionBusy = isStarting || isSending || messageRevealInProgress;
   const turnBusy = isSending || messageRevealInProgress || !canModifyTurn;
 
   return (
     <div className="turn-actions">
+      {messageRevealInProgress ? (
+        <button
+          type="button"
+          className="turn-action-btn skip-reveal"
+          onClick={onSkipReveal}
+          title="남은 메시지 바로 표시"
+        >
+          <SkipForward size={14} aria-hidden="true" />
+          <span>스킵</span>
+        </button>
+      ) : null}
       <button
         type="button"
         className="turn-action-btn"
