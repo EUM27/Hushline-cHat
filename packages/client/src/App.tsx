@@ -12,6 +12,7 @@ import type {
   ClientSessionState,
 } from "@hushline/shared";
 import { advanceV2, createSessionV2, getScenarioDetail, getSessionV2, listScenarios, rerollV2, undoV2, type V2ScenarioDetailResponse } from "./api-v2";
+import { appendOptimisticUserMessage } from "./optimistic-session";
 
 interface ModelsResponse {
   models: ModelOption[];
@@ -406,13 +407,19 @@ export function App() {
     setInput("");
     setIsSending(true);
     setError(null);
-    const nextVisibleCount = session.messages.length + 1;
+    const baseSession = session;
+    const optimisticSession = appendOptimisticUserMessage(baseSession, content, inputMode);
+    const nextVisibleCount = optimisticSession.messages.length;
+    setSession(optimisticSession);
+    setRevealedMessageCount(nextVisibleCount);
 
     try {
-      const payload = await advanceV2(session.id, content, inputMode, activeConnections(connections));
+      const payload = await advanceV2(baseSession.id, content, inputMode, activeConnections(connections));
       setSession(payload.session);
       setRevealedMessageCount(Math.min(nextVisibleCount, payload.session.messages.length));
     } catch (reason: unknown) {
+      setSession(baseSession);
+      setRevealedMessageCount(baseSession.messages.length);
       setInput(content);
       setError(reason instanceof Error ? reason.message : "응답 실패");
     } finally {
