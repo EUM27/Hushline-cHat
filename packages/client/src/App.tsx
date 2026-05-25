@@ -13,7 +13,14 @@ import type {
 } from "@hushline/shared";
 import { advanceV2, createSessionV2, getScenarioDetail, getSessionV2, listScenarios, rerollV2, undoV2, type V2ScenarioDetailResponse } from "./api-v2";
 import { appendOptimisticUserMessage } from "./optimistic-session";
-import { calculateRevealDelay } from "./reveal-timing";
+import {
+  calculateRevealDelay,
+  calculateStreamStepSize,
+  calculateStreamTickDelay,
+  countStreamCharacters,
+  shouldStreamMessageContent,
+  sliceStreamedText,
+} from "./reveal-timing";
 
 interface ModelsResponse {
   models: ModelOption[];
@@ -522,12 +529,13 @@ export function App() {
               <span>초대 수신</span>
             </header>
             <div className="invitation-log" ref={logRef}>
-              {visibleMessages.map((message) => (
+              {visibleMessages.map((message, index) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
                   session={session}
                   providerProfiles={providerProfiles}
+                  forceComplete={!(messageRevealInProgress && index === visibleMessages.length - 1)}
                 />
               ))}
               {messageRevealInProgress ? (
@@ -585,12 +593,13 @@ export function App() {
             </header>
 
             <div className="message-log" ref={logRef}>
-              {visibleMessages.map((message) => (
+              {visibleMessages.map((message, index) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
                   session={session}
                   providerProfiles={providerProfiles}
+                  forceComplete={!(messageRevealInProgress && index === visibleMessages.length - 1)}
                 />
               ))}
             </div>
@@ -1349,10 +1358,12 @@ function MessageBubble({
   message,
   session,
   providerProfiles,
+  forceComplete,
 }: {
   message: ChatMessage;
   session: ClientSessionState;
   providerProfiles: ProviderProfile[];
+  forceComplete: boolean;
 }) {
   const character = message.characterId
     ? session.characters.find((candidate) => candidate.id === message.characterId)
@@ -1375,7 +1386,7 @@ function MessageBubble({
           ) : null}
         </div>
       ) : null}
-      <MessageContent content={message.content} />
+      <MessageContent content={message.content} message={message} forceComplete={forceComplete} />
       {message.generationSource === "dry-run" && message.fallbackReason ? (
         <small className="fallback-reason">{message.fallbackReason}</small>
       ) : null}
@@ -1400,9 +1411,55 @@ function getSemanticMessageLabel(message: ChatMessage): string | undefined {
   return undefined;
 }
 
-function MessageContent({ content }: { content: string }) {
+function MessageContent({
+  content,
+  message,
+  forceComplete,
+}: {
+  content: string;
+  message: ChatMessage;
+  forceComplete: boolean;
+}) {
+  const shouldStream = shouldStreamMessageContent(message);
+  const [visibleCharacters, setVisibleCharacters] = useState(() =>
+    shouldStream && !forceComplete ? 0 : countStreamCharacters(content),
+  );
+
+  useEffect(() => {
+    setVisibleCharacters(shouldStream && !forceComplete ? 0 : countStreamCharacters(content));
+  }, [content, forceComplete, message.id, shouldStream]);
+
+  useEffect(() => {
+    if (!shouldStream || forceComplete) {
+      return;
+    }
+
+    const totalCharacters = countStreamCharacters(content);
+    if (visibleCharacters >= totalCharacters) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setVisibleCharacters((current) =>
+        Math.min(current + calculateStreamStepSize(message), totalCharacters),
+      );
+    }, calculateStreamTickDelay(message));
+
+    return () => window.clearTimeout(timeout);
+  }, [content, forceComplete, message, shouldStream, visibleCharacters]);
+
+  const visibleContent = shouldStream && !forceComplete
+    ? sliceStreamedText(content, visibleCharacters)
+    : content;
+  const isStreaming = shouldStream && !forceComplete && visibleCharacters < countStreamCharacters(content);
+
   if (!looksLikeRichHtml(content)) {
-    return <div className="message-content">{content}</div>;
+    return (
+      <div className="message-content">
+        {visibleContent}
+        {isStreaming ? <span className="stream-caret" aria-hidden="true" /> : null}
+      </div>
+    );
   }
 
   return (

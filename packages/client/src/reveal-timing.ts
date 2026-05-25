@@ -36,6 +36,47 @@ export function calculateRevealDelay(
   return Math.round(clamp(delay, minimum, MAX_REVEAL_DELAY_MS));
 }
 
+export function shouldStreamMessageContent(
+  message: Pick<ChatMessage, "content" | "role">,
+): boolean {
+  return message.role !== "user" && message.content.trim().length > 0 && !looksLikeRichHtml(message.content);
+}
+
+export function calculateStreamTickDelay(
+  message: Pick<ChatMessage, "role" | "isOpeningBeat">,
+): number {
+  const base = message.role === "narrator"
+    ? 38
+    : message.role === "character"
+      ? 30
+      : 34;
+  return message.isOpeningBeat ? Math.round(base * 1.08) : base;
+}
+
+export function calculateStreamStepSize(
+  message: Pick<ChatMessage, "content" | "role">,
+): number {
+  const length = countStreamCharacters(message.content);
+  if (message.role === "character" && length < 24) {
+    return 1;
+  }
+  if (length >= 120) {
+    return 3;
+  }
+  if (length >= 64) {
+    return 2;
+  }
+  return 1;
+}
+
+export function countStreamCharacters(content: string): number {
+  return [...content].length;
+}
+
+export function sliceStreamedText(content: string, visibleCharacters: number): string {
+  return [...content].slice(0, visibleCharacters).join("");
+}
+
 function getBaseMsPerCharacter(role: ChatMessage["role"]): number {
   if (role === "narrator") return 34;
   if (role === "system") return 30;
@@ -49,4 +90,8 @@ function countMatches(content: string, pattern: RegExp): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function looksLikeRichHtml(content: string): boolean {
+  return /<\/?[a-z][\s\S]*>/i.test(content);
 }
