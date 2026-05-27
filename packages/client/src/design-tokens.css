@@ -142,6 +142,25 @@
 }
 
 /* ═══════════════════════════════════════════════
+   §1.4.1 RESPONSIVE LAYOUT CONTROL TOKENS
+   ═══════════════════════════════════════════════
+
+   Fixed interface dimensions live here only. Component CSS must reference these
+   tokens or derive from spacing tokens instead of scattering one-off numbers.
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --control-block-sm: calc(var(--space-4) * 2);
+  --control-block-md: calc(var(--space-4) * 2 + var(--space-1));
+  --control-block-lg: calc((var(--space-5) * 2) - var(--space-1));
+
+  --drawer-inline-md: calc((var(--space-8) * 8) + var(--space-6) + var(--space-1));
+  --panel-inline-md: calc(var(--space-8) * 10);
+  --panel-block-md: calc(var(--space-8) * 12);
+  --dev-panel-inline: calc((var(--space-8) * 7) + var(--space-5));
+}
+
+/* ═══════════════════════════════════════════════
    §1.5 SHADOW / ELEVATION TOKENS
    ═══════════════════════════════════════════════ */
 

@@ -185,12 +185,12 @@ describe("Hushline API v2", () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
     const responses = [
       JSON.stringify({
-        speakers: ["ha-jinwoo"],
+        speakers: ["yoon-seha"],
         silence: false,
         event: null,
         narratorInstruction: null,
         characterIntents: {
-          "ha-jinwoo": "문가의 흔적을 보고 방어적으로 반응한다.",
+          "yoon-seha": "문가의 흔적을 보고 차분하지만 방어적으로 반응한다.",
         },
         stateDelta: {},
         subObjectiveUpdate: null,
@@ -198,8 +198,8 @@ describe("Hushline API v2", () => {
         directives: [],
         delay: null,
       }),
-      "서재 문 아래의 어두운 틈으로 찬 바람이 얇게 밀려들고, 황동 데드볼트에는 희미한 긁힌 자국이 빛난다.",
-      "그 정도 흠집은 오래된 문이면 어디에나 있습니다.",
+      "서재 문 아래의 어두운 틈으로 찬 바람이 얇게 밀려들고, 안쪽 걸쇠 근처에는 희미한 긁힌 자국이 빛난다.",
+      "그 정도 흠집은 오래된 산장 문이면 어디에나 있습니다.",
     ];
 
     globalThis.fetch = (async () =>
@@ -241,23 +241,85 @@ describe("Hushline API v2", () => {
     const advanced = await advancedResponse.json();
     const roles = advanced.turn.messages.map((message: { role: string }) => message.role);
     expect(roles).toEqual(["user", "narrator", "character"]);
-    expect(advanced.turn.messages[1].content).toContain("데드볼트");
+    expect(advanced.turn.messages[1].content).toContain("걸쇠");
     expect(advanced.turn.messages[2].content).toContain("흠집");
+  });
+
+  test("scene-first turns parse narrator background tags into world state", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+    const responses = [
+      JSON.stringify({
+        speakers: [],
+        silence: true,
+        event: null,
+        narratorInstruction: "서재 사건 현장을 짧게 묘사하고 배경 태그를 붙인다.",
+        characterIntents: {},
+        messagePlan: [{ kind: "narrator" }],
+        stateDelta: {},
+        subObjectiveUpdate: null,
+        relationshipUpdate: null,
+        directives: [],
+        delay: null,
+      }),
+      "[bg:lodge-study-crime-scene]\n서재 안쪽에는 피 냄새와 젖은 목재 냄새가 뒤섞여 있다.",
+    ];
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() ?? "" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content: "서재 안쪽을 확인합니다.",
+        inputMode: "action",
+        connections: {
+          default: {
+            providerId: "openrouter",
+            apiKey: "test-key",
+            model: "test/model",
+          },
+        },
+      }),
+    });
+
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+    expect(advanced.session.worldState.backgroundId).toBe("lodge-study-crime-scene");
+    expect(advanced.turn.messages.map((message: { role: string }) => message.role)).toEqual(["user", "narrator"]);
+    expect(advanced.turn.messages[1].content).not.toContain("[bg:");
+    expect(advanced.turn.messages[1].content).toContain("피 냄새");
   });
 
   test("can compose a turn with character dialogue before narration when the director plans that rhythm", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
     const responses = [
       JSON.stringify({
-        speakers: ["kwak-sangcheol"],
+        speakers: ["kang-mujin"],
         silence: false,
         event: null,
-        narratorInstruction: "곽상철의 말이 먼저 튀어나온 뒤 복도의 정적을 짧게 잡는다.",
+        narratorInstruction: "강무진의 말이 먼저 튀어나온 뒤 복도의 정적을 짧게 잡는다.",
         characterIntents: {
-          "kwak-sangcheol": "사망 여부를 거칠게 단정하고 현장 접근을 막는다.",
+          "kang-mujin": "사망 여부를 거칠게 단정하고 현장 접근을 막는다.",
         },
         messagePlan: [
-          { kind: "character", speakerId: "kwak-sangcheol" },
+          { kind: "character", speakerId: "kang-mujin" },
           { kind: "narrator" },
         ],
         stateDelta: {},
@@ -266,7 +328,7 @@ describe("Hushline API v2", () => {
         directives: [],
         delay: null,
       }),
-      "곽상철의 짧은 말 뒤로 복도에 서 있던 사람들이 반 박자 늦게 숨을 삼킨다.",
+      "강무진의 짧은 말 뒤로 복도에 서 있던 사람들이 반 박자 늦게 숨을 삼킨다.",
       "봐도 모르겠냐. 숨도 안 쉬잖아.",
     ];
 
@@ -309,7 +371,7 @@ describe("Hushline API v2", () => {
     const advanced = await advancedResponse.json();
     const roles = advanced.turn.messages.map((message: { role: string }) => message.role);
     expect(roles).toEqual(["user", "character", "narrator"]);
-    expect(advanced.turn.messages[1].characterId).toBe("kwak-sangcheol");
+    expect(advanced.turn.messages[1].characterId).toBe("kang-mujin");
     expect(advanced.turn.messages[2].role).toBe("narrator");
   });
 
@@ -415,10 +477,9 @@ describe("Hushline API v2", () => {
     expect(response.status).toBe(201);
     const payload = await response.json();
     expect(payload.session.characters.map((character: { id: string }) => character.id)).toEqual([
-      "ha-jinwoo",
-      "kwak-sangcheol",
-      "seo-yura",
-      "shin-jiyeon",
+      "kang-mujin",
+      "yoon-haeon",
+      "yoon-seha",
     ]);
     expect(payload.session.characters.every((character: { profileKind: string }) => character.profileKind === "named-actor")).toBe(true);
     expect(payload.session.characters.some((character: { name: string }) => character.name === "[익명 22]")).toBe(false);

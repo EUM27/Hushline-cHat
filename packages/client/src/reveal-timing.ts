@@ -44,19 +44,28 @@ export function shouldStreamMessageContent(
 
 export function calculateStreamTickDelay(
   message: Pick<ChatMessage, "role" | "isOpeningBeat">,
+  visibleCharacters?: number,
 ): number {
   const base = message.role === "narrator"
     ? 38
     : message.role === "character"
       ? 30
       : 34;
-  return message.isOpeningBeat ? Math.round(base * 1.08) : base;
+  const normalizedBase = message.isOpeningBeat ? Math.round(base * 1.08) : base;
+  if (hasContent(message) && visibleCharacters !== undefined && shouldPauseAfterImpactCharacter(message.content, visibleCharacters)) {
+    return normalizedBase + 170;
+  }
+  return normalizedBase;
 }
 
 export function calculateStreamStepSize(
   message: Pick<ChatMessage, "content" | "role">,
+  visibleCharacters = 0,
 ): number {
   const length = countStreamCharacters(message.content);
+  if (isInsideImpactSoundEffect(message.content, visibleCharacters)) {
+    return 1;
+  }
   if (message.role === "character" && length < 24) {
     return 1;
   }
@@ -86,6 +95,40 @@ function getBaseMsPerCharacter(role: ChatMessage["role"]): number {
 
 function countMatches(content: string, pattern: RegExp): number {
   return content.match(pattern)?.length ?? 0;
+}
+
+function hasContent(message: Pick<ChatMessage, "role">): message is Pick<ChatMessage, "role"> & { content: string } {
+  return typeof (message as { content?: unknown }).content === "string";
+}
+
+function isInsideImpactSoundEffect(content: string, visibleCharacters: number): boolean {
+  return getImpactSoundEffectRanges(content).some(
+    ([start, end]) => visibleCharacters >= start && visibleCharacters < end,
+  );
+}
+
+function shouldPauseAfterImpactCharacter(content: string, visibleCharacters: number): boolean {
+  if (visibleCharacters <= 0) {
+    return false;
+  }
+  const previousIndex = visibleCharacters - 1;
+  return getImpactSoundEffectRanges(content).some(
+    ([start, end]) => previousIndex >= start && previousIndex < end,
+  );
+}
+
+function getImpactSoundEffectRanges(content: string): Array<[number, number]> {
+  const characters = [...content];
+  const ranges: Array<[number, number]> = [];
+  for (let index = 0; index < characters.length; index += 1) {
+    const syllable = characters[index];
+    const punctuation = characters[index + 1];
+    if (syllable && /[가-힣]/.test(syllable) && /[!！]/.test(punctuation ?? "")) {
+      ranges.push([index, index + 2]);
+      index += 1;
+    }
+  }
+  return ranges;
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -29,6 +29,7 @@ import { invokeDirector } from "./director.js";
 import { invokeNarrator } from "./narrator.js";
 import { invokeCharacter } from "./character.js";
 import { applyDirectorOutput, markCharacterSpoke } from "./state-manager.js";
+import { parseBackgroundTags } from "./background-tags.js";
 
 /**
  * Run a complete turn through the v2 pipeline.
@@ -52,7 +53,11 @@ export async function runTurnV2(
 
 
   // ── Step 1: Input Classification ──
-  const { mode: inputMode, content: userContent } = classifyInput(rawInput, options.inputMode);
+  const { mode: inputMode, content: classifiedUserContent } = classifyInput(rawInput, options.inputMode);
+  const allowedBackgroundIds = getAllowedBackgroundIds(pack, session.worldState);
+  const parsedUserContent = parseBackgroundTags(classifiedUserContent, allowedBackgroundIds);
+  const userContent = parsedUserContent.content || classifiedUserContent;
+  let taggedBackgroundId = parsedUserContent.backgroundId;
 
   // ── Step 2: Context Assembly ──
   const publicContext = buildPublicContext(session.worldState, session.messages, pack);
@@ -120,12 +125,16 @@ export async function runTurnV2(
     for (const characterResult of characterResults) {
       if (!characterResult) continue;
       const { result, connection } = characterResult;
+      const parsedContent = parseBackgroundTags(result.content, allowedBackgroundIds);
+      if (parsedContent.backgroundId) {
+        taggedBackgroundId = parsedContent.backgroundId;
+      }
       const generationModel = result.source === "api" ? snapshotGenerationModel(connection) : undefined;
       characterMessages.push({
         id: crypto.randomUUID(),
         sessionId: session.id,
         role: "character",
-        content: result.content,
+        content: parsedContent.content || result.content,
         characterId: result.characterId,
         speakerLabel: session.characters.find((c) => c.id === result.characterId)?.anonymousLabel
           ?? session.characters.find((c) => c.id === result.characterId)?.name
@@ -146,6 +155,12 @@ export async function runTurnV2(
   for (const speakerId of speakerIds) {
     nextWorldState = markCharacterSpoke(nextWorldState, speakerId);
   }
+  if (taggedBackgroundId) {
+    nextWorldState = {
+      ...nextWorldState,
+      backgroundId: taggedBackgroundId,
+    };
+  }
 
   // ── Step 7: Message Assembly ──
   const turnMessages: TurnMessage[] = [];
@@ -163,12 +178,19 @@ export async function runTurnV2(
   // Narrator message (if any)
   let narratorMessage: TurnMessage | null = null;
   if (narratorResult.content) {
+    const parsedContent = parseBackgroundTags(narratorResult.content, allowedBackgroundIds);
+    if (parsedContent.backgroundId) {
+      nextWorldState = {
+        ...nextWorldState,
+        backgroundId: parsedContent.backgroundId,
+      };
+    }
     const generationModel = narratorResult.source === "api" ? snapshotGenerationModel(narratorConnection) : undefined;
     narratorMessage = {
       id: crypto.randomUUID(),
       sessionId: session.id,
       role: "narrator",
-      content: narratorResult.content,
+      content: parsedContent.content || narratorResult.content,
       speakerLabel: "[나레이터]",
       generationSource: narratorResult.source === "api" ? "api" : "dry-run",
       ...(generationModel ? { generationModel } : {}),
@@ -270,6 +292,13 @@ function snapshotGenerationModel(connection: ModelConnection | undefined): Gener
     providerId: connection.providerId,
     model: connection.model,
   };
+}
+
+function getAllowedBackgroundIds(pack: ScenarioPack, worldState: WorldState): string[] {
+  const ids = pack.scenarioCard.backgroundIds.length > 0
+    ? pack.scenarioCard.backgroundIds
+    : [worldState.backgroundId];
+  return [...new Set(ids.filter(Boolean))];
 }
 
 function buildNarratorInstruction(

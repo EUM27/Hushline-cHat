@@ -227,7 +227,8 @@ export interface AssetManifest {
     id: string;
     name: string;
     url: string;
-    kind: "messenger" | "school" | "interior";
+    kind: "messenger" | "school" | "interior" | "exterior";
+    tags?: string[];
   }>;
   sprites: Array<{
     id: string;

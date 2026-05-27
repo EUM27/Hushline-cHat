@@ -2,31 +2,31 @@
   {
     "id": "alibi-conflict",
     "condition": "turnNumber >= 3 AND 유저가 2명 이상의 증언을 확보함",
-    "description": "두 용의자의 알리바이가 서로 모순됨이 드러난다. 한 명이 거짓말을 하고 있다.",
+    "description": "정전 직후 각자의 위치 진술이 서로 맞지 않는다. 누군가 거실 테이블 근처에 있었던 시간이 비어 있다.",
     "oneShot": true
   },
   {
-    "id": "power-outage",
+    "id": "second-power-flicker",
     "condition": "tension >= 6",
-    "description": "폭설로 인해 저택 전체가 순간 정전된다. 어둠 속에서 누군가 움직이는 소리.",
+    "description": "발전기가 짧게 흔들리며 거실 조명이 꺼졌다 켜진다. 강무진이 무심코 발전기실 쪽을 먼저 돌아본다.",
     "oneShot": true
   },
   {
-    "id": "evidence-tampering",
-    "condition": "turnNumber >= 6 AND danger >= 4",
-    "description": "누군가 현장의 증거를 훼손하려 한 흔적이 발견된다.",
+    "id": "key-contamination",
+    "condition": "turnNumber >= 5 AND 유저가 황동 열쇠를 조사함",
+    "description": "황동 열쇠 표면에는 지문보다 먼저 닦아낸 듯한 천 자국이 보인다. 손수건이나 젖은 종이 냄새와 연결될 수 있다.",
     "oneShot": true
   },
   {
-    "id": "confession-pressure",
-    "condition": "tension >= 8",
-    "description": "용의자 중 한 명이 극도의 압박에 못 이겨 부분적 진실을 토로한다 (완전한 자백은 아님).",
+    "id": "haeon-vision-slip",
+    "condition": "tension >= 7",
+    "description": "윤해온이 검은 물방울이라는 말을 거의 꺼낼 뻔하다가 삼킨다. 그는 누군가를 특정하려 하지 않고 위험만 피하려 한다.",
     "oneShot": true
   },
   {
-    "id": "new-body-discovery",
-    "condition": "turnNumber >= 10 AND 유저가 특정 장소를 아직 조사하지 않음",
-    "description": "저택 어딘가에서 추가 단서(피 묻은 장갑, 숨겨진 메모 등)가 우연히 발견된다.",
+    "id": "book-evidence",
+    "condition": "turnNumber >= 7 AND 유저가 윤서하의 책이나 소지품을 조사함",
+    "description": "윤서하가 가져온 책등 안쪽에서 젖은 종이 냄새와 말라붙은 갈색 얼룩이 희미하게 드러난다.",
     "oneShot": true
   }
 ]

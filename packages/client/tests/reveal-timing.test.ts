@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   calculateRevealDelay,
   calculateStreamStepSize,
+  calculateStreamTickDelay,
   sliceStreamedText,
   shouldStreamMessageContent,
 } from "../src/reveal-timing";
@@ -60,5 +61,32 @@ describe("calculateRevealDelay", () => {
 
     expect(shortStep).toBe(1);
     expect(longStep).toBeGreaterThan(shortStep);
+  });
+
+  test("reveals impact sound effects one character at a time", () => {
+    const message = {
+      role: "narrator" as const,
+      isOpeningBeat: true,
+      content: "쾅! 쾅! 관리인 곽상철이 내려찍는 도끼날이 참나무 문을 파고들었다.",
+    };
+
+    expect(calculateStreamStepSize(message, 0)).toBe(1);
+    expect(calculateStreamStepSize(message, 1)).toBe(1);
+    expect(calculateStreamStepSize(message, 2)).toBe(1);
+    expect(calculateStreamStepSize(message, 3)).toBe(1);
+  });
+
+  test("pauses briefly after each impact sound effect character", () => {
+    const baseDelay = calculateStreamTickDelay({ role: "narrator", isOpeningBeat: true });
+    const message = {
+      role: "narrator" as const,
+      isOpeningBeat: true,
+      content: "쾅! 쾅!",
+    };
+
+    expect(calculateStreamTickDelay(message, 1)).toBeGreaterThan(baseDelay);
+    expect(calculateStreamTickDelay(message, 2)).toBeGreaterThan(baseDelay);
+    expect(calculateStreamTickDelay(message, 3)).toBe(baseDelay);
+    expect(calculateStreamTickDelay(message, 4)).toBeGreaterThan(baseDelay);
   });
 });

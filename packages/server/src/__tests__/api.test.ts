@@ -125,7 +125,13 @@ describe("Hushline API", () => {
     expect(payload.backgrounds.some((asset: { id: string }) => asset.id === "school-exterior")).toBe(
       true,
     );
+    expect(payload.backgrounds.some((asset: { id: string }) => asset.id === "lodge-foyer")).toBe(
+      true,
+    );
     expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "evan")).toBe(
+      true,
+    );
+    expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "yoon-seha")).toBe(
       true,
     );
   });
