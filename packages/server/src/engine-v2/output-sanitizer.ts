@@ -19,6 +19,7 @@ import { parseModelJson } from "../engine/json.js";
  * 1. Strip leading speaker label
  * 2. Truncate at any label mid-text (own or foreign)
  * 3. Strip leading narration paragraphs
+ * 4. Normalize remaining character lines into quote markers for client formatting
  */
 export function sanitizeCharacterOutput(raw: string, character: CharacterDefinition): string {
   let text = raw.trim();
@@ -40,7 +41,7 @@ export function sanitizeCharacterOutput(raw: string, character: CharacterDefinit
 
   text = truncateAtLabel(text);
 
-  text = unwrapOuterDialogueQuotes(text);
+  text = enforceCharacterLineMarkers(text);
 
   return text.trim();
 }
@@ -199,6 +200,46 @@ function truncateAtLabel(text: string): string {
   return text;
 }
 
+function enforceCharacterLineMarkers(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed || matchesCharacterLineMarkers(trimmed)) {
+    return trimmed;
+  }
+
+  return trimmed
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `"${normalizeUnmarkedCharacterLine(line)}"`)
+    .join("\n");
+}
+
+function matchesCharacterLineMarkers(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return true;
+  const quotedSegment = /(?:["“][^"”\n]+["”]|['‘][^'’\n]+['’])/y;
+  let index = 0;
+  while (index < trimmed.length) {
+    while (/\s/.test(trimmed[index] ?? "")) index += 1;
+    quotedSegment.lastIndex = index;
+    const match = quotedSegment.exec(trimmed);
+    if (!match || match.index !== index) {
+      return false;
+    }
+    index = quotedSegment.lastIndex;
+  }
+  return true;
+}
+
+function normalizeUnmarkedCharacterLine(line: string): string {
+  return line
+    .trim()
+    .replace(/^["“'‘]+/, "")
+    .replace(/["”'’]+$/, "")
+    .replace(/["“”]/g, "")
+    .replace(/[‘’]/g, "'");
+}
+
 /**
  * If output has multiple paragraphs and the first looks like narration
  * (sensory/descriptive, no dialogue markers), strip it.
@@ -208,28 +249,28 @@ function stripLeadingNarration(text: string): string {
   if (paragraphs.length <= 1) return text;
 
   const first = paragraphs[0]?.trim() ?? "";
-  if (looksLikeNarration(first)) {
+  const rest = paragraphs.slice(1).join("\n\n").trim();
+  if (looksLikeNarration(first) || (looksLikeActionSentence(first) && containsStandaloneDialogue(rest))) {
     return paragraphs.slice(1).join("\n\n").trim();
   }
 
   return text;
 }
 
-function unwrapOuterDialogueQuotes(text: string): string {
-  const trimmed = text.trim();
-  const match = /^["'“”‘’](?<content>[\s\S]+)["'“”‘’]$/.exec(trimmed);
-  if (!match?.groups?.content) {
-    return trimmed;
-  }
-  const content = match.groups.content.trim();
-  return content || trimmed;
+function containsStandaloneDialogue(text: string): boolean {
+  return /^["'“”‘’][^"'“”‘’\n]+["'“”‘’]/m.test(text.trim());
+}
+
+function looksLikeActionSentence(text: string): boolean {
+  return /(시선|고개|손|입술|숨|침묵|눈|몸|어깨|라이터|문 쪽|테이블)/.test(text)
+    && /(했다|하였다|피했다|돌렸다|내렸다|올렸다|움직였다|굳었다|멈췄다|닫았다|열었다)\.?$/.test(text);
 }
 
 function looksLikeNarration(text: string): boolean {
   const narrationMarkers = [
     /냄새/, /소리/, /느껴/, /닿는다/, /스친다/, /들린다/, /보인다/,
-    /어둠/, /빛/, /그림자/, /공기/, /바닥/, /천장/, /벽/,
-    /한다\./, /였다\./, /있다\./, /된다\./,
+    /어둠/, /빛/, /그림자/, /공기/, /바닥/, /천장/, /벽/, /시선/, /고개/,
+    /한다\./, /했다\./, /였다\./, /있다\./, /된다\./,
   ];
   const dialogueMarkers = [
     /야\s/, /너\s/, /해\b/, /마\b/, /봐\b/, /말해/, /대답/,

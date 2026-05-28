@@ -71,7 +71,9 @@ describe("character prompt boundaries", () => {
 
     expect(capturedSystemPrompt).toContain("사용자 입력에는 대사와 행동 지문이 섞일 수 있다.");
     expect(capturedSystemPrompt).toContain("그 형식을 따라 하지 않는다.");
-    expect(capturedSystemPrompt).toContain("최종 출력은 캐릭터의 대사만 쓴다.");
+    expect(capturedSystemPrompt).toContain("최종 출력은 \"실제 발화\" 또는 '짧은 내면 반응'만 쓴다.");
+    expect(capturedSystemPrompt).toContain("실제 입 밖으로 말한 대사는 반드시 큰따옴표로 감싼다");
+    expect(capturedSystemPrompt).toContain("입 밖으로 말하지 않은 생각은 반드시 작은따옴표로 감싼다");
     expect(capturedSystemPrompt).not.toContain("자기 몸짓");
     expect(capturedSystemPrompt).not.toContain("짧은 추임새");
     expect(capturedSystemPrompt).toContain("혼잣말");

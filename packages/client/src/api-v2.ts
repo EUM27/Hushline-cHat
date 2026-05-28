@@ -11,7 +11,10 @@ import type {
   ModelConnection,
   InputMode,
   DirectorOutput,
+  BoundaryReport,
+  CaseRuntimeTrace,
   PersonaDraft,
+  StateLawSnapshot,
   TurnMessage,
 } from "@hushline/shared";
 
@@ -24,6 +27,9 @@ export interface V2AdvanceResponse {
   turn: {
     messages: TurnMessage[];
     directorOutput: DirectorOutput;
+    boundaryReport: BoundaryReport;
+    stateLaw: StateLawSnapshot;
+    caseRuntime?: CaseRuntimeTrace;
   };
 }
 

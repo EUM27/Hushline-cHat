@@ -6,6 +6,7 @@ import { MessageContent } from "./ChatTimeline";
 import {
   findSpriteUrl,
   formatKoreanTime,
+  getStageCharacterId,
   getLatestStageMessage,
   getStageExpression,
   getStageSpeakerLabel,
@@ -20,7 +21,6 @@ export function VisualNovelMainScreen({
   theme,
   tools,
   overlays,
-  activeCharacter,
   activeSpeakerLabel,
   visibleMessages,
   providerProfiles,
@@ -28,16 +28,14 @@ export function VisualNovelMainScreen({
   messageRevealInProgress,
   isStarting,
   isSending,
-  input,
+  actionInput,
   enterToSend,
   error,
   logRef,
-  inputMode,
-  onSubmit,
-  onInputChange,
+  onActionSubmit,
+  onActionInputChange,
   onKeyDown,
   onEnterToSendChange,
-  onInputModeChange,
   onNewGame,
   onRestart,
   onUndo,
@@ -50,7 +48,6 @@ export function VisualNovelMainScreen({
   theme: VisualThemePreset;
   tools: ReactNode;
   overlays: ReactNode;
-  activeCharacter: ClientSessionState["characters"][number] | undefined;
   activeSpeakerLabel: string;
   visibleMessages: ChatMessage[];
   providerProfiles: ProviderProfile[];
@@ -58,16 +55,14 @@ export function VisualNovelMainScreen({
   messageRevealInProgress: boolean;
   isStarting: boolean;
   isSending: boolean;
-  input: string;
+  actionInput: string;
   enterToSend: boolean;
   error: string | null;
   logRef: RefObject<HTMLDivElement | null>;
-  inputMode: "chat" | "action";
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onInputChange: (value: string) => void;
-  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onActionSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onActionInputChange: (value: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>, mode: "chat" | "action") => void;
   onEnterToSendChange: (enabled: boolean) => void;
-  onInputModeChange: (mode: "chat" | "action") => void;
   onNewGame: () => void;
   onRestart: () => void;
   onUndo: () => void;
@@ -82,7 +77,11 @@ export function VisualNovelMainScreen({
   const latestVisibleMessage = visibleMessages.at(-1);
   const shouldStreamStageMessage = Boolean(stageMessage && stageMessage.id === latestVisibleMessage?.id);
   const stageExpression = getStageExpression(visibleMessages, stageMessage);
-  const spriteUrl = findSpriteUrl(assets, activeCharacter?.id, stageExpression);
+  const stageCharacterId = getStageCharacterId(stageMessage);
+  const stageCharacter = stageCharacterId
+    ? session.characters.find((character) => character.id === stageCharacterId)
+    : undefined;
+  const spriteUrl = findSpriteUrl(assets, stageCharacter?.id, stageExpression);
   const visibleLogMessages = visibleMessages.filter(isStageMessage);
 
   useEffect(() => {
@@ -161,7 +160,14 @@ export function VisualNovelMainScreen({
 
       <div className="vn-visual-area">
         <div className="vn-scene-backdrop" aria-hidden="true" />
-        {spriteUrl ? <img className="vn-character-standee" src={spriteUrl} alt={activeSpeakerLabel} /> : null}
+        {spriteUrl ? (
+          <img
+            className="vn-character-standee"
+            src={spriteUrl}
+            alt={stageCharacter?.name ?? activeSpeakerLabel}
+            data-character-id={stageCharacter?.id}
+          />
+        ) : null}
       </div>
 
       <div className={`vn-command-dock ${isLogOpen ? "log-open" : ""}`}>
@@ -178,7 +184,7 @@ export function VisualNovelMainScreen({
                 {visibleLogMessages.map((message) => (
                   <article key={message.id} className={`vn-log-entry ${message.role}`}>
                     <span>{getStageSpeakerLabel(message, activeSpeakerLabel)}</span>
-                    <p>{message.content}</p>
+                    <MessageContent content={message.content} message={message} forceComplete />
                   </article>
                 ))}
               </div>
@@ -258,7 +264,7 @@ export function VisualNovelMainScreen({
             </div>
           ) : null}
 
-          <form className="vn-input-bar" onSubmit={onSubmit}>
+          <div className="vn-input-bar">
             <div className="vn-quick-actions" aria-label="빠른 기능">
               <button
                 className="vn-quick-btn"
@@ -282,44 +288,33 @@ export function VisualNovelMainScreen({
               </button>
             </div>
 
-            <label className="vn-reply-shell">
-              <button
-                type="button"
-                className="vn-input-mode-toggle-btn"
-                onClick={() => onInputModeChange(inputMode === "chat" ? "action" : "chat")}
-                title="클릭하여 입력 상태 전환 (문자 / 행동)"
-              >
-                {inputMode === "chat" ? "💬 문자" : "🎭 행동"}
-              </button>
+            <form className="vn-reply-shell action" onSubmit={onActionSubmit}>
+              <span className="vn-input-mode-label">행동</span>
               <textarea
                 className="vn-reply-input"
-                value={input}
-                onChange={(event) => onInputChange(event.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder={
-                  inputMode === "chat"
-                    ? "단톡방에 문자를 보냅니다..."
-                    : "물리적인 행동을 보냅니다... (예: *주변을 살펴본다*)"
-                }
-                aria-label="메시지"
+                value={actionInput}
+                onChange={(event) => onActionInputChange(event.target.value)}
+                onKeyDown={(event) => onKeyDown(event, "action")}
+                placeholder="물리적인 행동을 보냅니다... (예: 주변을 살펴본다)"
+                aria-label="행동 입력"
                 rows={1}
               />
-              <label className="enter-send-inline">
-                <input
-                  type="checkbox"
-                  checked={enterToSend}
-                  onChange={(event) => onEnterToSendChange(event.target.checked)}
-                />
-                <CornerDownLeft size={12} aria-hidden="true" />
-                <span>Enter</span>
-              </label>
-            </label>
+              <button className="vn-reply-send secondary" type="submit" disabled={isSending}>
+                <Send size={14} aria-hidden="true" />
+                ACT
+              </button>
+            </form>
 
-            <button className="vn-reply-send" type="submit" disabled={isSending}>
-              <Send size={14} aria-hidden="true" />
-              SEND
-            </button>
-          </form>
+            <label className="enter-send-inline">
+              <input
+                type="checkbox"
+                checked={enterToSend}
+                onChange={(event) => onEnterToSendChange(event.target.checked)}
+              />
+              <CornerDownLeft size={12} aria-hidden="true" />
+              <span>Enter</span>
+            </label>
+          </div>
         </div>
       </div>
     </main>

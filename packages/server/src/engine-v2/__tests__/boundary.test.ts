@@ -85,6 +85,18 @@ describe("engine v2 boundary layer", () => {
     expect(report.violations[0]?.code).toBe("foreign-dialogue");
   });
 
+  test("fallbacks character output outside quote-based dialogue/thought format", () => {
+    const { content, report } = enforceCharacterBoundary(
+      "강무진, 지금 큰소리 내면 더 불안해져요.",
+      "yoon-haeon",
+      makePack(),
+      "\"...잠깐만.\"",
+    );
+
+    expect(content).toBe("\"...잠깐만.\"");
+    expect(report.violations.map((violation) => violation.code)).toContain("format-contract");
+  });
+
   test("fallbacks character output that mixes dialogue with narration paragraphs", () => {
     const { content, report } = enforceCharacterBoundary(
       [

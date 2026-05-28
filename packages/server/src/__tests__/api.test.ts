@@ -129,6 +129,12 @@ describe("Hushline API", () => {
       true,
     );
     expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "evan")).toBe(
+      false,
+    );
+    expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "kang-mujin")).toBe(
+      true,
+    );
+    expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "yoon-haeon")).toBe(
       true,
     );
     expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "yoon-seha")).toBe(
@@ -303,6 +309,48 @@ describe("Hushline API", () => {
     expect(payload.models).toEqual([
       { id: "alpha/model", label: "Alpha Model" },
       { id: "zeta/model", label: "Zeta Model" },
+    ]);
+  });
+
+  test("loads NanoGPT subscription and paid model catalogs with visible tiers", async () => {
+    const store = createSqliteStore(":memory:");
+    const app = createApp({ store });
+    const requestedUrls: string[] = [];
+
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      const data = url.includes("/subscription/")
+        ? [
+            { id: "sub/model", name: "Subscription Model" },
+            { id: "shared/model", name: "Shared Model" },
+          ]
+        : [
+            { id: "paid/model", name: "Paid Model" },
+            { id: "shared/model", name: "Shared Model Paid" },
+          ];
+      return new Response(JSON.stringify({ data }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const response = await app.request("/api/provider-profiles/nanogpt/models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ apiKey: "test-key" }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(requestedUrls).toEqual([
+      "https://nano-gpt.com/api/subscription/v1/models?detailed=true",
+      "https://nano-gpt.com/api/paid/v1/models?detailed=true",
+    ]);
+    expect(payload.models).toEqual([
+      { id: "paid/model", label: "Paid Model", billingTier: "paid" },
+      { id: "shared/model", label: "Shared Model", billingTier: "subscription" },
+      { id: "sub/model", label: "Subscription Model", billingTier: "subscription" },
     ]);
   });
 

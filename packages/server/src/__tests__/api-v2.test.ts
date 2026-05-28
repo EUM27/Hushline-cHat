@@ -95,6 +95,10 @@ describe("Hushline API v2", () => {
     expect(advanced.session.scene.sessionId).toBe(created.session.id);
     expect(advanced.session.scene.turnNumber).toBeGreaterThan(0);
     expect(advanced.turn.messages.some((message: { role: string }) => message.role === "user")).toBe(true);
+    expect(advanced.turn.boundaryReport).toEqual({
+      corrected: false,
+      violations: [],
+    });
 
     const rerollResponse = await app.request(`/api/v2/sessions/${created.session.id}/reroll`, {
       method: "POST",
@@ -105,6 +109,10 @@ describe("Hushline API v2", () => {
     const rerolled = await rerollResponse.json();
     expect(rerolled.session.scene.sessionId).toBe(created.session.id);
     expect(rerolled.turn.messages.some((message: { role: string }) => message.role === "user")).toBe(true);
+    expect(rerolled.turn.boundaryReport).toEqual({
+      corrected: false,
+      violations: [],
+    });
 
     const undoResponse = await app.request(`/api/v2/sessions/${created.session.id}/undo`, {
       method: "POST",
@@ -113,6 +121,60 @@ describe("Hushline API v2", () => {
     const undone = await undoResponse.json();
     expect(undone.session.scene.sessionId).toBe(created.session.id);
     expect(undone.session.messages.some((message: { role: string }) => message.role === "user")).toBe(false);
+  });
+
+  test("advance response includes developer-only state law snapshot", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "지금 나가도 되나요?", inputMode: "chat" }),
+    });
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+
+    expect(advanced.turn.stateLaw).toBeDefined();
+    expect(advanced.turn.stateLaw.immutableFacts.length).toBeGreaterThan(0);
+    expect(advanced.turn.stateLaw.outputRules).toContain("유저 행동/생각/감정 대리 금지");
+  });
+
+  test("advance response includes developer-only case runtime metadata", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "누가 마지막으로 테이블 근처에 있었어?", inputMode: "chat" }),
+    });
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+
+    expect(advanced.turn.caseRuntime.inquiry.isCaseInquiry).toBe(true);
+    expect(["timeline_query", "witness_testimony"]).toContain(advanced.turn.caseRuntime.inquiry.inquiryType);
+    expect(advanced.turn.caseRuntime.answerScope.blockedTruthIds).toContain("truth_killer_identity");
   });
 
   test("can return a flexible multi-message turn when the director asks for narration, characters, and scene state", async () => {

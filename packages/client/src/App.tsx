@@ -9,6 +9,9 @@ import type {
   ModelProviderId,
   ProviderProfile,
   ClientSessionState,
+  BoundaryReport,
+  CaseRuntimeTrace,
+  StateLawSnapshot,
 } from "@hushline/shared";
 import { advanceV2, createSessionV2, getScenarioDetail, getSessionV2, listScenarios, rerollV2, undoV2, type V2ScenarioDetailResponse } from "./api-v2";
 import { appendOptimisticUserMessage } from "./optimistic-session";
@@ -26,11 +29,9 @@ import {
   buildConnectionSlots,
   createAdvisorDrafts,
   createVisualThemeStyle,
-  detectInputModeFromText,
   findBackgroundUrl,
   formatKoreanTime,
   getConnectionStatus,
-  getLatestStageMessage,
   loadConnections,
   loadEnterToSend,
   persistConnections,
@@ -39,8 +40,8 @@ import { PhoneSubScreen } from "./components/PhoneSubScreen";
 import { VisualNovelMainScreen } from "./components/VisualNovelMainScreen";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { DevPanel } from "./components/DevPanel";
+import { DirectorLawPanel } from "./components/DirectorLawPanel";
 
-const defaultInput = "";
 const defaultInputMode: InputMode = "chat";
 
 export function App() {
@@ -55,9 +56,8 @@ export function App() {
   const [selectedScenarioDetail, setSelectedScenarioDetail] = useState<V2ScenarioDetailResponse | null>(null);
   const [personaDraft, setPersonaDraft] = useState({ name: "" });
   const [advisorDrafts, setAdvisorDrafts] = useState<AdvisorDraft[]>(() => createAdvisorDrafts());
-  const [input, setInput] = useState(defaultInput);
-  const [inputMode, setInputMode] = useState<"chat" | "action">("chat");
-  const [inputModeLocked, setInputModeLocked] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [actionInput, setActionInput] = useState("");
   const [enterToSend, setEnterToSend] = useState(() => loadEnterToSend());
   const [connections, setConnections] = useState<Record<string, ModelConnection>>(() =>
     loadConnections(),
@@ -69,13 +69,16 @@ export function App() {
   const [oauthStatus, setOauthStatus] = useState<string | null>(null);
   const [manualSaveAt, setManualSaveAt] = useState<string | null>(null);
   const [connectionSaveError, setConnectionSaveError] = useState<string | null>(null);
-  const [activeSlotKey, setActiveSlotKey] = useState<string>("default");
   const [isStarting, setIsStarting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [revealedMessageCount, setRevealedMessageCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isConnectionPanelOpen, setIsConnectionPanelOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [rightToolMode, setRightToolMode] = useState<"connections" | "law">("connections");
+  const [lastBoundaryReport, setLastBoundaryReport] = useState<BoundaryReport | null>(null);
+  const [lastStateLaw, setLastStateLaw] = useState<StateLawSnapshot | null>(null);
+  const [lastCaseRuntime, setLastCaseRuntime] = useState<CaseRuntimeTrace | null>(null);
   const [visualThemeId, setVisualThemeId] = useState<VisualThemeId>("moonlight");
   const [isVisualThemeOpen, setIsVisualThemeOpen] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -108,6 +111,9 @@ export function App() {
           const savedSession = await getSessionV2(savedSessionId);
           if (savedSession && !cancelled) {
             setSession(savedSession);
+            setLastBoundaryReport(null);
+            setLastStateLaw(null);
+            setLastCaseRuntime(null);
             setRevealedMessageCount(savedSession.messages.length);
           } else {
             localStorage.removeItem(sessionStorageKey);
@@ -225,18 +231,11 @@ export function App() {
     [session, selectedScenarioDetail],
   );
 
-  useEffect(() => {
-    if (!slots.some((slot) => slot.key === activeSlotKey)) {
-      setActiveSlotKey(slots[0]?.key ?? "default");
-    }
-  }, [slots, activeSlotKey]);
-
   const isSceneOpen = Boolean(session?.scene.hasEnteredScene);
   const backgroundUrl = findBackgroundUrl(assets, session?.scene.backgroundId);
   const visibleMessages = session?.messages.slice(0, revealedMessageCount) ?? [];
   const messageRevealInProgress = Boolean(session && revealedMessageCount < session.messages.length);
   const isOpeningSequence = Boolean(session && session.scene.turnNumber === 0);
-  const latestStageMessage = getLatestStageMessage(visibleMessages);
   const activeCharacter = session?.characters.find(
     (character) => character.id === session.scene.activeSpeakerId,
   );
@@ -255,37 +254,7 @@ export function App() {
         : "messenger-open"
     : `setup-open ${setupStep}-step`;
 
-  useEffect(() => {
-    if (!session) return;
-    if (input.trim()) return;
-    if (isSending || messageRevealInProgress) return;
-    if (inputModeLocked) return;
-
-    const content = latestStageMessage?.content?.trim() ?? "";
-    const role = latestStageMessage?.role;
-    const suggestsAction =
-      role === "system"
-      || (role === "narrator" && /조사|확인|어떤 행동|무엇을|어디를|어디서/i.test(content));
-    const nextMode: "chat" | "action" = suggestsAction ? "action" : "chat";
-    if (nextMode !== inputMode) {
-      setInputMode(nextMode);
-    }
-  }, [
-    input,
-    inputMode,
-    inputModeLocked,
-    isSending,
-    latestStageMessage?.content,
-    latestStageMessage?.role,
-    messageRevealInProgress,
-    session?.id,
-  ]);
-
-  function handleInputChange(value: string) {
-    setInput(value);
-  }
-
-  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, _mode: "chat" | "action") {
     if (event.nativeEvent.isComposing || event.key !== "Enter") {
       return;
     }
@@ -314,6 +283,9 @@ export function App() {
     createSessionV2(selectedScenario, personaDraft.name || undefined, undefined, activeConnections(connections))
       .then((nextSession) => {
         setSession(nextSession);
+        setLastBoundaryReport(null);
+        setLastStateLaw(null);
+        setLastCaseRuntime(null);
         setRevealedMessageCount(0);
       })
       .catch((reason: unknown) => {
@@ -341,6 +313,9 @@ export function App() {
         activeConnections(connections),
       );
       setSession(nextSession);
+      setLastBoundaryReport(null);
+      setLastStateLaw(null);
+      setLastCaseRuntime(null);
       setRevealedMessageCount(0);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "세션 시작 실패");
@@ -365,6 +340,9 @@ export function App() {
     try {
       const payload = await advanceV2(baseSession.id, content, mode, activeConnections(connections));
       setSession(payload.session);
+      setLastBoundaryReport(payload.turn.boundaryReport);
+      setLastStateLaw(payload.turn.stateLaw);
+      setLastCaseRuntime(payload.turn.caseRuntime ?? null);
       setRevealedMessageCount(Math.min(nextVisibleCount, payload.session.messages.length));
       return true;
     } catch (reason: unknown) {
@@ -377,19 +355,31 @@ export function App() {
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const content = input.trim();
+    const content = chatInput.trim();
     if (!content) {
       return;
     }
 
-    setInput("");
-    setInputModeLocked(false);
-    const detectedMode = detectInputModeFromText(content) ?? inputMode;
-    const didSubmit = await submitEngineInput(content, detectedMode);
+    setChatInput("");
+    const didSubmit = await submitEngineInput(content, "chat");
     if (!didSubmit) {
-      setInput(content);
+      setChatInput(content);
+    }
+  }
+
+  async function handleActionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = actionInput.trim();
+    if (!content) {
+      return;
+    }
+
+    setActionInput("");
+    const didSubmit = await submitEngineInput(content, "action");
+    if (!didSubmit) {
+      setActionInput(content);
     }
   }
 
@@ -400,6 +390,9 @@ export function App() {
     try {
       const payload = await rerollV2(session.id, activeConnections(connections), defaultInputMode);
       setSession(payload.session);
+      setLastBoundaryReport(payload.turn.boundaryReport);
+      setLastStateLaw(payload.turn.stateLaw);
+      setLastCaseRuntime(payload.turn.caseRuntime ?? null);
       setRevealedMessageCount(payload.session.messages.length);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "리롤 실패");
@@ -420,6 +413,7 @@ export function App() {
     try {
       const nextSession = await undoV2(session.id);
       setSession(nextSession);
+      setLastCaseRuntime(null);
       setRevealedMessageCount(nextSession.messages.length);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "삭제 실패");
@@ -441,6 +435,9 @@ export function App() {
         activeConnections(connections),
       );
       setSession(nextSession);
+      setLastBoundaryReport(null);
+      setLastStateLaw(null);
+      setLastCaseRuntime(null);
       setRevealedMessageCount(0);
       localStorage.setItem(sessionStorageKey, nextSession.id);
     } catch (reason: unknown) {
@@ -453,8 +450,12 @@ export function App() {
   function handleNewGame() {
     setSession(null);
     setRevealedMessageCount(0);
-    setInput("");
+    setChatInput("");
+    setActionInput("");
     setError(null);
+    setLastBoundaryReport(null);
+    setLastStateLaw(null);
+    setLastCaseRuntime(null);
     setSetupStep("scenario");
     setSelectedScenario("");
     setSelectedScenarioDetail(null);
@@ -560,8 +561,6 @@ export function App() {
     <ConnectionPanel
       profiles={providerProfiles}
       slots={slots}
-      activeSlotKey={activeSlotKey}
-      onSelectSlot={setActiveSlotKey}
       connections={connections}
       modelOptions={modelOptions}
       modelLoadState={modelLoadState}
@@ -607,11 +606,14 @@ export function App() {
               isSending={isSending}
               themeOptions={visualThemeOrder.map((themeId) => visualThemePresets[themeId])}
               isThemeOpen={isVisualThemeOpen}
+              chatInput={chatInput}
               onToggleTheme={() => setIsVisualThemeOpen((current) => !current)}
               onSelectTheme={(nextThemeId) => {
                 setVisualThemeId(nextThemeId);
                 setIsVisualThemeOpen(false);
               }}
+              onChatInputChange={setChatInput}
+              onChatSubmit={handleChatSubmit}
             />
             <VisualNovelMainScreen
               assets={assets}
@@ -625,6 +627,7 @@ export function App() {
                   isDevPanelOpen={isDevPanelOpen}
                   showDevTools
                   onToggleConnectionPanel={() => {
+                    setRightToolMode("connections");
                     setIsConnectionPanelOpen((current) => !current);
                     setIsDevPanelOpen(false);
                   }}
@@ -645,14 +648,40 @@ export function App() {
                           aria-label="모델 설정 닫기"
                           onClick={() => setIsConnectionPanelOpen(false)}
                         />
-                        {connectionPanel}
+                        <div className="vn-right-tool-panel">
+                          <div className="vn-right-tool-tabs" aria-label="오른쪽 개발 도구">
+                            <button
+                              type="button"
+                              className={rightToolMode === "connections" ? "active" : ""}
+                              onClick={() => setRightToolMode("connections")}
+                            >
+                              모델 연결
+                            </button>
+                            <button
+                              type="button"
+                              className={rightToolMode === "law" ? "active" : ""}
+                              onClick={() => setRightToolMode("law")}
+                            >
+                              Director Law
+                            </button>
+                          </div>
+                          {rightToolMode === "connections" ? connectionPanel : <DirectorLawPanel stateLaw={lastStateLaw} />}
+                        </div>
                       </div>
                     ) : null}
-                    {isDevPanelOpen ? <DevPanel session={session} open theme={visualTheme} /> : null}
+                    {isDevPanelOpen ? (
+                      <DevPanel
+                        session={session}
+                        open
+                        theme={visualTheme}
+                        boundaryReport={lastBoundaryReport}
+                        stateLaw={lastStateLaw}
+                        caseRuntime={lastCaseRuntime}
+                      />
+                    ) : null}
                   </>
                 ) : null
               }
-              activeCharacter={activeCharacter}
               activeSpeakerLabel={activeSpeakerLabel}
               visibleMessages={visibleMessages}
               providerProfiles={providerProfiles}
@@ -660,19 +689,14 @@ export function App() {
               messageRevealInProgress={messageRevealInProgress}
               isStarting={isStarting}
               isSending={isSending}
-              input={input}
-              inputMode={inputMode}
+              actionInput={actionInput}
               enterToSend={enterToSend}
               error={error}
               logRef={logRef}
-              onSubmit={handleSubmit}
-              onInputChange={handleInputChange}
+              onActionSubmit={handleActionSubmit}
+              onActionInputChange={setActionInput}
               onKeyDown={handleComposerKeyDown}
               onEnterToSendChange={setEnterToSend}
-              onInputModeChange={(mode) => {
-                setInputMode(mode);
-                setInputModeLocked(true);
-              }}
               onNewGame={handleNewGame}
               onRestart={handleRestartSession}
               onUndo={handleUndo}

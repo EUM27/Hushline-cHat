@@ -1,15 +1,21 @@
-import type { ClientSessionState } from "@hushline/shared";
+import type { BoundaryReport, CaseRuntimeTrace, ClientSessionState, StateLawSnapshot } from "@hushline/shared";
 import type { VisualThemePreset } from "../types/ui";
-import { createVisualThemeStyle } from "../utils/ui-helpers";
+import { createVisualThemeStyle, summarizeCaseRuntimeForDevPanel, summarizeStateLawForDevPanel } from "../utils/ui-helpers";
 
 export function DevPanel({
   session,
   open,
   theme,
+  boundaryReport,
+  stateLaw,
+  caseRuntime,
 }: {
   session: ClientSessionState;
   open: boolean;
   theme: VisualThemePreset;
+  boundaryReport?: BoundaryReport | null;
+  stateLaw?: StateLawSnapshot | null;
+  caseRuntime?: CaseRuntimeTrace | null;
 }) {
   // v2 세션이면 worldState/handouts가 있음
   const worldState = (session as any).worldState;
@@ -25,6 +31,35 @@ export function DevPanel({
       {open && (
         <div className="dev-panel-content">
           <h3>Dev Panel</h3>
+
+          {boundaryReport?.violations.length ? (
+            <section className="dev-section">
+              <h4>Boundary</h4>
+              {boundaryReport.violations.slice(-8).map((violation, index) => (
+                <p key={`${violation.layer}-${violation.code}-${index}`} className="dev-event">
+                  <strong>{violation.layer}</strong> {violation.code}: {violation.message}
+                </p>
+              ))}
+            </section>
+          ) : null}
+
+          {stateLaw ? (
+            <section className="dev-section">
+              <h4>Director Law</h4>
+              {summarizeStateLawForDevPanel(stateLaw).map((row) => (
+                <p key={row} className="dev-event">{row}</p>
+              ))}
+            </section>
+          ) : null}
+
+          {caseRuntime ? (
+            <section className="dev-section">
+              <h4>Case Runtime</h4>
+              {summarizeCaseRuntimeForDevPanel(caseRuntime).map((row) => (
+                <p key={row} className="dev-event">{row}</p>
+              ))}
+            </section>
+          ) : null}
 
           <section className="dev-section">
             <h4>World State</h4>

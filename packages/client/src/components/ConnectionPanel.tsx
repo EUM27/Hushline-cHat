@@ -4,6 +4,7 @@ import type {
   ModelProviderId,
   ProviderProfile,
 } from "@hushline/shared";
+import { useEffect, useMemo, useState } from "react";
 import type { ConnectionSlot } from "../types/ui";
 import { ModelSearchPicker } from "./ModelSearchPicker";
 import { getConnectionStatus, getSharedProviderApiKey } from "../utils/ui-helpers";
@@ -11,8 +12,6 @@ import { getConnectionStatus, getSharedProviderApiKey } from "../utils/ui-helper
 export function ConnectionPanel({
   profiles,
   slots,
-  activeSlotKey,
-  onSelectSlot,
   connections,
   modelOptions,
   modelLoadState,
@@ -26,8 +25,6 @@ export function ConnectionPanel({
 }: {
   profiles: ProviderProfile[];
   slots: ConnectionSlot[];
-  activeSlotKey: string;
-  onSelectSlot: (key: string) => void;
   connections: Record<string, ModelConnection>;
   modelOptions: Record<string, ModelOption[]>;
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
@@ -39,9 +36,10 @@ export function ConnectionPanel({
   onCheckChatGptAccount: () => void;
   onSave: () => void;
 }) {
+  const [activeSlotKey, setActiveSlotKey] = useState("default");
   const fallbackProviderId = profiles[0]?.id ?? ("nanogpt" as ModelProviderId);
-  const slot = slots.find((candidate) => candidate.key === activeSlotKey) ?? slots[0];
-  const slotKey = slot?.key ?? "default";
+  const slotKey = resolveConnectionSlotKey(slots, activeSlotKey);
+  const slot = slots.find((candidate) => candidate.key === slotKey);
   const currentConnection =
     connections[slotKey] ??
     ({
@@ -51,9 +49,12 @@ export function ConnectionPanel({
     } as ModelConnection);
   const selectedProfile = profiles.find((profile) => profile.id === currentConnection.providerId);
   const providerModels = modelOptions[currentConnection.providerId] ?? [];
-  const modelChoices = currentConnection.model
-    ? ensureSelectedModel(providerModels, currentConnection.model)
-    : providerModels;
+  const modelChoices = useMemo(
+    () => currentConnection.model
+      ? ensureSelectedModel(providerModels, currentConnection.model)
+      : providerModels,
+    [currentConnection.model, providerModels],
+  );
   const currentModelLoadState = modelLoadState[currentConnection.providerId] ?? {
     loading: false,
     error: null,
@@ -62,6 +63,10 @@ export function ConnectionPanel({
   const inheritedApiKey = getSharedProviderApiKey(connections, currentConnection.providerId, slotKey);
   const effectiveApiKey = currentConnection.apiKey.trim() || inheritedApiKey;
   const slotStatus = getConnectionStatus(connections[slotKey], profiles, inheritedApiKey);
+
+  useEffect(() => {
+    setActiveSlotKey((current) => resolveConnectionSlotKey(slots, current));
+  }, [slots]);
 
   function updateSlotConnection(next: Partial<ModelConnection>) {
     const providerId = next.providerId ?? currentConnection.providerId;
@@ -92,7 +97,6 @@ export function ConnectionPanel({
 
       <div className="slot-tabs" role="tablist">
         {slots.map((candidate) => {
-          const tabStatus = getConnectionStatus(connections[candidate.key], profiles);
           const isActive = candidate.key === slotKey;
           return (
             <button
@@ -100,8 +104,8 @@ export function ConnectionPanel({
               key={candidate.key}
               role="tab"
               aria-selected={isActive}
-              className={`slot-tab ${isActive ? "active" : ""} ${tabStatus.tone}`}
-              onClick={() => onSelectSlot(candidate.key)}
+              className={`slot-tab ${isActive ? "active" : ""}`}
+              onClick={() => setActiveSlotKey(candidate.key)}
             >
               <span className="slot-tab-title">{candidate.title}</span>
               <span className="slot-tab-subtitle">{candidate.subtitle}</span>
@@ -188,6 +192,13 @@ export function ConnectionPanel({
       ) : null}
     </aside>
   );
+}
+
+export function resolveConnectionSlotKey(slots: ConnectionSlot[], activeSlotKey: string): string {
+  if (slots.some((slot) => slot.key === activeSlotKey)) {
+    return activeSlotKey;
+  }
+  return slots[0]?.key ?? "default";
 }
 
 function ensureSelectedModel(models: ModelOption[], selectedModelId: string): ModelOption[] {

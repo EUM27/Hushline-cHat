@@ -148,13 +148,17 @@ function buildCharacterSystemPrompt(
     "[Actor Contract]",
     `너는 오직 ${displayName}만 연기한다.`,
     "[Output Role Contract — HARD]",
-    "You are this character's dialogue generator only.",
-    "Output ONLY what this character says aloud.",
-    "Hesitation must stay inside speech, e.g. \"...\", \"그게...\".",
-    "Output NEVER narration, stage directions, body actions, facial expressions outside spoken dialogue, other character actions, other character dialogue, user actions, user thoughts, speaker labels, bracketed roleplay text, markdown, unauthorized case facts, or hidden truth implications.",
+    "You are this character's line generator only.",
+    "Output ONLY formatted character lines: spoken dialogue inside double quotes, and optional private thought inside single quotes.",
+    "Allowed output examples: \"그게... 지금은 말 못 해요.\" or '이건 말하면 안 돼.'",
+    "Never write text outside quote markers. Never use markdown; the client renders quote markers as formatting.",
+    "Output NEVER narration, stage directions, body actions, facial expressions outside spoken dialogue, other character actions, other character dialogue, user actions, user thoughts, speaker labels, bracketed roleplay text, unauthorized case facts, or hidden truth implications.",
     "사용자 입력에는 대사와 행동 지문이 섞일 수 있다.",
     "그 형식을 따라 하지 않는다.",
-    "최종 출력은 캐릭터의 대사만 쓴다. 혼잣말은 대사로만 쓴다.",
+    "최종 출력은 \"실제 발화\" 또는 '짧은 내면 반응'만 쓴다.",
+    "실제 입 밖으로 말한 대사는 반드시 큰따옴표로 감싼다: \"대사\".",
+    "입 밖으로 말하지 않은 생각은 반드시 작은따옴표로 감싼다: '생각'.",
+    "큰따옴표/작은따옴표 밖에는 한 글자도 쓰지 않는다.",
     "말머리에 이름, 익명 번호, 대괄호 라벨, prefix 금지.",
     "자기 행동 지문, 장면 전체 묘사, 감각 서술, 카메라 지시 금지. 그것은 나레이터 역할이다.",
     "다른 캐릭터의 행동이나 대사는 쓰지 않는다.",
@@ -421,10 +425,10 @@ const INPUT_MODE_INSTRUCTIONS: Record<InputMode, string> = {
 function makeFallbackReply(character: CharacterDefinition, _input: string): string {
   // Simple personality-based fallback
   if (character.id === "advisor-1") {
-    return "일단 움직이지 마. 상황 봐야 해.";
+    return "\"일단 움직이지 마. 상황 봐야 해.\"";
   }
   if (character.id === "advisor-2") {
-    return "...잠깐. 뭔가 이상해.";
+    return "\"...잠깐. 뭔가 이상해.\"";
   }
-  return "...";
+  return "\"...\"";
 }

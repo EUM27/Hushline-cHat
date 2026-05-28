@@ -213,13 +213,17 @@ export function createAppV2(options: CreateAppV2Options = {}) {
       };
     }
 
+    const personaName = persona?.name ?? "{{유저}}";
+
     // Build opening messages
     const openingMessages: TurnMessage[] = pack.scenarioCard.openingBeats.map((beat) => ({
       id: crypto.randomUUID(),
       sessionId,
       role: beat.role,
       content: beat.content,
-      speakerLabel: beat.speakerLabel,
+      speakerKind: beat.speakerKind,
+      speakerLabel: resolveUserLabel(beat.speakerLabel, personaName),
+      isOpeningBeat: true,
       createdAt: new Date().toISOString(),
     }));
 
@@ -229,8 +233,8 @@ export function createAppV2(options: CreateAppV2Options = {}) {
       title: pack.manifest.title,
       persona: {
         id: "user",
-        name: persona?.name ?? "{{유저}}",
-        shortName: persona?.name ?? "{{유저}}",
+        name: personaName,
+        shortName: personaName,
       },
       worldState,
       characters: pack.characters,
@@ -292,6 +296,9 @@ export function createAppV2(options: CreateAppV2Options = {}) {
       turn: {
         messages: turnResult.messages,
         directorOutput: turnResult.directorOutput,
+        boundaryReport: turnResult.boundaryReport,
+        stateLaw: turnResult.stateLaw,
+        caseRuntime: turnResult.caseRuntime,
       },
     });
   });
@@ -351,6 +358,9 @@ export function createAppV2(options: CreateAppV2Options = {}) {
       turn: {
         messages: turnResult.messages,
         directorOutput: turnResult.directorOutput,
+        boundaryReport: turnResult.boundaryReport,
+        stateLaw: turnResult.stateLaw,
+        caseRuntime: turnResult.caseRuntime,
       },
     });
   });
@@ -912,6 +922,12 @@ function inferPersonaName(prompt: string): string {
 
 function stripAnonymousBrackets(label: string): string {
   return label.replace(/^\[/, "").replace(/\]$/, "").trim();
+}
+
+function resolveUserLabel(label: string, personaName: string): string {
+  return label
+    .replaceAll("{{유저}}", personaName)
+    .replaceAll("{{user}}", personaName);
 }
 
 function nonEmpty(value?: string): string | undefined {

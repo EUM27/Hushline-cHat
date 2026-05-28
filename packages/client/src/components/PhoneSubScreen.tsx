@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { Battery, ChevronLeft, Menu, Palette, Plus, Search, Wifi, X } from "lucide-react";
+import { Battery, ChevronLeft, Menu, Palette, Plus, Search, Send, Wifi, X } from "lucide-react";
 import type { ChatMessage, ClientSessionState } from "@hushline/shared";
 import { buildPhoneMessages, type PhoneMessage } from "../phone-feed";
 import type { VisualThemePreset, VisualThemeId } from "../types/ui";
@@ -12,8 +12,11 @@ export function PhoneSubScreen({
   isSending,
   themeOptions,
   isThemeOpen,
+  chatInput,
   onToggleTheme,
   onSelectTheme,
+  onChatInputChange,
+  onChatSubmit,
 }: {
   session: ClientSessionState;
   theme: VisualThemePreset;
@@ -21,10 +24,14 @@ export function PhoneSubScreen({
   isSending: boolean;
   themeOptions: VisualThemePreset[];
   isThemeOpen: boolean;
+  chatInput: string;
   onToggleTheme: () => void;
   onSelectTheme: (themeId: VisualThemeId) => void;
+  onChatInputChange: (value: string) => void;
+  onChatSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const [phoneFilter, setPhoneFilter] = useState("");
+  const [isFiltering, setIsFiltering] = useState(false);
   const [isPhoneMenuOpen, setIsPhoneMenuOpen] = useState(false);
   const [pinnedPhoneMessageIds, setPinnedPhoneMessageIds] = useState<string[]>([]);
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
@@ -56,7 +63,8 @@ export function PhoneSubScreen({
       setIsPhoneMenuOpen(false);
       return;
     }
-    if (phoneFilter) {
+    if (isFiltering) {
+      setIsFiltering(false);
       setPhoneFilter("");
       return;
     }
@@ -65,6 +73,7 @@ export function PhoneSubScreen({
 
   function handlePhoneSearch() {
     setIsPhoneMenuOpen(false);
+    setIsFiltering(true);
     window.requestAnimationFrame(() => {
       phoneInputRef.current?.focus();
       phoneInputRef.current?.select();
@@ -72,6 +81,10 @@ export function PhoneSubScreen({
   }
 
   function handlePhoneSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!isFiltering) {
+      onChatSubmit(event);
+      return;
+    }
     event.preventDefault();
     phoneFeedRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -180,17 +193,26 @@ export function PhoneSubScreen({
             <input
               ref={phoneInputRef}
               type="text"
-              value={phoneFilter}
-              onChange={(event) => setPhoneFilter(event.target.value)}
-              placeholder="단서 필터"
-              aria-label="보조 화면 단서 필터"
+              value={isFiltering ? phoneFilter : chatInput}
+              onChange={(event) =>
+                isFiltering ? setPhoneFilter(event.target.value) : onChatInputChange(event.target.value)
+              }
+              placeholder={isFiltering ? "단서 필터" : "단톡방에 문자를 보냅니다..."}
+              aria-label={isFiltering ? "보조 화면 단서 필터" : "단톡방 문자 입력"}
             />
-            {phoneFilter.trim() ? (
+            {(isFiltering ? phoneFilter.trim() : chatInput.trim()) ? (
               <button
                 type="button"
                 className="phone-inline-clear"
-                onClick={() => setPhoneFilter("")}
-                aria-label="단서 필터 지우기"
+                onClick={() => {
+                  if (isFiltering) {
+                    setPhoneFilter("");
+                    setIsFiltering(false);
+                    return;
+                  }
+                  onChatInputChange("");
+                }}
+                aria-label={isFiltering ? "단서 필터 지우기" : "문자 입력 지우기"}
               >
                 <X size={13} aria-hidden="true" />
               </button>
@@ -200,9 +222,9 @@ export function PhoneSubScreen({
             className="phone-round-btn phone-send-btn"
             type="submit"
             disabled={isSending}
-            aria-label="필터 적용"
+            aria-label={isFiltering ? "필터 적용" : "문자 보내기"}
           >
-            <Search size={13} aria-hidden="true" />
+            {isFiltering ? <Search size={13} aria-hidden="true" /> : <Send size={13} aria-hidden="true" />}
           </button>
         </form>
 

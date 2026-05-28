@@ -8,7 +8,13 @@ import {
   calculateStreamTickDelay,
   sliceStreamedText,
 } from "../reveal-timing";
-import { looksLikeRichHtml, sanitizeRichHtml, getSourceBadge } from "../utils/ui-helpers";
+import {
+  type MessageFormatToken,
+  looksLikeRichHtml,
+  parseMessageFormat,
+  sanitizeRichHtml,
+  getSourceBadge,
+} from "../utils/ui-helpers";
 
 export function ChatTimeline({
   className = "message-log",
@@ -334,7 +340,7 @@ export function MessageContent({
   if (!looksLikeRichHtml(content)) {
     return (
       <div className="message-content">
-        {visibleContent}
+        {renderFormattedMessageContent(visibleContent)}
         {isStreaming ? <span className="stream-caret" aria-hidden="true" /> : null}
       </div>
     );
@@ -346,4 +352,35 @@ export function MessageContent({
       dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }}
     />
   );
+}
+
+function renderFormattedMessageContent(content: string): ReactNode {
+  return parseMessageFormat(content).map((token, index) => renderMessageToken(token, index));
+}
+
+function renderMessageToken(token: MessageFormatToken, index: number): ReactNode {
+  if (token.kind === "lineBreak") {
+    return <br key={`br-${index}`} />;
+  }
+  if (token.kind === "dialogue" || token.kind === "bold") {
+    return (
+      <strong
+        key={`${token.kind}-${index}`}
+        className={token.kind === "dialogue" ? "message-dialogue" : undefined}
+      >
+        {token.text}
+      </strong>
+    );
+  }
+  if (token.kind === "thought" || token.kind === "italic") {
+    return (
+      <em
+        key={`${token.kind}-${index}`}
+        className={token.kind === "thought" ? "message-thought" : undefined}
+      >
+        {token.text}
+      </em>
+    );
+  }
+  return token.text;
 }

@@ -63,7 +63,7 @@ export const visualThemePresets: Record<VisualThemeId, VisualThemePreset> = {
   },
   dunkshoot: {
     id: "dunkshoot",
-    name: "덩크슛",
+    name: "낙엽",
     shortName: "Dunkshoot",
     desc: "오렌지빛 코트와 스포티한 프레임",
     systemTag: "COURT SESSION START",
@@ -116,7 +116,7 @@ export const visualThemePresets: Record<VisualThemeId, VisualThemePreset> = {
   },
   cherryNight: {
     id: "cherryNight",
-    name: "야사쿠라",
+    name: "밤벚꽃",
     shortName: "Cherry Night",
     desc: "깊은 밤의 벚꽃 안개",
     systemTag: "SILENT BLOSSOMS NIGHT",

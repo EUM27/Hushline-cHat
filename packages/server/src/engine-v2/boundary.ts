@@ -15,7 +15,7 @@ export const EMPTY_BOUNDARY_REPORT: BoundaryReport = {
 
 const SAFE_DIRECTOR_INTENT = "공개된 정보와 자기 입장만 사용해 현재 장면에 짧게 반응한다.";
 const SAFE_NARRATION = "공개적으로 보이는 움직임과 공간의 압력만 남는다.";
-const SAFE_CHARACTER_LINE = "...잠깐만.";
+const SAFE_CHARACTER_LINE = "\"...잠깐만.\"";
 
 const revealPattern = /(범인\s*(은|는|이|가)|살인범\s*(은|는|이|가)|공범\s*(은|는|이|가)|진상|정답|트릭[^.!?\n]*(설명|밝히|드러|공개)|밀실\s*트릭|자백)/i;
 const narratorMindPattern = /(속으로|마음속|생각했다|느꼈다|결심했다|알고 있었다|원했다|의도했다)/i;
@@ -128,6 +128,9 @@ export function enforceCharacterBoundary(
   if (containsForeignLabel(content, characterId, pack.characters)) {
     violations.push(makeViolation("character", "foreign-dialogue", "캐릭터 출력이 타인 대사나 행동을 작성해 fallback으로 대체했습니다.", "fallback", "content", characterId));
   }
+  if (!matchesCharacterOutputFormat(content)) {
+    violations.push(makeViolation("character", "format-contract", "캐릭터 출력이 \"대사\" 또는 '생각' 형식을 벗어나 fallback으로 대체했습니다.", "fallback", "content", characterId));
+  }
   if (containsSceneNarration(content)) {
     violations.push(makeViolation("character", "scene-narration", "캐릭터 출력이 장면 전체 서술로 넘어가 fallback으로 대체했습니다.", "fallback", "content", characterId));
   }
@@ -208,6 +211,23 @@ function containsForeignLabel(content: string, characterId: string, characters: 
     return labels.some((label) => new RegExp(`(^|\\n)\\s*${escapeRegExp(label!)}\\s*[:：]`).test(content))
       || labels.some((label) => new RegExp(`${escapeRegExp(label!)}\\s*(은|는|이|가)\\s*["“]?`).test(content));
   });
+}
+
+function matchesCharacterOutputFormat(content: string): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return true;
+  const quotedSegment = /(?:["“][^"”\n]+["”]|['‘][^'’\n]+['’])/y;
+  let index = 0;
+  while (index < trimmed.length) {
+    while (/\s/.test(trimmed[index] ?? "")) index += 1;
+    quotedSegment.lastIndex = index;
+    const match = quotedSegment.exec(trimmed);
+    if (!match || match.index !== index) {
+      return false;
+    }
+    index = quotedSegment.lastIndex;
+  }
+  return true;
 }
 
 function containsSceneNarration(content: string): boolean {

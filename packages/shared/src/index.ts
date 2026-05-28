@@ -198,6 +198,7 @@ export interface ProviderProfile {
 export interface ModelOption {
   id: string;
   label: string;
+  billingTier?: "subscription" | "paid" | "unknown";
 }
 
 export interface SessionState {
