@@ -1,0 +1,309 @@
+{
+  "facts": [
+    {
+      "id": "fact_blackout_2105",
+      "text": "21:05경 산장의 조명이 약 3분간 꺼졌다.",
+      "category": "timeline",
+      "truthStatus": "true",
+      "importance": "case_basic",
+      "tags": ["blackout", "timeline"],
+      "visibility": {
+        "knownBy": [
+          { "agentId": "all_present", "source": "experienced", "confidence": 0.9 }
+        ],
+        "blockedFrom": []
+      },
+      "evidence": {
+        "sourceType": "shared_observation",
+        "reliability": 0.9
+      }
+    },
+    {
+      "id": "fact_table_key_seen",
+      "text": "정전 직전 라운지 테이블 위에 서재 열쇠가 놓여 있었다.",
+      "category": "object",
+      "truthStatus": "true",
+      "importance": "clue",
+      "tags": ["key", "table", "before_blackout", "lounge"],
+      "locationId": "lodge-foyer",
+      "objectIds": ["study-key", "lounge-table"],
+      "visibility": {
+        "knownBy": [
+          { "agentId": "yoon-haeon", "source": "saw", "confidence": 0.8 }
+        ],
+        "blockedFrom": []
+      },
+      "evidence": {
+        "sourceType": "witness",
+        "reliability": 0.6
+      }
+    },
+    {
+      "id": "truth_killer_identity",
+      "text": "HIDDEN_TRUTH_REDACTED",
+      "category": "hidden_truth",
+      "truthStatus": "true",
+      "importance": "solution",
+      "tags": ["killer", "truth"],
+      "visibility": {
+        "knownBy": [
+          { "agentId": "director", "source": "omniscient", "confidence": 1.0 }
+        ],
+        "blockedFrom": [
+          { "agentId": "all_characters", "reason": "solution locked" },
+          { "agentId": "user", "reason": "deduction not validated" }
+        ]
+      }
+    },
+    {
+      "id": "truth_locked_room_trick",
+      "text": "HIDDEN_TRUTH_REDACTED",
+      "category": "hidden_truth",
+      "truthStatus": "true",
+      "importance": "solution",
+      "tags": ["trick", "locked_room", "truth"],
+      "visibility": {
+        "knownBy": [
+          { "agentId": "director", "source": "omniscient", "confidence": 1.0 }
+        ],
+        "blockedFrom": [
+          { "agentId": "all_characters", "reason": "solution locked" },
+          { "agentId": "user", "reason": "deduction not validated" }
+        ]
+      }
+    }
+  ],
+  "locations": [
+    {
+      "id": "lodge-foyer",
+      "name": "라운지",
+      "tags": ["lounge", "table"],
+      "observableFactIds": ["fact_table_key_seen", "fact_key_not_accounted_for"],
+      "objectIds": ["study-key", "lounge-table"]
+    },
+    {
+      "id": "lodge-study-crime-scene",
+      "name": "2층 서재",
+      "tags": ["study", "locked_room"],
+      "observableFactIds": ["pub_locked_study"],
+      "objectIds": []
+    }
+  ],
+  "objects": [
+    {
+      "id": "study-key",
+      "name": "서재 열쇠",
+      "tags": ["key"],
+      "initialLocationId": "lodge-foyer",
+      "factRefs": ["fact_table_key_seen", "fact_key_not_accounted_for"]
+    },
+    {
+      "id": "lounge-table",
+      "name": "라운지 테이블",
+      "tags": ["table", "lounge"],
+      "initialLocationId": "lodge-foyer",
+      "factRefs": ["fact_table_key_seen", "pub_key_after_blackout"]
+    }
+  ],
+  "timeline": [
+    {
+      "id": "timeline_blackout",
+      "time": "21:05",
+      "publicLabel": "정전",
+      "eventRefs": ["fact_blackout_2105"],
+      "locationStates": {
+        "lodge-foyer": {
+          "present": ["kang-mujin", "yoon-haeon", "yoon-seha"],
+          "observableObjects": ["study-key", "lounge-table"],
+          "observableFactIds": ["fact_table_key_seen"]
+        }
+      }
+    }
+  ],
+  "publicFacts": [
+    {
+      "id": "pub_victim_owner",
+      "text": "피해자는 산장 주인 윤태식이다.",
+      "tags": ["victim", "owner", "case_basic"],
+      "category": "briefing",
+      "knownBy": "all"
+    },
+    {
+      "id": "pub_snow_isolation",
+      "text": "산장은 폭설로 고립되어 있고 통신도 끊겨 있다.",
+      "tags": ["snow", "isolation", "phone", "case_basic"],
+      "category": "briefing",
+      "knownBy": "all"
+    },
+    {
+      "id": "pub_locked_study",
+      "text": "윤태식은 2층 서재에서 발견되었고, 발견 당시 서재 문은 안쪽에서 잠겨 있었다.",
+      "tags": ["study", "locked_room", "victim", "case_basic"],
+      "category": "briefing",
+      "locationId": "lodge-study-crime-scene",
+      "knownBy": "all"
+    },
+    {
+      "id": "pub_key_after_blackout",
+      "text": "시신 발견 직후 정전이 있었고, 불이 돌아왔을 때 라운지 테이블 위에 출처 불명의 열쇠가 놓여 있었다.",
+      "tags": ["key", "table", "blackout", "lounge", "case_basic"],
+      "category": "object",
+      "locationId": "lodge-foyer",
+      "objectIds": ["study-key", "lounge-table"],
+      "knownBy": "all"
+    }
+  ],
+  "observableFacts": [
+    {
+      "id": "fact_lounge_shadow_before_blackout",
+      "text": "정전 직전 라운지 테이블 근처에서 누군가 움직인 듯한 그림자가 보였다.",
+      "tags": ["table", "blackout", "lounge", "last_seen", "witness"],
+      "category": "witness",
+      "locationId": "lodge-foyer",
+      "objectIds": ["lounge-table"]
+    },
+    {
+      "id": "fact_key_not_accounted_for",
+      "text": "라운지 테이블 위 열쇠가 어디서 나왔는지는 아직 아무도 설명하지 않았다.",
+      "tags": ["key", "table", "unknown", "lounge"],
+      "category": "clue",
+      "locationId": "lodge-foyer",
+      "objectIds": ["study-key", "lounge-table"]
+    }
+  ],
+  "testimonySeeds": [
+    {
+      "id": "testimony_haeon_lounge_shadow",
+      "characterId": "yoon-haeon",
+      "factIds": ["fact_lounge_shadow_before_blackout"],
+      "topicTags": ["table", "blackout", "lounge", "last_seen", "key"],
+      "defaultRevealLevel": "partial",
+      "certainty": "uncertain",
+      "canSay": [
+        "정전 직전 라운지 테이블 쪽에서 움직임을 본 것 같지만 얼굴은 못 봤다."
+      ],
+      "mustNotSay": [
+        "누가 열쇠를 놓았는지 확정하지 않는다.",
+        "범인이나 밀실 트릭을 언급하지 않는다."
+      ],
+      "revealWhen": {
+        "inquiryTypes": ["timeline_query", "witness_testimony"],
+        "topicTags": ["table", "blackout", "last_seen", "key"],
+        "objectIds": ["lounge-table"]
+      }
+    },
+    {
+      "id": "testimony_mujin_key_unaccounted",
+      "characterId": "kang-mujin",
+      "factIds": ["fact_key_not_accounted_for"],
+      "topicTags": ["key", "table", "unknown"],
+      "defaultRevealLevel": "hint",
+      "certainty": "uncertain",
+      "canSay": [
+        "열쇠의 출처는 아직 확인되지 않았고, 지금 단계에서 누가 놓았다고 단정할 수 없다."
+      ],
+      "mustNotSay": [
+        "열쇠를 둔 사람을 확정하지 않는다.",
+        "진상이나 트릭을 말하지 않는다."
+      ],
+      "revealWhen": {
+        "inquiryTypes": ["object_query", "timeline_query", "truth_request"],
+        "topicTags": ["key", "table"]
+      }
+    }
+  ],
+  "hiddenTruths": [
+    {
+      "id": "truth_killer_identity",
+      "label": "범인 정체",
+      "tags": ["killer", "truth"],
+      "blockedKeywords": ["범인", "살인범", "공범", "진상"]
+    },
+    {
+      "id": "truth_locked_room_trick",
+      "label": "밀실 트릭",
+      "tags": ["trick", "locked_room", "truth"],
+      "blockedKeywords": ["밀실 트릭", "트릭 정답", "살해 방법"]
+    }
+  ],
+  "hiddenTruthVault": {
+    "hiddenTruthIds": ["truth_killer_identity", "truth_locked_room_trick"],
+    "blockedByDefault": ["truth_killer_identity", "truth_locked_room_trick"],
+    "solutionGraph": {
+      "caseId": "locked-room-mystery",
+      "requiredProofNodes": [
+        {
+          "id": "opportunity_window",
+          "type": "timeline",
+          "requiredRefs": ["fact_table_key_seen", "fact_key_not_accounted_for"],
+          "weight": 0.4
+        },
+        {
+          "id": "trick_mechanism",
+          "type": "trick_mechanism",
+          "requiredRefs": ["contra_key_after_blackout"],
+          "weight": 0.6
+        }
+      ],
+      "optionalProofNodes": [],
+      "disqualifyingErrors": [],
+      "unlockThresholds": {
+        "partialTruth": 0.4,
+        "finalTruth": 1
+      }
+    }
+  },
+  "revealBudget": {
+    "scope": "per_fact",
+    "perFact": {
+      "fact_table_key_seen": {
+        "hintCount": 0,
+        "partialCount": 0,
+        "fullCount": 0,
+        "maxHints": 2,
+        "maxPartial": 2,
+        "maxFull": 1,
+        "hintCooldownTurns": 1,
+        "partialCooldownTurns": 1,
+        "fullResetPolicy": "never"
+      },
+      "fact_key_not_accounted_for": {
+        "hintCount": 0,
+        "partialCount": 0,
+        "fullCount": 0,
+        "maxHints": 3,
+        "maxPartial": 2,
+        "maxFull": 1,
+        "hintCooldownTurns": 1,
+        "partialCooldownTurns": 1,
+        "fullResetPolicy": "never"
+      }
+    }
+  },
+  "ambiguousFacts": [
+    {
+      "id": "amb_key_location_after_blackout",
+      "text": "정전 후 열쇠가 어디에 있었는지에 대한 증언이 엇갈릴 수 있다.",
+      "topicTags": ["key", "blackout", "table"],
+      "possibleInterpretations": [
+        {
+          "interpretationId": "key_moved_during_blackout",
+          "description": "정전 중 누군가 열쇠를 옮겼다.",
+          "supportingFactIds": ["fact_table_key_seen"],
+          "supportingClaimIds": [],
+          "supportingEvidenceIds": [],
+          "contradictingFactIds": [],
+          "contradictingClaimIds": [],
+          "contradictingEvidenceIds": [],
+          "probability": 0.5,
+          "playerVisibleLabel": "열쇠 이동 시점"
+        }
+      ],
+      "resolutionCondition": {
+        "requiredContradictionIds": ["contra_key_after_blackout"],
+        "requiredDeductionScore": 1
+      },
+      "playerVisibleStatus": "unnoticed"
+    }
+  ]
+}

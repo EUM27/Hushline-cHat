@@ -7,6 +7,8 @@
 
 import type {
   CharacterDefinition,
+  CaseAnswerScope,
+  CaseInquiryFrame,
   DirectorOutput,
   InputMode,
   ModelConnection,
@@ -36,6 +38,7 @@ export async function invokeDirector(
   inputMode: InputMode,
   pack: ScenarioPack,
   connection?: ModelConnection,
+  caseRuntime?: { inquiry: CaseInquiryFrame; answerScope: CaseAnswerScope },
 ): Promise<DirectorInvocationResult> {
   const characterIds = pack.characters.map((c) => c.id);
 
@@ -49,7 +52,7 @@ export async function invokeDirector(
   }
 
   const systemPrompt = buildDirectorSystemPrompt(pack, omniscientContext);
-  const messages = buildDirectorMessages(publicContext, userInput, inputMode, worldState);
+  const messages = buildDirectorMessages(publicContext, userInput, inputMode, worldState, caseRuntime);
 
   let raw: string;
   try {
@@ -101,6 +104,8 @@ export function buildDirectorSystemPrompt(
     pack.directorPrompt,
     "",
     SCENE_CAUSALITY_PRIORITY_RULES,
+    "",
+    MYSTERY_ACCESS_MANAGER_RULES,
     "",
     SPEAKER_SELECTION_RULES,
     "",
@@ -154,6 +159,7 @@ export function buildDirectorMessages(
   userInput: string,
   inputMode: InputMode,
   worldState: WorldState,
+  caseRuntime?: { inquiry: CaseInquiryFrame; answerScope: CaseAnswerScope },
 ): string[] {
   const chatSummary = publicContext.publicChatLog
     .slice(-10)
@@ -173,6 +179,8 @@ export function buildDirectorMessages(
     "[최근 공개 이벤트]",
     publicContext.publicEvents.length > 0 ? publicContext.publicEvents.slice(-5).map((event) => `- ${event}`).join("\n") : "(없음)",
     "",
+    ...formatCaseRuntimeForDirector(caseRuntime),
+    "",
     "[최근 대화]",
     chatSummary,
     "",
@@ -189,6 +197,28 @@ export function buildDirectorMessages(
   ].join("\n");
 
   return [stateBlock];
+}
+
+function formatCaseRuntimeForDirector(caseRuntime: { inquiry: CaseInquiryFrame; answerScope: CaseAnswerScope } | undefined): string[] {
+  if (!caseRuntime?.inquiry.isCaseInquiry) {
+    return ["[Case Inquiry]", "(없음)"];
+  }
+  const { inquiry, answerScope } = caseRuntime;
+  return [
+    "[Case Inquiry]",
+    `type: ${inquiry.inquiryType}`,
+    `topics: ${inquiry.topicTags.join(", ") || "(없음)"}`,
+    `targetCharacterId: ${inquiry.targetCharacterId ?? "(없음)"}`,
+    `targetObjectId: ${inquiry.targetObjectId ?? "(없음)"}`,
+    `truthLeakRisk: ${inquiry.truthLeakRisk}`,
+    `answerability: ${answerScope.answerability}`,
+    `recommendedSpeakerIds: ${answerScope.recommendedSpeakerIds.join(", ") || "(없음)"}`,
+    `allowedPublicFactIds: ${answerScope.publicFactIds.join(", ") || "(없음)"}`,
+    `allowedObservableFactIds: ${answerScope.observableFactIds.join(", ") || "(없음)"}`,
+    `blockedFactIds: ${answerScope.blockedFactIds.join(", ") || "(없음)"}`,
+    `blockedTruthIds: ${answerScope.blockedTruthIds.join(", ") || "(없음)"}`,
+    "Director는 hiddenTruth 전문을 쓰지 않는다. characterIntents에는 fact_id 허용 범위와 태도만 반영한다.",
+  ];
 }
 
 const SCENE_CAUSALITY_PRIORITY_RULES = [
@@ -214,6 +244,17 @@ const SCENE_CAUSALITY_PRIORITY_RULES = [
   "- 먼저 현재 장면의 원인망을 만든다: 최근 대화, 현재 위치, 현재 인물의 목표, 이미 등장한 물건, 최근 공개 이벤트 중 하나를 명시적으로 이어라.",
   "- bridge 없이 새 설정을 꽂아 목표를 밀어붙이지 않는다.",
   "- 장면을 움직이는 힘은 우선 현재 장면 내부에서 발생해야 한다.",
+].join("\n");
+
+const MYSTERY_ACCESS_MANAGER_RULES = [
+  "[추리 런타임 규칙 — 정보 접근 관리자]",
+  "You are not the final narrator and not the character speaker.",
+  "You manage access permissions only.",
+  "Never write final dialogue.",
+  "Never include hidden truth prose in characterIntents.",
+  "Only expose allowed fact ids, blocked fact ids, reveal level, speaker selection, and safe behavior instructions.",
+  "캐릭터가 말할 수 있는 내용은 answerScope/revealPermissions 안의 fact_id와 claim_id로 제한한다.",
+  "truth_request에는 증거 제시 요구, 보류, 공개 정보 정리로만 반응하고 hiddenTruth 전문을 쓰지 않는다.",
 ].join("\n");
 
 const SPEAKER_SELECTION_RULES = [

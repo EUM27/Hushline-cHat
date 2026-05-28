@@ -108,6 +108,254 @@ export const eventTriggerSchema = z.object({
   oneShot: z.boolean().default(true),
 });
 
+// ── Case Knowledge ──
+
+export const caseInquiryTypeSchema = z.enum([
+  "general_dialogue",
+  "case_briefing_request",
+  "case_summary_request",
+  "observable_scene_request",
+  "location_search",
+  "object_query",
+  "timeline_query",
+  "alibi_query",
+  "witness_testimony",
+  "accusation",
+  "truth_request",
+  "contradiction_challenge",
+  "deduction_attempt",
+  "hypothesis",
+  "evidence_presentation",
+  "ooc_meta_request",
+  "unknown",
+]);
+
+export const caseRequestedTruthLevelSchema = z.enum([
+  "none",
+  "public",
+  "observable",
+  "testimony",
+  "deduction",
+  "hidden_truth",
+]);
+
+export const caseFactSchema = z.object({
+  id: z.string().min(1).max(120),
+  text: z.string().min(1).max(1000),
+  tags: z.array(z.string().min(1).max(80)).default([]),
+  category: z.enum([
+    "briefing",
+    "public",
+    "observable",
+    "timeline",
+    "object",
+    "location",
+    "witness",
+    "clue",
+    "hidden_truth",
+    "solution",
+  ]).optional(),
+  truthStatus: z.enum(["true", "false", "unknown", "ambiguous"]).optional(),
+  importance: z.enum(["flavor", "case_basic", "clue", "critical", "solution"]).optional(),
+  locationId: z.string().min(1).max(120).optional(),
+  objectIds: z.array(z.string().min(1).max(120)).optional(),
+  knownBy: z.union([z.literal("all"), z.array(z.string().min(1).max(120))]).optional(),
+  visibility: z.object({
+    knownBy: z.array(z.object({
+      agentId: z.string().min(1),
+      source: z.enum(["public", "saw", "heard", "experienced", "inferred", "told", "omniscient"]),
+      confidence: z.number().min(0).max(1),
+    })).default([]),
+    blockedFrom: z.array(z.object({
+      agentId: z.string().min(1),
+      reason: z.string().min(1),
+    })).optional(),
+  }).optional(),
+  evidence: z.object({
+    sourceType: z.enum(["shared_observation", "physical_evidence", "witness", "document", "deduction", "hidden"]),
+    reliability: z.number().min(0).max(1),
+  }).optional(),
+});
+
+export const testimonySeedSchema = z.object({
+  id: z.string().min(1).max(120),
+  npcId: z.string().min(1).max(120).optional(),
+  characterId: z.string().min(1).max(120),
+  factRefs: z.array(z.string().min(1).max(120)).optional(),
+  factIds: z.array(z.string().min(1).max(120)).default([]),
+  topicTags: z.array(z.string().min(1).max(80)).default([]),
+  defaultRevealLevel: z.enum(["none", "hint", "partial", "full", "lie", "deflect", "refuse", "mistaken"]).default("partial"),
+  certainty: z.enum(["certain", "uncertain", "denial"]).default("uncertain"),
+  canSay: z.array(z.string().min(1).max(1000)).default([]),
+  mustNotSay: z.array(z.string().min(1).max(1000)).default([]),
+  revealWhen: z.object({
+    inquiryTypes: z.array(caseInquiryTypeSchema).optional(),
+    topicTags: z.array(z.string().min(1).max(80)).optional(),
+    objectIds: z.array(z.string().min(1).max(120)).optional(),
+    locationIds: z.array(z.string().min(1).max(120)).optional(),
+  }).optional(),
+});
+
+export const hiddenTruthRefSchema = z.object({
+  id: z.string().min(1).max(120),
+  label: z.string().min(1).max(200),
+  tags: z.array(z.string().min(1).max(80)).default([]),
+  blockedKeywords: z.array(z.string().min(1).max(120)).default([]),
+});
+
+export const caseKnowledgeSchema = z.object({
+  publicFacts: z.array(caseFactSchema).default([]),
+  observableFacts: z.array(caseFactSchema).default([]),
+  testimonySeeds: z.array(testimonySeedSchema).default([]),
+  hiddenTruths: z.array(hiddenTruthRefSchema).default([]),
+  facts: z.array(caseFactSchema).optional(),
+  timeline: z.array(z.object({
+    id: z.string().min(1),
+    time: z.string().min(1),
+    publicLabel: z.string().optional(),
+    eventRefs: z.array(z.string()).optional(),
+    locationStates: z.record(z.string(), z.object({
+      present: z.array(z.string()).optional(),
+      observableObjects: z.array(z.string()).optional(),
+      observableFactIds: z.array(z.string()).optional(),
+    })).optional(),
+  })).optional(),
+  locations: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    tags: z.array(z.string()).default([]),
+    observableFactIds: z.array(z.string()).optional(),
+    objectIds: z.array(z.string()).optional(),
+  })).optional(),
+  objects: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    tags: z.array(z.string()).default([]),
+    initialLocationId: z.string().optional(),
+    factRefs: z.array(z.string()).optional(),
+  })).optional(),
+  hiddenTruthVault: z.object({
+    hiddenTruthIds: z.array(z.string()).default([]),
+    blockedByDefault: z.array(z.string()).default([]),
+    solutionGraph: z.object({
+      caseId: z.string().min(1),
+      requiredProofNodes: z.array(z.object({
+        id: z.string().min(1),
+        type: z.enum(["motive", "means", "opportunity", "timeline", "object_movement", "contradiction", "trick_mechanism", "identity"]),
+        requiredRefs: z.array(z.string()).default([]),
+        weight: z.number().min(0),
+      })).default([]),
+      optionalProofNodes: z.array(z.object({
+        id: z.string().min(1),
+        requiredRefs: z.array(z.string()).default([]),
+        weight: z.number().min(0),
+      })).default([]),
+      disqualifyingErrors: z.array(z.object({
+        id: z.string().min(1),
+        description: z.string().default(""),
+        triggeredByWrongRefs: z.array(z.string()).default([]),
+      })).default([]),
+      unlockThresholds: z.object({
+        partialTruth: z.number().min(0),
+        finalTruth: z.number().min(0),
+      }),
+    }),
+  }).optional(),
+  revealBudget: z.object({
+    scope: z.enum(["per_fact", "per_npc", "per_scene", "per_session"]).default("per_fact"),
+    perFact: z.record(z.string(), z.object({
+      hintCount: z.number().int().min(0).default(0),
+      partialCount: z.number().int().min(0).default(0),
+      fullCount: z.number().int().min(0).default(0),
+      maxHints: z.number().int().min(0).optional(),
+      maxPartial: z.number().int().min(0).optional(),
+      maxFull: z.number().int().min(0),
+      hintCooldownTurns: z.number().int().min(0).default(0),
+      partialCooldownTurns: z.number().int().min(0).default(0),
+      lastHintTurn: z.number().int().min(0).optional(),
+      lastPartialTurn: z.number().int().min(0).optional(),
+      fullRevealedAtTurn: z.number().int().min(0).optional(),
+      fullResetPolicy: z.enum(["never", "on_scene_unlock", "on_final_phase"]).default("never"),
+    })).default({}),
+  }).optional(),
+  ambiguousFacts: z.array(z.object({
+    id: z.string().min(1),
+    text: z.string().min(1),
+    topicTags: z.array(z.string()).default([]),
+    possibleInterpretations: z.array(z.object({
+      interpretationId: z.string().min(1),
+      description: z.string().min(1),
+      supportingFactIds: z.array(z.string()).default([]),
+      supportingClaimIds: z.array(z.string()).default([]),
+      supportingEvidenceIds: z.array(z.string()).default([]),
+      contradictingFactIds: z.array(z.string()).default([]),
+      contradictingClaimIds: z.array(z.string()).default([]),
+      contradictingEvidenceIds: z.array(z.string()).default([]),
+      probability: z.number().min(0).max(1),
+      playerVisibleLabel: z.string().optional(),
+    })).default([]),
+    resolutionCondition: z.object({
+      requiredEvidenceIds: z.array(z.string()).optional(),
+      requiredClaimIds: z.array(z.string()).optional(),
+      requiredContradictionIds: z.array(z.string()).optional(),
+      requiredLocationSearches: z.array(z.string()).optional(),
+      requiredDeductionScore: z.number().min(0).optional(),
+    }),
+    resolvedTo: z.string().optional(),
+    resolvedAtTurn: z.number().int().min(0).optional(),
+    playerVisibleStatus: z.enum(["unnoticed", "noticed", "contested", "nearly_resolved", "resolved"]).default("unnoticed"),
+  })).optional(),
+});
+
+export const caseInquiryFrameSchema = z.object({
+  isCaseInquiry: z.boolean(),
+  inquiryType: caseInquiryTypeSchema,
+  targetCharacterId: z.string().optional(),
+  targetNpcId: z.string().optional(),
+  targetObjectId: z.string().optional(),
+  targetLocationId: z.string().optional(),
+  topicTags: z.array(z.string()).default([]),
+  timeWindow: z.enum(["before_blackout", "during_blackout", "after_blackout", "current", "unknown"]).optional(),
+  referencedEvidenceIds: z.array(z.string()).default([]),
+  referencedClaimIds: z.array(z.string()).default([]),
+  referencedFactIds: z.array(z.string()).optional(),
+  accusationTargetId: z.string().optional(),
+  impliedAccusation: z.boolean().optional(),
+  requestedTruthLevel: caseRequestedTruthLevelSchema,
+  truthLeakRisk: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
+});
+
+export const caseAllowedWitnessSchema = z.object({
+  characterId: z.string().min(1),
+  testimonySeedIds: z.array(z.string()).default([]),
+  factIds: z.array(z.string()).default([]),
+  canSay: z.array(z.string()).default([]),
+  mustNotSay: z.array(z.string()).default([]),
+  certainty: z.enum(["certain", "uncertain", "denial"]).default("uncertain"),
+  maxRevealLevel: z.enum(["none", "hint", "partial", "full", "lie", "deflect", "refuse", "mistaken"]).default("partial"),
+});
+
+export const caseAnswerScopeSchema = z.object({
+  inquiryFrame: caseInquiryFrameSchema,
+  publicFactIds: z.array(z.string()).default([]),
+  observableFactIds: z.array(z.string()).default([]),
+  allowedWitnesses: z.array(caseAllowedWitnessSchema).default([]),
+  blockedFactIds: z.array(z.string()).default([]),
+  blockedTruthIds: z.array(z.string()).default([]),
+  recommendedSpeakerIds: z.array(z.string()).default([]),
+  answerability: z.enum(["none", "partial", "direct"]).default("none"),
+});
+
+export const caseRevealPermissionSchema = z.object({
+  allowedFactIds: z.array(z.string()).default([]),
+  allowedClaimIds: z.array(z.string()).optional(),
+  blockedFactIds: z.array(z.string()).default([]),
+  blockedTruthIds: z.array(z.string()).default([]),
+  maxRevealLevel: z.enum(["none", "hint", "partial", "full", "lie", "deflect", "refuse", "mistaken"]).default("none"),
+  requiredBehavior: z.string().optional(),
+  forbiddenClaims: z.array(z.string()).optional(),
+});
+
 // ── Director Output (for runtime validation) ──
 
 export const directorStateDeltaSchema = z.object({
@@ -149,6 +397,14 @@ export const directorOutputSchema = z.object({
   event: z.string().nullable().default(null),
   narratorInstruction: z.string().nullable().default(null),
   characterIntents: z.record(z.string(), z.string()).default({}),
+  inquiry: caseInquiryFrameSchema.optional(),
+  answerScope: caseAnswerScopeSchema.optional(),
+  revealPermissions: z.record(z.string(), caseRevealPermissionSchema).optional(),
+  caseDebug: z.object({
+    selectedSpeakerReason: z.string().optional(),
+    blockedReasonSummary: z.array(z.string()).default([]),
+    truthLeakRisk: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
+  }).optional(),
   messagePlan: z.array(directorMessagePlanItemSchema).max(8).optional(),
   stateDelta: directorStateDeltaSchema.default({}),
   subObjectiveUpdate: directorSubObjectiveUpdateSchema.nullable().default(null),

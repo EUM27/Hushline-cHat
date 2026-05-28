@@ -15,10 +15,16 @@ import type {
   TurnMessage,
   ActorReply,
   ExpressionId,
+  CaseAnswerScope,
 } from "@hushline/shared";
 import { completeWithConnection, isConnectionReady } from "../providers/adapters/index.js";
 import { sanitizeCharacterOutput } from "./output-sanitizer.js";
-import { buildCharacterChatContext } from "./context-builder.js";
+import {
+  assertNoHiddenTruthVault,
+  assertNoOtherHandouts,
+  assertNoSolutionGraph,
+  buildCharacterChatContext,
+} from "./context-builder.js";
 
 export interface CharacterInvocationResult {
   characterId: string;
@@ -41,6 +47,7 @@ export async function invokeCharacter(
   personaName: string,
   pack: ScenarioPack,
   connection?: ModelConnection,
+  answerScope?: CaseAnswerScope,
 ): Promise<CharacterInvocationResult> {
   if (!isConnectionReady(connection)) {
     return {
@@ -51,12 +58,12 @@ export async function invokeCharacter(
   }
 
   const systemPrompt = buildCharacterSystemPrompt(
-    character, handout, directorIntent, inputMode, publicContext, pack,
+    character, handout, directorIntent, inputMode, publicContext, pack, personaName, answerScope,
   );
   const chatContext = buildCharacterChatContext(messages, character.id, personaName);
   const contextMessages = [
     ...chatContext.map((entry) => `${entry.label}: ${entry.content}`),
-    `${personaName}: ${userInput}`,
+    `{{user}}: ${userInput}`,
   ].join("\n");
 
   let raw: string;
@@ -105,21 +112,51 @@ function buildCharacterSystemPrompt(
   inputMode: InputMode,
   publicContext: PublicContext,
   pack: ScenarioPack,
+  personaName: string,
+  answerScope?: CaseAnswerScope,
 ): string {
   const displayName = character.anonymousLabel ?? character.name;
   const actorBrief = buildActorBrief(directorIntent, character, handout, publicContext, pack);
+  assertNoOtherHandouts({ handout, answerScope, actorBrief });
+  assertNoHiddenTruthVault({ handout, answerScope, actorBrief });
+  assertNoSolutionGraph({ handout, answerScope, actorBrief });
   const autonomyGuideline = getAutonomyGuideline(handout.autonomy, actorBrief.responseGoal);
   const inputModeText = INPUT_MODE_INSTRUCTIONS[inputMode];
+  const conversationTarget = inferConversationTargetLabelFromUserInput(directorIntent, pack) // directorIntent sometimes includes names
+    || inferConversationTargetLabelFromUserInput(publicContext.publicChatLog.at(-1)?.content ?? "", pack)
+    || "";
 
   const sections = [
     "[Character Identity]",
     character.systemPrompt,
     "",
+    "[사용자/플레이어]",
+    "{{user}}는 사용자/플레이어다.",
+    personaName && personaName !== "{{user}}" ? `현재 사용자 표시명: ${personaName}` : "",
+    "사용자와 모든 캐릭터는 서로 다른 인물이다.",
+    "",
+    "[그룹 인물 목록]",
+    formatCharacterRoster(pack.characters, character.id),
+    "그룹 인물 목록의 각 이름은 서로 다른 인물이다.",
+    "현재 API 호출 대상만 네가 연기할 인물이다.",
+    "",
+    "[Conversation Target]",
+    conversationTarget ? `이번 턴 입력의 수신자: ${conversationTarget}` : "이번 턴 입력의 수신자: (명시 없음)",
+    "수신자가 특정 인물이라면 그 인물에게 답하듯 반응한다. 명시가 없으면 유저에게 답한다.",
+    "'너' 같은 모호한 2인칭을 남발하지 말고, 필요하면 이름으로 대상을 명확히 한다.",
+    "",
     "[Actor Contract]",
     `너는 오직 ${displayName}만 연기한다.`,
-    "발화 중심으로 출력한다. 필요하면 자기 몸짓, 짧은 추임새, 혼잣말을 한 문장 안에 섞을 수 있다.",
+    "[Output Role Contract — HARD]",
+    "You are this character's dialogue generator only.",
+    "Output ONLY what this character says aloud.",
+    "Hesitation must stay inside speech, e.g. \"...\", \"그게...\".",
+    "Output NEVER narration, stage directions, body actions, facial expressions outside spoken dialogue, other character actions, other character dialogue, user actions, user thoughts, speaker labels, bracketed roleplay text, markdown, unauthorized case facts, or hidden truth implications.",
+    "사용자 입력에는 대사와 행동 지문이 섞일 수 있다.",
+    "그 형식을 따라 하지 않는다.",
+    "최종 출력은 캐릭터의 대사만 쓴다. 혼잣말은 대사로만 쓴다.",
     "말머리에 이름, 익명 번호, 대괄호 라벨, prefix 금지.",
-    "장면 전체 묘사, 감각 서술, 카메라 지시 금지. 그것은 나레이터 역할이다.",
+    "자기 행동 지문, 장면 전체 묘사, 감각 서술, 카메라 지시 금지. 그것은 나레이터 역할이다.",
     "다른 캐릭터의 행동이나 대사는 쓰지 않는다.",
     "줄바꿈 후 라벨 등장 시 멈춘다.",
     "한국어로만 답하고, 1~3문장으로 짧게 말한다.",
@@ -155,12 +192,14 @@ function buildCharacterSystemPrompt(
       ? `공개 관찰 단서: ${actorBrief.observableCues.join("; ")}`
       : "",
     "",
+    ...formatAnswerScopeForCharacter(character.id, answerScope),
+    "",
     "[Agency / Friction]",
     "사용자의 부탁이나 명령을 자동으로 수행하지 않는다.",
     "모든 반응은 네 비밀, 욕망, 현재 목표, 현 장소·시간·관계·감정과 이해관계에 맞는 방식으로 정한다.",
     "반응을 협조/비협조 중 하나로 미리 고정하지 않는다. 같은 사건에도 인물마다 이해관계가 다르므로 말투, 정보량, 침묵, 질문, 행동 제안이 달라져야 한다.",
     "특정 감정(공포/두려움)이나 특정 태도(협조)를 기본값으로 삼지 않는다.",
-    "행동 규칙이나 성격상 거친 말, 욕설, 혼잣말, 자기 행동이 자연스러우면 무리하게 점잖게 정제하지 않는다.",
+    "행동 규칙이나 성격상 거친 말, 욕설, 혼잣말이 자연스러우면 무리하게 점잖게 정제하지 않는다.",
     "",
     "[Input Mode]",
     inputModeText,
@@ -176,6 +215,33 @@ function buildCharacterSystemPrompt(
   ];
 
   return sections.filter(Boolean).join("\n");
+}
+
+function formatAnswerScopeForCharacter(characterId: string, answerScope: CaseAnswerScope | undefined): string[] {
+  if (!answerScope?.inquiryFrame.isCaseInquiry) {
+    return [];
+  }
+  const witness = answerScope.allowedWitnesses.find((candidate) => candidate.characterId === characterId);
+  const lines = [
+    "[Answer Scope]",
+    `질문 유형: ${answerScope.inquiryFrame.inquiryType}`,
+    `답변 가능성: ${answerScope.answerability}`,
+    "아래 허용 정보 안에서만 답한다. 확실하지 않은 정보는 확실하다고 말하지 않는다.",
+    "허용된 fact_id 밖의 사건 정보, 차단된 진상 ID, 타인의 비밀은 말하지 않는다.",
+    `허용 fact_id: ${[...answerScope.publicFactIds, ...answerScope.observableFactIds, ...(witness?.factIds ?? [])].join(", ") || "(없음)"}`,
+    `차단된 fact_id: ${answerScope.blockedFactIds.join(", ") || "(없음)"}`,
+    `차단된 진상 ID: ${answerScope.blockedTruthIds.join(", ") || "(없음)"}`,
+  ];
+
+  if (witness) {
+    lines.push(`말해도 되는 내용: ${witness.canSay.join(" / ") || "(없음)"}`);
+    lines.push(`말하면 안 되는 내용: ${witness.mustNotSay.join(" / ") || "(없음)"}`);
+    lines.push(`확실성: ${witness.certainty} / 최대 공개: ${witness.maxRevealLevel}`);
+  } else {
+    lines.push("이 캐릭터에게 허용된 증언 seed가 없다. 모르면 모른다고 말하거나 답변을 피한다.");
+  }
+
+  return lines;
 }
 
 interface ActorBrief {
@@ -279,6 +345,30 @@ function getCharacterLabels(character: CharacterDefinition): string[] {
   return [character.name, character.shortName, character.anonymousLabel]
     .filter((label): label is string => Boolean(label))
     .flatMap((label) => [label, label.replace(/^\[/, "").replace(/\]$/, "")]);
+}
+
+function inferConversationTargetLabelFromUserInput(text: string, pack: ScenarioPack): string {
+  const normalized = normalizeForLeakCheck(text);
+  if (!normalized) return "";
+  for (const candidate of pack.characters) {
+    for (const label of getCharacterLabels(candidate)) {
+      const needle = normalizeForLeakCheck(label);
+      if (needle && normalized.includes(needle)) {
+        return candidate.name;
+      }
+    }
+  }
+  return "";
+}
+
+function formatCharacterRoster(characters: CharacterDefinition[], activeCharacterId: string): string {
+  return characters
+    .map((candidate) => {
+      const label = candidate.anonymousLabel ?? candidate.name;
+      const role = candidate.id === activeCharacterId ? "현재 API 호출 대상" : "독립 캐릭터";
+      return `${label}: ${role}`;
+    })
+    .join("\n");
 }
 
 function extractHiddenTerms(values: string[]): string[] {

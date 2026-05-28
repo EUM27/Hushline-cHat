@@ -43,7 +43,7 @@ describe("character prompt boundaries", () => {
     expect(capturedSystemPrompt).not.toContain("밀실 트릭");
   });
 
-  test("allows only the active character's own action beats and mutters", async () => {
+  test("separates mixed user input from dialogue-only character output", async () => {
     let capturedSystemPrompt = "";
     globalThis.fetch = captureSystemPrompt((prompt) => {
       capturedSystemPrompt = prompt;
@@ -61,7 +61,7 @@ describe("character prompt boundaries", () => {
       handout("kwak-sangcheol", "밀렵 도구를 숨기고 있다."),
       "사망 여부를 거칠게 단정하고 현장 접근을 막는다.",
       "chat",
-      "여기 누구 사망고지 가능하신 분 안 계시겠죠.",
+      "\"여기 누구 사망고지 가능하신 분 안 계시겠죠.\" 나는 휴대폰을 든 채 뒤로 물러섰다.",
       publicContext(),
       [],
       "한서윤",
@@ -69,11 +69,122 @@ describe("character prompt boundaries", () => {
       connection(),
     );
 
-    expect(capturedSystemPrompt).toContain("자기 몸짓");
-    expect(capturedSystemPrompt).toContain("짧은 추임새");
+    expect(capturedSystemPrompt).toContain("사용자 입력에는 대사와 행동 지문이 섞일 수 있다.");
+    expect(capturedSystemPrompt).toContain("그 형식을 따라 하지 않는다.");
+    expect(capturedSystemPrompt).toContain("최종 출력은 캐릭터의 대사만 쓴다.");
+    expect(capturedSystemPrompt).not.toContain("자기 몸짓");
+    expect(capturedSystemPrompt).not.toContain("짧은 추임새");
     expect(capturedSystemPrompt).toContain("혼잣말");
     expect(capturedSystemPrompt).toContain("다른 캐릭터의 행동이나 대사는 쓰지 않는다");
     expect(capturedSystemPrompt).toContain("무리하게 점잖게 정제하지 않는다");
+  });
+
+  test("injects answer scope into character prompt without hidden truth text", async () => {
+    let capturedSystemPrompt = "";
+    globalThis.fetch = captureSystemPrompt((prompt) => {
+      capturedSystemPrompt = prompt;
+      return "확실히 본 건 아닙니다.";
+    });
+
+    await invokeCharacter(
+      character("yoon-haeon", "윤해온", "해온"),
+      handout("yoon-haeon", "윤해온은 불안한 투숙객이다."),
+      "허용된 목격 범위 안에서만 답한다.",
+      "chat",
+      "정전 전에 테이블 근처에서 뭐 봤어요?",
+      publicContext(),
+      [],
+      "한서윤",
+      pack([character("yoon-haeon", "윤해온", "해온")]),
+      connection(),
+      {
+        inquiryFrame: {
+          isCaseInquiry: true,
+          inquiryType: "witness_testimony",
+          topicTags: ["table", "blackout"],
+          referencedEvidenceIds: [],
+          referencedClaimIds: [],
+          requestedTruthLevel: "testimony",
+          truthLeakRisk: 1,
+        },
+        publicFactIds: [],
+        observableFactIds: ["fact_lounge_shadow_before_blackout"],
+        allowedWitnesses: [{
+          characterId: "yoon-haeon",
+          testimonySeedIds: ["testimony_haeon_lounge_shadow"],
+          factIds: ["fact_lounge_shadow_before_blackout"],
+          canSay: ["정전 직전 라운지 테이블 쪽에서 움직임을 본 것 같지만 얼굴은 못 봤다."],
+          mustNotSay: ["누가 열쇠를 놓았는지 확정하지 않는다."],
+          certainty: "uncertain",
+          maxRevealLevel: "partial",
+        }],
+        blockedFactIds: [],
+        blockedTruthIds: ["truth_killer_identity"],
+        recommendedSpeakerIds: ["yoon-haeon"],
+        answerability: "partial",
+      },
+    );
+
+    expect(capturedSystemPrompt).toContain("[Answer Scope]");
+    expect(capturedSystemPrompt).toContain("정전 직전 라운지 테이블 쪽에서 움직임을 본 것 같지만 얼굴은 못 봤다.");
+    expect(capturedSystemPrompt).toContain("누가 열쇠를 놓았는지 확정하지 않는다.");
+    expect(capturedSystemPrompt).toContain("차단된 진상 ID: truth_killer_identity");
+    expect(capturedSystemPrompt).not.toContain("범인은");
+  });
+
+  test("separates user, current speaker, and independent characters in character payload", async () => {
+    let capturedSystemPrompt = "";
+    let capturedUserPayload = "";
+    globalThis.fetch = capturePayload((payload) => {
+      capturedSystemPrompt = payload.systemPrompt;
+      capturedUserPayload = payload.userPayload;
+      return "그 질문은 나한테 한 거지?";
+    });
+
+    await invokeCharacter(
+      character("kang-mujin", "강무진", "무진"),
+      handout("kang-mujin", "수사 자료 일부를 숨기고 있다."),
+      "유저의 질문에 자기 입장으로 답한다.",
+      "chat",
+      "서하 씨 말고 무진 씨가 답해 주세요.",
+      publicContext(),
+      [
+        {
+          id: "m1",
+          sessionId: "s1",
+          role: "user",
+          content: "나는 피곤한 얼굴로 이마를 문질렀다.",
+          createdAt: "2026-05-28T00:00:00.000Z",
+        },
+        {
+          id: "m2",
+          sessionId: "s1",
+          role: "character",
+          characterId: "yoon-seha",
+          speakerLabel: "윤서하",
+          content: "저는 그 열쇠를 모릅니다.",
+          createdAt: "2026-05-28T00:00:01.000Z",
+        },
+      ],
+      "한서윤",
+      pack([
+        character("kang-mujin", "강무진", "무진"),
+        character("yoon-seha", "윤서하", "서하"),
+        character("yoon-haeon", "윤해온", "해온"),
+      ]),
+      connection(),
+    );
+
+    expect(capturedSystemPrompt).toContain("[사용자/플레이어]");
+    expect(capturedSystemPrompt).toContain("{{user}}는 사용자/플레이어다.");
+    expect(capturedSystemPrompt).toContain("[그룹 인물 목록]");
+    expect(capturedSystemPrompt).toContain("강무진: 현재 API 호출 대상");
+    expect(capturedSystemPrompt).toContain("윤서하: 독립 캐릭터");
+    expect(capturedSystemPrompt).toContain("윤해온: 독립 캐릭터");
+    expect(capturedSystemPrompt).toContain("그룹 인물 목록의 각 이름은 서로 다른 인물이다.");
+    expect(capturedUserPayload).toContain("{{user}}: 나는 피곤한 얼굴로 이마를 문질렀다.");
+    expect(capturedUserPayload).toContain("{{user}}: 서하 씨 말고 무진 씨가 답해 주세요.");
+    expect(capturedUserPayload).not.toContain("한서윤:");
   });
 });
 
@@ -86,6 +197,22 @@ function captureSystemPrompt(reply: (systemPrompt: string) => string): typeof fe
     return new Response(
       JSON.stringify({
         choices: [{ message: { content: reply(systemPrompt) } }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as typeof fetch;
+}
+
+function capturePayload(reply: (payload: { systemPrompt: string; userPayload: string }) => string): typeof fetch {
+  return (async (_input, init) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as {
+      messages?: Array<{ role: string; content: string }>;
+    };
+    const systemPrompt = body.messages?.find((message) => message.role === "system")?.content ?? "";
+    const userPayload = body.messages?.find((message) => message.role === "user")?.content ?? "";
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: reply({ systemPrompt, userPayload }) } }],
       }),
       { status: 200, headers: { "content-type": "application/json" } },
     );

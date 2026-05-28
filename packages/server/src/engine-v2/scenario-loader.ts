@@ -9,6 +9,7 @@ import type {
   ScenarioManifest,
   ScenarioCardV2,
   CharacterDefinition,
+  CaseKnowledge,
   ObjectiveDefinition,
   EventTrigger,
 } from "@hushline/shared";
@@ -18,12 +19,32 @@ import {
   characterDefinitionSchema,
   objectiveDefinitionSchema,
   eventTriggerSchema,
+  caseKnowledgeSchema,
 } from "./schemas.js";
 
 export interface ScenarioLoadError {
   file: string;
   message: string;
   details?: string;
+}
+
+export interface ScenarioValidationReport {
+  valid: boolean;
+  missingFactRefs: Array<{
+    file: string;
+    path: string;
+    missingFactId: string;
+  }>;
+  missingClaimRefs: string[];
+  missingLocationRefs: string[];
+  missingObjectRefs: string[];
+  invalidTimelineRefs: string[];
+  invalidRevealConditionRefs: string[];
+  hiddenTruthLeakRisks: Array<{
+    file: string;
+    field: string;
+    reason: string;
+  }>;
 }
 
 export type ScenarioLoadResult =
@@ -46,6 +67,7 @@ export type ScenarioLoadResult =
  *       main.json
  *     events/
  *       triggers.json  (optional)
+ *     case-knowledge.json  (optional)
  */
 export function loadScenarioPack(packDir: string): ScenarioLoadResult {
   const errors: ScenarioLoadError[] = [];
@@ -119,6 +141,19 @@ export function loadScenarioPack(packDir: string): ScenarioLoadResult {
     }
   }
 
+  // ── Case Knowledge (optional) ──
+  const caseKnowledgePath = join(abs, "case-knowledge.json");
+  let caseKnowledge: CaseKnowledge | undefined;
+  if (existsSync(caseKnowledgePath)) {
+    caseKnowledge = loadJsonFile<CaseKnowledge>(
+      abs, "case-knowledge.json", caseKnowledgeSchema, errors,
+    ) ?? undefined;
+  }
+
+  if (caseKnowledge) {
+    validateCaseKnowledge(caseKnowledge, characters, scenarioCard!, errors);
+  }
+
   // ── Final validation ──
   if (errors.length > 0) {
     return { success: false, errors };
@@ -134,6 +169,7 @@ export function loadScenarioPack(packDir: string): ScenarioLoadResult {
       narratorPrompt: narratorPrompt ?? "",
       mainObjective: mainObjective ?? { id: "default", description: "시나리오를 진행한다." },
       eventTriggers,
+      ...(caseKnowledge ? { caseKnowledge } : {}),
     },
   };
 }
@@ -210,4 +246,211 @@ function loadTextFile(
     });
     return null;
   }
+}
+
+function validateCaseKnowledge(
+  caseKnowledge: CaseKnowledge,
+  characters: CharacterDefinition[],
+  scenarioCard: ScenarioCardV2,
+  errors: ScenarioLoadError[],
+): void {
+  const factIds = new Set([
+    ...(caseKnowledge.facts ?? []).map((fact) => fact.id),
+    ...caseKnowledge.publicFacts.map((fact) => fact.id),
+    ...caseKnowledge.observableFacts.map((fact) => fact.id),
+  ]);
+  const characterIds = new Set(characters.map((character) => character.id));
+  const objectIds = new Set(
+    [
+      ...(caseKnowledge.objects ?? []).map((object) => object.id),
+      ...[...(caseKnowledge.facts ?? []), ...caseKnowledge.publicFacts, ...caseKnowledge.observableFacts]
+      .flatMap((fact) => fact.objectIds ?? []),
+    ],
+  );
+  const locationIds = new Set([
+    scenarioCard.initialLocationId,
+    scenarioCard.initialBackgroundId,
+    ...scenarioCard.backgroundIds,
+    ...(caseKnowledge.locations ?? []).map((location) => location.id),
+    ...[...(caseKnowledge.facts ?? []), ...caseKnowledge.publicFacts, ...caseKnowledge.observableFacts]
+      .map((fact) => fact.locationId)
+      .filter((id): id is string => Boolean(id)),
+  ]);
+  const hiddenTruthIds = new Set([
+    ...caseKnowledge.hiddenTruths.map((truth) => truth.id),
+    ...(caseKnowledge.hiddenTruthVault?.hiddenTruthIds ?? []),
+  ]);
+
+  for (const seed of caseKnowledge.testimonySeeds) {
+    const characterId = seed.npcId ?? seed.characterId;
+    if (!characterIds.has(characterId)) {
+      errors.push({
+        file: "case-knowledge.json",
+        message: `testimonySeed ${seed.id} references missing characterId: ${characterId}`,
+      });
+    }
+    for (const factId of [...(seed.factRefs ?? []), ...seed.factIds]) {
+      if (!factIds.has(factId)) {
+        errors.push({
+          file: "case-knowledge.json",
+          message: `testimonySeed ${seed.id} references missing factId: ${factId}`,
+        });
+      }
+    }
+    for (const objectId of seed.revealWhen?.objectIds ?? []) {
+      if (!objectIds.has(objectId)) {
+        errors.push({
+          file: "case-knowledge.json",
+          message: `testimonySeed ${seed.id} references missing objectId: ${objectId}`,
+        });
+      }
+    }
+    for (const locationId of seed.revealWhen?.locationIds ?? []) {
+      if (!locationIds.has(locationId)) {
+        errors.push({
+          file: "case-knowledge.json",
+          message: `testimonySeed ${seed.id} references missing locationId: ${locationId}`,
+        });
+      }
+    }
+  }
+
+  for (const hiddenTruthId of hiddenTruthIds) {
+    if (!factIds.has(hiddenTruthId) && !caseKnowledge.hiddenTruths.some((truth) => truth.id === hiddenTruthId)) {
+      errors.push({
+        file: "case-knowledge.json",
+        message: `hiddenTruth references missing factId: ${hiddenTruthId}`,
+      });
+    }
+  }
+
+  for (const factId of Object.keys(caseKnowledge.revealBudget?.perFact ?? {})) {
+    if (!factIds.has(factId)) {
+      errors.push({
+        file: "case-knowledge.json",
+        message: `revealBudget references missing factId: ${factId}`,
+      });
+    }
+  }
+
+  for (const node of caseKnowledge.hiddenTruthVault?.solutionGraph.requiredProofNodes ?? []) {
+    for (const ref of node.requiredRefs) {
+      if (!isValidSolutionRef(ref, factIds)) {
+        errors.push({
+          file: "case-knowledge.json",
+          message: `solutionGraph proof node ${node.id} references invalid ref: ${ref}`,
+        });
+      }
+    }
+  }
+
+  for (const timeline of caseKnowledge.timeline ?? []) {
+    for (const factId of timeline.eventRefs ?? []) {
+      if (!factIds.has(factId)) {
+        errors.push({
+          file: "case-knowledge.json",
+          message: `timeline ${timeline.id} references missing factId: ${factId}`,
+        });
+      }
+    }
+    for (const [locationId, state] of Object.entries(timeline.locationStates ?? {})) {
+      if (!locationIds.has(locationId)) {
+        errors.push({
+          file: "case-knowledge.json",
+          message: `timeline ${timeline.id} references missing locationId: ${locationId}`,
+        });
+      }
+      for (const objectId of state.observableObjects ?? []) {
+        if (!objectIds.has(objectId)) {
+          errors.push({
+            file: "case-knowledge.json",
+            message: `timeline ${timeline.id} references missing objectId: ${objectId}`,
+          });
+        }
+      }
+      for (const factId of state.observableFactIds ?? []) {
+        if (!factIds.has(factId)) {
+          errors.push({
+            file: "case-knowledge.json",
+            message: `timeline ${timeline.id} references missing factId: ${factId}`,
+          });
+        }
+      }
+    }
+  }
+
+  for (const object of caseKnowledge.objects ?? []) {
+    if (object.initialLocationId && !locationIds.has(object.initialLocationId)) {
+      errors.push({
+        file: "case-knowledge.json",
+        message: `object ${object.id} references missing locationId: ${object.initialLocationId}`,
+      });
+    }
+    for (const factId of object.factRefs ?? []) {
+      if (!factIds.has(factId)) {
+        errors.push({
+          file: "case-knowledge.json",
+          message: `object ${object.id} references missing factId: ${factId}`,
+        });
+      }
+    }
+  }
+
+  for (const ambiguous of caseKnowledge.ambiguousFacts ?? []) {
+    for (const interpretation of ambiguous.possibleInterpretations) {
+      for (const factId of [...interpretation.supportingFactIds, ...interpretation.contradictingFactIds]) {
+        if (!factIds.has(factId)) {
+          errors.push({
+            file: "case-knowledge.json",
+            message: `ambiguousFact ${ambiguous.id} references missing factId: ${factId}`,
+          });
+        }
+      }
+    }
+  }
+
+  for (const leak of detectHiddenTruthLeakRisks(caseKnowledge)) {
+    errors.push({
+      file: leak.file,
+      message: `hiddenTruth leak risk [${leak.field}]: ${leak.reason}`,
+    });
+  }
+}
+
+function isValidSolutionRef(ref: string, factIds: Set<string>): boolean {
+  return factIds.has(ref)
+    || ref.startsWith("claim_")
+    || ref.startsWith("evidence_")
+    || ref.startsWith("contra_")
+    || ref.startsWith("contradiction_");
+}
+
+function detectHiddenTruthLeakRisks(caseKnowledge: CaseKnowledge): ScenarioValidationReport["hiddenTruthLeakRisks"] {
+  const leakPatterns = [
+    /범인\s*(은|는|이|가)\s*[가-힣A-Za-z0-9_-]+/,
+    /살인범\s*(은|는|이|가)\s*[가-힣A-Za-z0-9_-]+/,
+    /정답\s*(은|는|이|가)/,
+    /트릭\s*(은|는|이|가|:)/,
+  ];
+  const risks: ScenarioValidationReport["hiddenTruthLeakRisks"] = [];
+  const publicFacts = [
+    ...caseKnowledge.publicFacts.map((fact) => ({ file: "case-knowledge.json", field: `publicFacts.${fact.id}.text`, text: fact.text })),
+    ...caseKnowledge.observableFacts.map((fact) => ({ file: "case-knowledge.json", field: `observableFacts.${fact.id}.text`, text: fact.text })),
+    ...(caseKnowledge.facts ?? [])
+      .filter((fact) => fact.category !== "hidden_truth" && fact.category !== "solution")
+      .map((fact) => ({ file: "case-knowledge.json", field: `facts.${fact.id}.text`, text: fact.text })),
+  ];
+  for (const item of publicFacts) {
+    if (item.text.includes("HIDDEN_TRUTH_REDACTED")) {
+      continue;
+    }
+    if (leakPatterns.some((pattern) => pattern.test(item.text))) {
+      risks.push({
+        file: item.file,
+        field: item.field,
+        reason: "public case knowledge contains solution-like prose",
+      });
+    }
+  }
+  return risks;
 }

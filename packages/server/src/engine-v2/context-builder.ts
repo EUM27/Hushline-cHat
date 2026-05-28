@@ -20,6 +20,9 @@ import type {
   RelationshipEdge,
   EventTrigger,
   FactVisibility,
+  DeductionValidationResult,
+  FactId,
+  HiddenTruthVault,
 } from "@hushline/shared";
 import { getAgentKnowledge } from "./visibility-graph.js";
 
@@ -200,7 +203,7 @@ export function buildCharacterChatContext(
   return messages.slice(-CHARACTER_CONTEXT_SIZE).map((message) => {
     let label: string;
     if (message.role === "user") {
-      label = personaName;
+      label = "{{user}}";
     } else if (message.characterId === characterId) {
       label = "나";
     } else {
@@ -213,6 +216,70 @@ export function buildCharacterChatContext(
       ...(message.inputMode ? { inputMode: message.inputMode } : {}),
     };
   });
+}
+
+// ──────────────────────────────────────────────
+// Mystery Runtime Safe Context
+// ──────────────────────────────────────────────
+
+export interface DirectorSafeTruthContext {
+  hiddenTruthIds: FactId[];
+  lockedProofNodeIds: string[];
+  blockedFactIds: FactId[];
+  unlockConditions: Array<{
+    truthId: FactId;
+    requiredDeductionScore: number;
+    requiredProofNodeIds: string[];
+  }>;
+  solutionState: "locked" | "partially_unlocked" | "ready_for_final_reveal";
+}
+
+export function buildDirectorSafeTruthContext(input: {
+  hiddenTruthVault?: HiddenTruthVault;
+  deductionResult?: DeductionValidationResult;
+}): DirectorSafeTruthContext {
+  const graph = input.hiddenTruthVault?.solutionGraph;
+  const lockedProofNodeIds = graph?.requiredProofNodes
+    .filter((node) => !input.deductionResult?.requiredElementCoverage[node.id])
+    .map((node) => node.id) ?? [];
+  const score = input.deductionResult?.score ?? 0;
+  const finalThreshold = graph?.unlockThresholds.finalTruth ?? 1;
+  const partialThreshold = graph?.unlockThresholds.partialTruth ?? 0.5;
+
+  return {
+    hiddenTruthIds: input.hiddenTruthVault?.hiddenTruthIds ?? [],
+    lockedProofNodeIds,
+    blockedFactIds: input.hiddenTruthVault?.blockedByDefault ?? [],
+    unlockConditions: (input.hiddenTruthVault?.hiddenTruthIds ?? []).map((truthId) => ({
+      truthId,
+      requiredDeductionScore: finalThreshold,
+      requiredProofNodeIds: graph?.requiredProofNodes.map((node) => node.id) ?? [],
+    })),
+    solutionState: score >= finalThreshold
+      ? "ready_for_final_reveal"
+      : score >= partialThreshold
+        ? "partially_unlocked"
+        : "locked",
+  };
+}
+
+export function assertNoOtherHandouts(characterContext: unknown): void {
+  const serialized = JSON.stringify(characterContext);
+  if (/"allSecrets"|"allDesires"|"allObjectives"|"fullRelationshipGraph"/.test(serialized)) {
+    throw new Error("Character context contains another agent handout or omniscient relationship context.");
+  }
+}
+
+export function assertNoHiddenTruthVault(characterContext: unknown): void {
+  if (JSON.stringify(characterContext).includes("hiddenTruthVault")) {
+    throw new Error("Character context must not include hiddenTruthVault.");
+  }
+}
+
+export function assertNoSolutionGraph(characterContext: unknown): void {
+  if (JSON.stringify(characterContext).includes("solutionGraph")) {
+    throw new Error("Character context must not include solutionGraph.");
+  }
 }
 
 // ──────────────────────────────────────────────

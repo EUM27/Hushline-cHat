@@ -1,6 +1,7 @@
 import type {
   AdvisorDraft,
   AssetManifest,
+  CaseRuntimeTrace,
   ChatMessage,
   ClientSessionState,
   InputMode,
@@ -8,6 +9,7 @@ import type {
   ModelOption,
   ModelProviderId,
   ProviderProfile,
+  StateLawSnapshot,
 } from "@hushline/shared";
 import type { V2ScenarioDetailResponse } from "../api-v2";
 import type {
@@ -338,23 +340,18 @@ export function isPhoneChannelMessage(message: ChatMessage): boolean {
     return message.speakerKind === "advisor-slot";
   }
 
-  // 3. Narrator messages: anonymous chat participants (scenario-crowd) or "[익명 N]" labels are phone
+  // 3. Narrator messages: only explicitly anonymous phone chat belongs in the phone log.
   if (message.role === "narrator") {
-    const isAnonymousChat =
-      message.speakerKind === "scenario-crowd" ||
-      Boolean(message.speakerLabel && message.speakerLabel.includes("익명"));
-    return isAnonymousChat;
+    return Boolean(message.speakerLabel && message.speakerLabel.includes("익명"));
   }
 
-  // 4. System messages: digital notifications (room-master, 안내, 방장, 초대, 입장) are phone
+  // 4. System messages: only digital notices belong in the phone log.
   if (message.role === "system") {
     const isDigitalNotice =
-      message.speakerKind === "room-master" ||
       message.speakerLabel === "[안내]" ||
       message.speakerLabel === "[방장]" ||
       message.content.includes("초대") ||
-      message.content.includes("입장 확인") ||
-      Boolean(message.isOpeningBeat);
+      message.content.includes("입장 확인");
     return isDigitalNotice;
   }
 
@@ -372,6 +369,10 @@ export function getLatestStageMessage(messages: ChatMessage[]): ChatMessage | nu
   return [...messages].reverse().find(isStageMessage) ?? null;
 }
 
+export function getStageCharacterId(stageMessage: ChatMessage | null): string | undefined {
+  return stageMessage?.role === "character" ? stageMessage.characterId : undefined;
+}
+
 export function getStageExpression(
   messages: ChatMessage[],
   stageMessage: ChatMessage | null,
@@ -385,10 +386,47 @@ export function getStageExpression(
 
 export function getStageSpeakerLabel(message: ChatMessage | null, fallback: string): string {
   if (!message) return fallback;
+  if (message.speakerLabel) return message.speakerLabel;
   if (message.role === "narrator") return "장면";
   if (message.role === "system") return "알림";
-  if (message.role === "user") return message.speakerLabel ?? "나";
-  return message.speakerLabel ?? fallback;
+  if (message.role === "user") return "나";
+  return fallback;
+}
+
+export function summarizeStateLawForDevPanel(stateLaw: StateLawSnapshot | null | undefined): string[] {
+  if (!stateLaw) return [];
+  return [
+    ...stateLaw.immutableFacts.map((item) => `고정: ${item}`),
+    ...stateLaw.scenePressure.map((item) => `압력: ${item}`),
+    ...stateLaw.outputRules.map((item) => `규칙: ${item}`),
+  ];
+}
+
+export function summarizeCaseRuntimeForDevPanel(caseRuntime: CaseRuntimeTrace | null | undefined): string[] {
+  if (!caseRuntime) return [];
+  const { inquiry, answerScope, boundarySummary } = caseRuntime;
+  const devTrace = caseRuntime.devTrace;
+  return [
+    `질문: ${inquiry.inquiryType} · 위험 ${inquiry.truthLeakRisk}`,
+    inquiry.topicTags.length ? `주제: ${inquiry.topicTags.join(", ")}` : "주제: (없음)",
+    devTrace?.contradictionIds.length ? `모순: ${devTrace.contradictionIds.join(", ")}` : "모순: (없음)",
+    devTrace?.deductionVerdict ? `추리 판정: ${devTrace.deductionVerdict}` : "추리 판정: (없음)",
+    devTrace?.snapshotId ? `스냅샷: ${devTrace.snapshotId}` : "스냅샷: (없음)",
+    devTrace?.characterGate ? `Character Gate: ${JSON.stringify(devTrace.characterGate)}` : "Character Gate: (없음)",
+    devTrace?.narratorGate ? `Narrator Gate: ${JSON.stringify(devTrace.narratorGate)}` : "Narrator Gate: (없음)",
+    `답변성: ${answerScope.answerability}`,
+    answerScope.recommendedSpeakerIds.length
+      ? `추천 화자: ${answerScope.recommendedSpeakerIds.join(", ")}`
+      : "추천 화자: (없음)",
+    answerScope.publicFactIds.length ? `공개 사실: ${answerScope.publicFactIds.join(", ")}` : "공개 사실: (없음)",
+    answerScope.observableFactIds.length ? `관찰 사실: ${answerScope.observableFactIds.join(", ")}` : "관찰 사실: (없음)",
+    answerScope.allowedWitnesses.length
+      ? `허용 증언: ${answerScope.allowedWitnesses.map((witness) => `${witness.characterId}:${witness.factIds.join("/")}`).join(", ")}`
+      : "허용 증언: (없음)",
+    answerScope.blockedFactIds.length ? `차단 사실: ${answerScope.blockedFactIds.join(", ")}` : "차단 사실: (없음)",
+    answerScope.blockedTruthIds.length ? `차단 진상: ${answerScope.blockedTruthIds.join(", ")}` : "차단 진상: (없음)",
+    ...boundarySummary.map((item) => `Gate: ${item}`),
+  ];
 }
 
 export function loadConnections(): Record<string, ModelConnection> {

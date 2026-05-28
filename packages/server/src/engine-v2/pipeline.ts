@@ -7,6 +7,7 @@
 
 import type {
   DirectorOutput,
+  BoundaryReport,
   GenerationModelSnapshot,
   InputMode,
   ModelConnection,
@@ -30,6 +31,26 @@ import { invokeNarrator } from "./narrator.js";
 import { invokeCharacter } from "./character.js";
 import { applyDirectorOutput, markCharacterSpoke } from "./state-manager.js";
 import { parseBackgroundTags } from "./background-tags.js";
+import {
+  enforceCharacterBoundary,
+  enforceNarratorBoundary,
+  mergeBoundaryReports,
+} from "./boundary.js";
+import { enforceDirectorLaw } from "./director-law.js";
+import { buildStateLawSnapshot } from "./state-law.js";
+import { routeCaseInquiry } from "./case-inquiry-router.js";
+import { buildRevealPermissions, resolveCaseAnswerScope, summarizeCaseRuntimeBoundary } from "./case-scope-resolver.js";
+import { recordCaseClaims } from "./case-state.js";
+import { getAllCaseFacts, getHiddenTruthIds } from "./case-knowledge.js";
+import { detectContradictions, markPlayerNoticedContradiction } from "./contradiction-engine.js";
+import { parseDeductionAttempt, validateDeductionAttempt } from "./deduction-validator.js";
+import { resolveNarratorScope } from "./narrator-scope.js";
+import { validateNarratorDraft } from "./narrator-boundary-gate.js";
+import { validateCharacterDraft, type BoundaryGateResult } from "./runtime-boundary-gate.js";
+import { extractClaimFromApprovedDialogue } from "./claim-ledger.js";
+import { propagateKnowledgeFromTurn } from "./knowledge-propagation.js";
+import { buildSceneStateSnapshot } from "./scene-state-snapshot.js";
+import { updateAmbiguityZone } from "./ambiguity-zone.js";
 
 /**
  * Run a complete turn through the v2 pipeline.
@@ -62,6 +83,56 @@ export async function runTurnV2(
   // ── Step 2: Context Assembly ──
   const publicContext = buildPublicContext(session.worldState, session.messages, pack);
   const omniscientContext = buildOmniscientContext(session.worldState, session.characters, pack);
+  const caseInquiry = routeCaseInquiry(userContent, pack);
+  const caseFacts = getAllCaseFacts(pack.caseKnowledge);
+  const hiddenTruthIds = getHiddenTruthIds(pack.caseKnowledge);
+  const existingClaims = session.worldState.claimLedger?.claims ?? [];
+  const existingContradictions = (session.worldState.claimLedger?.contradictions ?? [])
+    .filter(isContradictionRecord);
+  const detectedContradictions = detectContradictions({
+    claims: existingClaims,
+    facts: caseFacts,
+    existingContradictions,
+    currentTurn: session.worldState.turnNumber + 1,
+  });
+  const contradictionsWithPlayerNotice = markPlayerNoticedContradiction({
+    inquiryFrame: caseInquiry,
+    contradictions: detectedContradictions,
+    currentTurn: session.worldState.turnNumber + 1,
+  });
+  const deductionAttempt = parseDeductionAttempt({
+    content: userContent,
+    inquiryFrame: caseInquiry,
+    revealedFactIds: [],
+    claims: existingClaims,
+    contradictions: contradictionsWithPlayerNotice,
+  });
+  const deductionResult = deductionAttempt && pack.caseKnowledge?.hiddenTruthVault?.solutionGraph
+    ? validateDeductionAttempt({
+        attempt: deductionAttempt,
+        solutionGraph: pack.caseKnowledge.hiddenTruthVault.solutionGraph,
+        revealedFactIds: [],
+        claims: existingClaims,
+        contradictions: contradictionsWithPlayerNotice,
+      })
+    : undefined;
+  if (deductionAttempt && deductionResult) {
+    deductionAttempt.validationResult = deductionResult;
+  }
+  const caseAnswerScope = pack.caseKnowledge
+    ? resolveCaseAnswerScope({
+        inquiryFrame: caseInquiry,
+        caseKnowledge: pack.caseKnowledge,
+        revealedFactIds: [],
+        claims: existingClaims,
+        currentTurn: session.worldState.turnNumber + 1,
+        ...(pack.caseKnowledge.revealBudget ? { revealBudget: pack.caseKnowledge.revealBudget } : {}),
+      })
+    : resolveCaseAnswerScope(caseInquiry, pack);
+  const caseRuntimeInput = {
+    inquiry: caseInquiry,
+    answerScope: caseAnswerScope,
+  };
 
   // ── Step 3: Director Invocation ──
   const directorConnection = getConnection(connections, "director");
@@ -73,11 +144,46 @@ export async function runTurnV2(
     inputMode,
     pack,
     directorConnection,
+    caseRuntimeInput,
   );
-  const directorOutput = directorResult.output;
+  const directorBoundary = enforceDirectorLaw(directorResult.output, session.worldState, pack);
+  let directorOutput = attachCaseRuntimeToDirectorOutput(
+    directorBoundary.output,
+    caseInquiry,
+    caseAnswerScope,
+  );
+  directorOutput = {
+    ...directorOutput,
+    contradictionPlan: {
+      contradictionIds: contradictionsWithPlayerNotice.map((contradiction) => contradiction.id),
+      pressureByNpc: buildPressureByNpc(contradictionsWithPlayerNotice),
+      allowedReactionByNpc: buildAllowedReactionByNpc(contradictionsWithPlayerNotice),
+    },
+    ...(deductionAttempt
+      ? {
+          deductionPlan: {
+            attemptId: deductionAttempt.id,
+            verdict: deductionResult?.verdict ?? "insufficient",
+            safeFeedbackFactIds: deductionAttempt.factRefs,
+            missingProofNodeIds: Object.entries(deductionResult?.requiredElementCoverage ?? {})
+              .filter(([, covered]) => !covered)
+              .map(([id]) => id),
+            unlockTruthIds: deductionResult?.verdict === "correct" ? hiddenTruthIds : [],
+          },
+        }
+      : {}),
+  };
 
   // ── Step 4: Narrator Invocation (conditional) ──
   const narratorConnection = getConnection(connections, "narrator");
+  const narratorScope = resolveNarratorScope({
+    inquiryFrame: caseInquiry,
+    caseScope: caseAnswerScope,
+    revealedFactIds: [],
+    currentLocationId: session.worldState.locationId,
+    ...(pack.caseKnowledge ? { caseKnowledge: pack.caseKnowledge } : {}),
+  });
+  directorOutput = { ...directorOutput, narratorScope };
   const narratorInstruction = buildNarratorInstruction(
     directorOutput,
     inputMode,
@@ -92,9 +198,23 @@ export async function runTurnV2(
     pack,
     narratorConnection,
   );
+  const narratorBoundary = enforceNarratorBoundary(narratorResult.content);
+  const narratorGate = narratorBoundary.content
+    ? validateNarratorDraft({
+        draft: narratorBoundary.content,
+        scope: narratorScope,
+        hiddenTruthIds,
+        caseFacts,
+      })
+    : { status: "approved" as const, violations: [] };
+  const narratorContent = narratorGate.status === "approved"
+    ? narratorBoundary.content
+    : narratorGate.finalText ?? narratorBoundary.content;
 
   // ── Step 5: Character Invocations ──
   const characterMessages: TurnMessage[] = [];
+  const characterBoundaryReports = [];
+  const characterGateResults: Array<{ npcId: string; gate: BoundaryGateResult }> = [];
 
   if (!directorOutput.silence && directorOutput.speakers.length > 0) {
     // Invoke characters — parallel if 2 speakers
@@ -118,6 +238,7 @@ export async function runTurnV2(
           session.persona.name,
           pack,
           charConnection,
+          caseAnswerScope,
         ).then((result) => ({ result, connection: charConnection }));
       }),
     );
@@ -125,7 +246,26 @@ export async function runTurnV2(
     for (const characterResult of characterResults) {
       if (!characterResult) continue;
       const { result, connection } = characterResult;
-      const parsedContent = parseBackgroundTags(result.content, allowedBackgroundIds);
+      const characterBoundary = enforceCharacterBoundary(result.content, result.characterId, pack, undefined, caseAnswerScope);
+      characterBoundaryReports.push(characterBoundary.report);
+      const witness = caseAnswerScope.allowedWitnesses.find((candidate) => candidate.characterId === result.characterId);
+      const characterGate = validateCharacterDraft({
+        draft: characterBoundary.content || result.content,
+        npcId: result.characterId,
+        allowedFactIds: [
+          ...caseAnswerScope.publicFactIds,
+          ...caseAnswerScope.observableFactIds,
+          ...(witness?.factIds ?? []),
+        ],
+        blockedFactIds: caseAnswerScope.blockedFactIds,
+        hiddenTruthIds,
+        knownClaimIds: existingClaims.map((claim) => claim.id),
+        caseFacts,
+        currentTurn: session.worldState.turnNumber + 1,
+      });
+      characterGateResults.push({ npcId: result.characterId, gate: characterGate });
+      const characterContent = characterGate.finalText || characterBoundary.content || result.content;
+      const parsedContent = parseBackgroundTags(characterContent, allowedBackgroundIds);
       if (parsedContent.backgroundId) {
         taggedBackgroundId = parsedContent.backgroundId;
       }
@@ -134,7 +274,7 @@ export async function runTurnV2(
         id: crypto.randomUUID(),
         sessionId: session.id,
         role: "character",
-        content: parsedContent.content || result.content,
+        content: parsedContent.content || characterContent,
         characterId: result.characterId,
         speakerLabel: session.characters.find((c) => c.id === result.characterId)?.anonymousLabel
           ?? session.characters.find((c) => c.id === result.characterId)?.name
@@ -161,6 +301,116 @@ export async function runTurnV2(
       backgroundId: taggedBackgroundId,
     };
   }
+  nextWorldState = recordCaseClaims(nextWorldState, characterMessages, caseInquiry, userContent);
+  const extractedClaims = characterMessages
+    .map((message) => extractClaimFromApprovedDialogue({
+      text: message.content,
+      speakerId: message.characterId ?? "unknown",
+      turnNumber: session.worldState.turnNumber + 1,
+      caseFacts,
+      objects: pack.caseKnowledge?.objects ?? [],
+      locations: pack.caseKnowledge?.locations ?? [],
+    }))
+    .filter((claim): claim is NonNullable<typeof claim> => Boolean(claim));
+  if (extractedClaims.length > 0) {
+    const currentLedger = nextWorldState.claimLedger ?? { claims: [], contradictions: [] };
+    const mergedClaims = [...currentLedger.claims];
+    for (const claim of extractedClaims) {
+      const duplicate = mergedClaims.some((existing) =>
+        (existing.speakerId ?? existing.speaker) === claim.speakerId
+        && existing.content === claim.content
+        && (existing.turnNumber ?? existing.turn) === claim.turnNumber,
+      );
+      if (!duplicate) {
+        mergedClaims.push(claim);
+      }
+    }
+    nextWorldState = {
+      ...nextWorldState,
+      claimLedger: {
+        ...currentLedger,
+        claims: mergedClaims,
+      },
+    };
+  }
+
+  const nextClaims = nextWorldState.claimLedger?.claims ?? [];
+  const nextContradictions = detectContradictions({
+    claims: nextClaims,
+    facts: caseFacts,
+    existingContradictions: contradictionsWithPlayerNotice,
+    currentTurn: session.worldState.turnNumber + 1,
+  });
+  const propagation = propagateKnowledgeFromTurn({
+    userInput: userContent,
+    approvedMessages: characterMessages.map((message) => ({
+      speakerId: message.characterId ?? "unknown",
+      text: message.content,
+    })),
+    currentLocationId: nextWorldState.locationId,
+    presentNpcIds: getPresentNpcIds(pack, speakerIds),
+    claims: nextClaims,
+    facts: caseFacts,
+    currentTurn: session.worldState.turnNumber + 1,
+  });
+  const updatedAmbiguity = updateAmbiguityZone({
+    ambiguousFacts: nextWorldState.ambiguousFacts ?? pack.caseKnowledge?.ambiguousFacts ?? [],
+    newClaims: extractedClaims,
+    contradictions: nextContradictions,
+    ...(deductionResult ? { deductionResult } : {}),
+    currentTurn: session.worldState.turnNumber + 1,
+  });
+  const nextDeductionAttempts = deductionAttempt
+    ? [...(nextWorldState.playerDeductionAttempts ?? []), deductionAttempt]
+    : nextWorldState.playerDeductionAttempts ?? [];
+  const nextSnapshot = buildSceneStateSnapshot({
+    sessionId: session.id,
+    turnNumber: session.worldState.turnNumber + 1,
+    locationId: nextWorldState.locationId,
+    sceneMode: nextWorldState.sceneMode,
+    revealedFactIds: caseAnswerScope.publicFactIds,
+    revealedClueIds: [],
+    claims: nextClaims,
+    propagatedClaims: [
+      ...(nextWorldState.propagatedClaims ?? []),
+      ...propagation.propagatedClaims,
+    ],
+    contradictions: nextContradictions,
+    ambiguousFacts: updatedAmbiguity,
+    npcKnowledgeDigest: buildNpcKnowledgeDigest(pack, nextClaims, propagation.propagatedClaims, caseAnswerScope.publicFactIds),
+    npcTrustLevels: buildNpcTrustLevels(pack, nextWorldState),
+    playerHypotheses: nextWorldState.playerHypotheses ?? [],
+    playerDeductionAttempts: nextDeductionAttempts,
+    revealBudget: pack.caseKnowledge?.revealBudget ?? {},
+  });
+  nextWorldState = {
+    ...nextWorldState,
+    claimLedger: {
+      claims: nextClaims,
+      contradictions: nextContradictions,
+    },
+    propagatedClaims: [
+      ...(nextWorldState.propagatedClaims ?? []),
+      ...propagation.propagatedClaims,
+    ],
+    ambiguousFacts: updatedAmbiguity,
+    playerDeductionAttempts: nextDeductionAttempts,
+    sceneSnapshots: [
+      ...(nextWorldState.sceneSnapshots ?? []),
+      nextSnapshot,
+    ].slice(-10),
+  };
+  directorOutput = {
+    ...directorOutput,
+    devTrace: {
+      inquiryType: caseInquiry.inquiryType,
+      contradictionIds: nextContradictions.map((contradiction) => contradiction.id),
+      ...(deductionResult ? { deductionVerdict: deductionResult.verdict } : {}),
+      ambiguityUpdates: updatedAmbiguity.map((fact) => `${fact.id}:${fact.playerVisibleStatus}`),
+      blockedTruthIds: caseAnswerScope.blockedTruthIds,
+      selectedSpeakerReason: directorOutput.caseDebug?.selectedSpeakerReason ?? "director/default speaker selection",
+    },
+  };
 
   // ── Step 7: Message Assembly ──
   const turnMessages: TurnMessage[] = [];
@@ -177,8 +427,8 @@ export async function runTurnV2(
 
   // Narrator message (if any)
   let narratorMessage: TurnMessage | null = null;
-  if (narratorResult.content) {
-    const parsedContent = parseBackgroundTags(narratorResult.content, allowedBackgroundIds);
+  if (narratorContent) {
+    const parsedContent = parseBackgroundTags(narratorContent, allowedBackgroundIds);
     if (parsedContent.backgroundId) {
       nextWorldState = {
         ...nextWorldState,
@@ -190,7 +440,7 @@ export async function runTurnV2(
       id: crypto.randomUUID(),
       sessionId: session.id,
       role: "narrator",
-      content: parsedContent.content || narratorResult.content,
+      content: parsedContent.content || narratorContent,
       speakerLabel: "[나레이터]",
       generationSource: narratorResult.source === "api" ? "api" : "dry-run",
       ...(generationModel ? { generationModel } : {}),
@@ -214,10 +464,80 @@ export async function runTurnV2(
 
   turnMessages.push(...composeSceneMessages(directorOutput, narratorMessage, characterMessages, systemMessage));
 
+  const stateLaw = buildStateLawSnapshot(nextWorldState, pack);
+
   return {
     worldState: nextWorldState,
     messages: turnMessages,
     directorOutput,
+    boundaryReport: mergeBoundaryReports(
+      directorBoundary.report,
+      narratorBoundary.report,
+      makeNarratorGateReport(narratorGate),
+      ...characterGateResults.map(({ npcId, gate }) => makeCharacterGateReport(npcId, gate)),
+      ...characterBoundaryReports,
+    ),
+    stateLaw,
+    ...(caseInquiry.isCaseInquiry
+      ? {
+          caseRuntime: {
+            inquiry: caseInquiry,
+            answerScope: caseAnswerScope,
+            boundarySummary: summarizeCaseRuntimeBoundary(caseAnswerScope),
+            devTrace: {
+              inquiryType: caseInquiry.inquiryType,
+              truthLeakRisk: caseInquiry.truthLeakRisk,
+              allowedFacts: [
+                ...caseAnswerScope.publicFactIds,
+                ...caseAnswerScope.observableFactIds,
+                ...caseAnswerScope.allowedWitnesses.flatMap((witness) => witness.factIds),
+              ],
+              blockedFacts: caseAnswerScope.blockedFactIds,
+              contradictionIds: nextContradictions.map((contradiction) => contradiction.id),
+              ...(deductionResult ? { deductionVerdict: deductionResult.verdict } : {}),
+              ...(pack.caseKnowledge?.revealBudget ? { revealBudget: pack.caseKnowledge.revealBudget } : {}),
+              characterGate: characterGateResults.map(({ npcId, gate }) => ({
+                npcId,
+                status: gate.status,
+                violations: gate.violations,
+              })),
+              narratorGate: {
+                status: narratorGate.status,
+                violations: narratorGate.violations,
+              },
+              ...(extractedClaims[0]?.id ? { claimRegistered: extractedClaims[0].id } : {}),
+              snapshotId: nextSnapshot.id,
+            },
+          },
+        }
+      : {}),
+  };
+}
+
+function attachCaseRuntimeToDirectorOutput(
+  directorOutput: DirectorOutput,
+  inquiry: ReturnType<typeof routeCaseInquiry>,
+  answerScope: ReturnType<typeof resolveCaseAnswerScope>,
+): DirectorOutput {
+  if (!inquiry.isCaseInquiry) {
+    return directorOutput;
+  }
+  const revealPermissions = buildRevealPermissions(answerScope);
+  return {
+    ...directorOutput,
+    inquiry: directorOutput.inquiry ?? inquiry,
+    answerScope: directorOutput.answerScope ?? answerScope,
+    revealPermissions: {
+      ...revealPermissions,
+      ...(directorOutput.revealPermissions ?? {}),
+    },
+    caseDebug: directorOutput.caseDebug ?? {
+      selectedSpeakerReason: answerScope.recommendedSpeakerIds.length
+        ? "case scope recommended speaker from testimony/target resolution"
+        : "director/default speaker selection",
+      blockedReasonSummary: answerScope.blockedTruthIds.map((truthId) => `${truthId}: hidden truth locked`),
+      truthLeakRisk: inquiry.truthLeakRisk,
+    },
   };
 }
 
@@ -275,6 +595,107 @@ function composeSceneMessages(
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
+
+function isContradictionRecord(value: unknown): value is import("@hushline/shared").ContradictionRecord {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && "id" in value
+    && "claimAId" in value
+    && "conflictType" in value,
+  );
+}
+
+function buildPressureByNpc(
+  contradictions: import("@hushline/shared").ContradictionRecord[],
+): Record<string, 0 | 1 | 2 | 3> {
+  const pressureByNpc: Record<string, 0 | 1 | 2 | 3> = {};
+  for (const contradiction of contradictions) {
+    for (const npcId of contradiction.involvedNpcIds) {
+      const reaction = contradiction.npcReaction[npcId];
+      const pressure = reaction?.pressureLevel ?? (contradiction.playerNoticed ? 1 : 0);
+      pressureByNpc[npcId] = Math.max(pressureByNpc[npcId] ?? 0, pressure) as 0 | 1 | 2 | 3;
+    }
+  }
+  return pressureByNpc;
+}
+
+function buildAllowedReactionByNpc(
+  contradictions: import("@hushline/shared").ContradictionRecord[],
+): Record<string, "deflect" | "doubled_down" | "cracked" | "explained_away" | "silence"> {
+  const reactions: Record<string, "deflect" | "doubled_down" | "cracked" | "explained_away" | "silence"> = {};
+  for (const contradiction of contradictions) {
+    for (const npcId of contradiction.involvedNpcIds) {
+      const pressure = contradiction.npcReaction[npcId]?.pressureLevel ?? (contradiction.playerNoticed ? 1 : 0);
+      reactions[npcId] = pressure >= 3 ? "cracked" : pressure >= 2 ? "doubled_down" : "deflect";
+    }
+  }
+  return reactions;
+}
+
+function getPresentNpcIds(pack: ScenarioPack, speakerIds: string[]): string[] {
+  const ids = speakerIds.length > 0 ? speakerIds : pack.characters.map((character) => character.id);
+  return [...new Set(ids)];
+}
+
+function buildNpcKnowledgeDigest(
+  pack: ScenarioPack,
+  claims: import("@hushline/shared").Claim[],
+  propagatedClaims: import("@hushline/shared").PropagatedClaim[],
+  revealedFactIds: string[],
+): import("@hushline/shared").SceneStateSnapshot["npcKnowledgeDigest"] {
+  return Object.fromEntries(pack.characters.map((character) => {
+    const knownClaimIds = claims
+      .filter((claim) => (claim.speakerId ?? claim.speaker) === character.id)
+      .map((claim) => claim.id);
+    const propagatedKnownClaimIds = propagatedClaims
+      .filter((claim) => claim.toActorId === character.id)
+      .map((claim) => claim.id);
+    return [
+      character.id,
+      {
+        knownFactIds: [...revealedFactIds],
+        knownClaimIds: [...knownClaimIds, ...propagatedKnownClaimIds],
+        suspectedFactIds: [],
+        falseBeliefIds: [],
+      },
+    ];
+  }));
+}
+
+function buildNpcTrustLevels(pack: ScenarioPack, worldState: WorldState): Record<string, number> {
+  return Object.fromEntries(pack.characters.map((character) => [
+    character.id,
+    worldState.characterStates[character.id]?.relationshipToUser ?? character.handout.initialRelationshipToUser,
+  ]));
+}
+
+function makeNarratorGateReport(gate: { status: string; violations: string[] }): BoundaryReport {
+  return {
+    corrected: gate.violations.length > 0,
+    violations: gate.violations.map((violation) => ({
+      layer: "narrator",
+      code: `runtime-${violation}`,
+      message: `Narrator runtime gate: ${violation}`,
+      action: gate.status === "approved" ? "removed" : "replaced",
+      path: "content",
+    })),
+  };
+}
+
+function makeCharacterGateReport(npcId: string, gate: BoundaryGateResult): BoundaryReport {
+  return {
+    corrected: gate.violations.length > 0,
+    violations: gate.violations.map((violation) => ({
+      layer: "character",
+      code: `runtime-${violation}`,
+      message: `Character runtime gate: ${violation}`,
+      action: gate.status === "approved" ? "removed" : "replaced",
+      path: "content",
+      characterId: npcId,
+    })),
+  };
+}
 
 function getConnection(
   connections: Record<string, ModelConnection>,
