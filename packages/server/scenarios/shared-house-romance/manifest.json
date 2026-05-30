@@ -1,0 +1,9 @@
+{
+  "id": "shared-house-romance",
+  "title": "늦은 봄의 셰어하우스",
+  "subtitle": "한 계절의 거리",
+  "genre": "romance",
+  "version": "1.0.0",
+  "engineVersion": ">=2.0.0",
+  "uiMode": "scene-first"
+}

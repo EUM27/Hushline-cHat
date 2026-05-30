@@ -1,0 +1,62 @@
+[
+  {
+    "id": "device-quiet-evening",
+    "type": "quiet_texture",
+    "trigger": { "conditionType": "always", "conditionValue": null },
+    "effect": {
+      "sceneBeat": "거실의 노란 스탠드만 켜진 늦은 저녁, 공기가 한결 느슨해진다. 평소보다 말이 천천히 오간다.",
+      "stateDelta": { "tension": 1 }
+    },
+    "oneShot": false,
+    "cooldown": 2,
+    "priority": 3
+  },
+  {
+    "id": "device-shared-chore",
+    "type": "social",
+    "trigger": { "conditionType": "turn_count", "conditionValue": 2 },
+    "effect": {
+      "sceneBeat": "설거지나 빨래 같은 사소한 집안일을 함께 하게 되면서, 어색하지만 자연스러운 거리가 만들어진다.",
+      "stateDelta": { "tension": 1 },
+      "npcReactions": [
+        { "npcId": "han-doyun", "reaction": "말없이 그릇을 건넨다" },
+        { "npcId": "seo-yujin", "reaction": "장난스럽게 말을 건다" }
+      ]
+    },
+    "oneShot": false,
+    "cooldown": 3,
+    "priority": 4
+  },
+  {
+    "id": "device-rooftop-air",
+    "type": "relational",
+    "trigger": { "conditionType": "state_threshold", "conditionValue": { "field": "tension", "operator": ">=", "value": 6 } },
+    "effect": {
+      "sceneBeat": "옥상에 올라서자 동네의 불빛이 펼쳐진다. 둘만 남은 공기 속에서 평소 못 하던 말이 떠오를 것 같다.",
+      "stateDelta": { "tension": 1 },
+      "npcReactions": [
+        { "npcId": "mer-ari", "reaction": "난간에 기대 먼 곳을 본다" }
+      ]
+    },
+    "oneShot": true,
+    "priority": 7
+  },
+  {
+    "id": "device-small-jealousy",
+    "type": "relational",
+    "trigger": { "conditionType": "state_threshold", "conditionValue": { "field": "tension", "operator": ">=", "value": 5 } },
+    "effect": {
+      "sceneBeat": "누군가의 다정한 한마디에, 곁에 있던 다른 사람의 표정이 아주 잠깐 흔들린다.",
+      "stateDelta": { "tension": 1 },
+      "npcReactions": [
+        { "npcId": "mer-ari", "reaction": "시선을 슬쩍 돌린다" }
+      ],
+      "relationshipChanges": [
+        { "sourceId": "mer-ari", "targetId": "seo-yujin", "descriptor": "envy", "intensityDelta": 1 }
+      ]
+    },
+    "oneShot": false,
+    "cooldown": 3,
+    "priority": 6
+  }
+]

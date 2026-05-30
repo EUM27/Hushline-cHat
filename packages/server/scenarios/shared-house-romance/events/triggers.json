@@ -1,0 +1,32 @@
+[
+  {
+    "id": "late-night-living-room",
+    "condition": "turnNumber >= 2 AND 유저가 거실에 늦게까지 머무름",
+    "description": "다른 사람들이 방으로 들어간 늦은 밤, 거실에 단둘만 남는다. 노란 스탠드 불빛 아래 평소보다 솔직한 말이 오갈 수 있다.",
+    "oneShot": false
+  },
+  {
+    "id": "kitchen-small-favor",
+    "condition": "turnNumber >= 1 AND 유저가 부엌에서 누군가와 마주침",
+    "description": "한도윤이 말없이 차를 한 잔 더 내려 두거나, 서유진이 아침을 챙기는 등 작은 호의가 오간다.",
+    "oneShot": false
+  },
+  {
+    "id": "small-misunderstanding",
+    "condition": "tension >= 5",
+    "description": "사소한 말 한마디가 엇갈려 작은 오해가 생긴다. 누군가 말수가 줄거나 자리를 피한다.",
+    "oneShot": true
+  },
+  {
+    "id": "rooftop-confession-chance",
+    "condition": "tension >= 6 AND 유저와 한 인물의 호감이 충분히 쌓임",
+    "description": "옥상에서 동네 야경을 보며 둘만의 시간이 생긴다. 평소 못 하던 말을 꺼낼 기회가 열린다.",
+    "oneShot": true
+  },
+  {
+    "id": "rivalry-surfaces",
+    "condition": "유저가 한 인물에게 눈에 띄게 가까워짐",
+    "description": "유저가 한 사람과 가까워지자, 다른 사람의 의식이나 부러움이 작은 행동으로 새어 나온다.",
+    "oneShot": true
+  }
+]
