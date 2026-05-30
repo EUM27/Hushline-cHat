@@ -8,21 +8,12 @@
 import type {
   DirectorOutput,
   BoundaryReport,
-  GenerationModelSnapshot,
-  InputMode,
-  ModelConnection,
-  PublicContext,
   ScenarioPack,
   SessionStateV2,
   TurnMessage,
-  TurnOptionsV2,
   TurnResultV2,
   WorldState,
 } from "@hushline/shared";
-
-type TurnRuntimeOptionsV2 = TurnOptionsV2 & {
-  scenarioPack?: ScenarioPack;
-};
 
 import { classifyInput } from "./input-classifier.js";
 import { buildPublicContext, buildPrivateHandout, buildOmniscientContext } from "./context-builder.js";
@@ -39,7 +30,7 @@ import {
 import { enforceDirectorLaw } from "./director-law.js";
 import { buildStateLawSnapshot } from "./state-law.js";
 import { routeCaseInquiry } from "./case-inquiry-router.js";
-import { buildRevealPermissions, resolveCaseAnswerScope, summarizeCaseRuntimeBoundary } from "./case-scope-resolver.js";
+import { resolveCaseAnswerScope, summarizeCaseRuntimeBoundary } from "./case-scope-resolver.js";
 import { recordCaseClaims } from "./case-state.js";
 import { getAllCaseFacts, getHiddenTruthIds } from "./case-knowledge.js";
 import { detectContradictions, markPlayerNoticedContradiction } from "./contradiction-engine.js";
@@ -51,6 +42,17 @@ import { extractClaimFromApprovedDialogue } from "./claim-ledger.js";
 import { propagateKnowledgeFromTurn } from "./knowledge-propagation.js";
 import { buildSceneStateSnapshot } from "./scene-state-snapshot.js";
 import { updateAmbiguityZone } from "./ambiguity-zone.js";
+import { attachCaseRuntimeToDirectorOutput, buildContradictionPlan } from "./director-pipeline.js";
+import { buildNarratorInstruction } from "./narrator-pipeline.js";
+import {
+  getAllowedBackgroundIds,
+  getConnection,
+  snapshotGenerationModel,
+  type TurnRuntimeOptionsV2,
+} from "./runtime-options.js";
+import { reconstructPack } from "./session-helpers.js";
+import { buildSystemMessageContent, composeSceneMessages } from "./turn-messages.js";
+import { hasUserIntroducedName } from "./user-identity.js";
 
 /**
  * Run a complete turn through the v2 pipeline.
@@ -79,9 +81,16 @@ export async function runTurnV2(
   const parsedUserContent = parseBackgroundTags(classifiedUserContent, allowedBackgroundIds);
   const userContent = parsedUserContent.content || classifiedUserContent;
   let taggedBackgroundId = parsedUserContent.backgroundId;
+  const userNameIntroduced = hasUserIntroducedName(session.messages, session.persona.name, userContent);
 
   // ── Step 2: Context Assembly ──
-  const publicContext = buildPublicContext(session.worldState, session.messages, pack);
+  const publicContext = buildPublicContext(
+    session.worldState,
+    session.messages,
+    pack,
+    session.persona.name,
+    userNameIntroduced,
+  );
   const omniscientContext = buildOmniscientContext(session.worldState, session.characters, pack);
   const caseInquiry = routeCaseInquiry(userContent, pack);
   const caseFacts = getAllCaseFacts(pack.caseKnowledge);
@@ -154,11 +163,7 @@ export async function runTurnV2(
   );
   directorOutput = {
     ...directorOutput,
-    contradictionPlan: {
-      contradictionIds: contradictionsWithPlayerNotice.map((contradiction) => contradiction.id),
-      pressureByNpc: buildPressureByNpc(contradictionsWithPlayerNotice),
-      allowedReactionByNpc: buildAllowedReactionByNpc(contradictionsWithPlayerNotice),
-    },
+    contradictionPlan: buildContradictionPlan(contradictionsWithPlayerNotice),
     ...(deductionAttempt
       ? {
           deductionPlan: {
@@ -252,6 +257,9 @@ export async function runTurnV2(
       const characterGate = validateCharacterDraft({
         draft: characterBoundary.content || result.content,
         npcId: result.characterId,
+        userInput: userContent,
+        userPersonaName: session.persona.name,
+        userNameIntroduced,
         allowedFactIds: [
           ...caseAnswerScope.publicFactIds,
           ...caseAnswerScope.observableFactIds,
@@ -514,84 +522,6 @@ export async function runTurnV2(
   };
 }
 
-function attachCaseRuntimeToDirectorOutput(
-  directorOutput: DirectorOutput,
-  inquiry: ReturnType<typeof routeCaseInquiry>,
-  answerScope: ReturnType<typeof resolveCaseAnswerScope>,
-): DirectorOutput {
-  if (!inquiry.isCaseInquiry) {
-    return directorOutput;
-  }
-  const revealPermissions = buildRevealPermissions(answerScope);
-  return {
-    ...directorOutput,
-    inquiry: directorOutput.inquiry ?? inquiry,
-    answerScope: directorOutput.answerScope ?? answerScope,
-    revealPermissions: {
-      ...revealPermissions,
-      ...(directorOutput.revealPermissions ?? {}),
-    },
-    caseDebug: directorOutput.caseDebug ?? {
-      selectedSpeakerReason: answerScope.recommendedSpeakerIds.length
-        ? "case scope recommended speaker from testimony/target resolution"
-        : "director/default speaker selection",
-      blockedReasonSummary: answerScope.blockedTruthIds.map((truthId) => `${truthId}: hidden truth locked`),
-      truthLeakRisk: inquiry.truthLeakRisk,
-    },
-  };
-}
-
-function composeSceneMessages(
-  directorOutput: DirectorOutput,
-  narratorMessage: TurnMessage | null,
-  characterMessages: TurnMessage[],
-  systemMessage: TurnMessage | null,
-): TurnMessage[] {
-  const plan = directorOutput.messagePlan;
-  if (!plan || plan.length === 0) {
-    return [
-      ...(narratorMessage ? [narratorMessage] : []),
-      ...characterMessages,
-      ...(systemMessage ? [systemMessage] : []),
-    ];
-  }
-
-  const result: TurnMessage[] = [];
-  const remainingCharacters = new Map(characterMessages.map((message) => [message.characterId, message]));
-  let narratorUsed = false;
-  let systemUsed = false;
-
-  for (const item of plan) {
-    if (item.kind === "narrator" && narratorMessage && !narratorUsed) {
-      result.push(narratorMessage);
-      narratorUsed = true;
-      continue;
-    }
-    if (item.kind === "system" && systemMessage && !systemUsed) {
-      result.push(systemMessage);
-      systemUsed = true;
-      continue;
-    }
-    if (item.kind === "character" && item.speakerId) {
-      const message = remainingCharacters.get(item.speakerId);
-      if (message) {
-        result.push(message);
-        remainingCharacters.delete(item.speakerId);
-      }
-    }
-  }
-
-  if (result.length === 0) {
-    return [
-      ...(narratorMessage ? [narratorMessage] : []),
-      ...characterMessages,
-      ...(systemMessage ? [systemMessage] : []),
-    ];
-  }
-
-  return result;
-}
-
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
@@ -604,33 +534,6 @@ function isContradictionRecord(value: unknown): value is import("@hushline/share
     && "claimAId" in value
     && "conflictType" in value,
   );
-}
-
-function buildPressureByNpc(
-  contradictions: import("@hushline/shared").ContradictionRecord[],
-): Record<string, 0 | 1 | 2 | 3> {
-  const pressureByNpc: Record<string, 0 | 1 | 2 | 3> = {};
-  for (const contradiction of contradictions) {
-    for (const npcId of contradiction.involvedNpcIds) {
-      const reaction = contradiction.npcReaction[npcId];
-      const pressure = reaction?.pressureLevel ?? (contradiction.playerNoticed ? 1 : 0);
-      pressureByNpc[npcId] = Math.max(pressureByNpc[npcId] ?? 0, pressure) as 0 | 1 | 2 | 3;
-    }
-  }
-  return pressureByNpc;
-}
-
-function buildAllowedReactionByNpc(
-  contradictions: import("@hushline/shared").ContradictionRecord[],
-): Record<string, "deflect" | "doubled_down" | "cracked" | "explained_away" | "silence"> {
-  const reactions: Record<string, "deflect" | "doubled_down" | "cracked" | "explained_away" | "silence"> = {};
-  for (const contradiction of contradictions) {
-    for (const npcId of contradiction.involvedNpcIds) {
-      const pressure = contradiction.npcReaction[npcId]?.pressureLevel ?? (contradiction.playerNoticed ? 1 : 0);
-      reactions[npcId] = pressure >= 3 ? "cracked" : pressure >= 2 ? "doubled_down" : "deflect";
-    }
-  }
-  return reactions;
 }
 
 function getPresentNpcIds(pack: ScenarioPack, speakerIds: string[]): string[] {
@@ -694,160 +597,5 @@ function makeCharacterGateReport(npcId: string, gate: BoundaryGateResult): Bound
       path: "content",
       characterId: npcId,
     })),
-  };
-}
-
-function getConnection(
-  connections: Record<string, ModelConnection>,
-  slot: string,
-): ModelConnection | undefined {
-  return connections[slot] ?? connections.default;
-}
-
-function snapshotGenerationModel(connection: ModelConnection | undefined): GenerationModelSnapshot | undefined {
-  if (!connection?.model) {
-    return undefined;
-  }
-
-  return {
-    providerId: connection.providerId,
-    model: connection.model,
-  };
-}
-
-function getAllowedBackgroundIds(pack: ScenarioPack, worldState: WorldState): string[] {
-  const ids = pack.scenarioCard.backgroundIds.length > 0
-    ? pack.scenarioCard.backgroundIds
-    : [worldState.backgroundId];
-  return [...new Set(ids.filter(Boolean))];
-}
-
-function buildNarratorInstruction(
-  directorOutput: DirectorOutput,
-  inputMode: InputMode,
-  publicContext: PublicContext,
-  pack: ScenarioPack,
-): string | null {
-  if (directorOutput.narratorInstruction) {
-    return directorOutput.narratorInstruction;
-  }
-
-  if (directorOutput.event) {
-    return `다음 장면 사건을 캐릭터 대사 없이 감각적 장면 서술 1~2문장으로 보여준다: ${directorOutput.event}`;
-  }
-
-  if (inputMode === "action") {
-    return null;
-  }
-
-  if (!shouldCreateSceneNarration(publicContext, pack)) {
-    return null;
-  }
-
-  return [
-    "현재 장면에서 유저 입력 직후의 공간, 분위기, 인물들의 비언어적 반응을 1~2문장으로 묘사한다.",
-    "캐릭터 대사는 쓰지 말고, 새 단서나 외부 사건을 만들지 말며, 현재 위치와 직전 입력에 붙인다.",
-  ].join(" ");
-}
-
-function shouldCreateSceneNarration(publicContext: PublicContext, pack: ScenarioPack): boolean {
-  if (pack.manifest.uiMode === "scene-first") {
-    return true;
-  }
-
-  if (pack.manifest.uiMode === "messenger-first" && publicContext.sceneMode === "messenger") {
-    return false;
-  }
-
-  return publicContext.sceneMode !== "messenger";
-}
-
-function buildSystemMessageContent(directorOutput: DirectorOutput): string | null {
-  const lines: string[] = [];
-
-  const stateChanges = formatStateDelta(directorOutput.stateDelta);
-  if (stateChanges.length > 0) {
-    lines.push(`상태 변화: ${stateChanges.join(", ")}`);
-  }
-
-  if (directorOutput.subObjectiveUpdate) {
-    const objective = directorOutput.subObjectiveUpdate.description ?? directorOutput.subObjectiveUpdate.id ?? "목표";
-    lines.push(`목표 ${directorOutput.subObjectiveUpdate.action}: ${objective}`);
-  }
-
-  if (directorOutput.relationshipUpdate) {
-    lines.push(
-      `관계 변화: ${directorOutput.relationshipUpdate.sourceId} → ${directorOutput.relationshipUpdate.targetId} `
-      + `${directorOutput.relationshipUpdate.descriptor} (${directorOutput.relationshipUpdate.intensityDelta >= 0 ? "+" : ""}${directorOutput.relationshipUpdate.intensityDelta})`,
-    );
-  }
-
-  if (directorOutput.directives.length > 0) {
-    lines.push(`연출: ${directorOutput.directives.map((directive) => directive.effect).join(", ")}`);
-  }
-
-  return lines.length > 0 ? lines.join("\n") : null;
-}
-
-function formatStateDelta(delta: DirectorOutput["stateDelta"]): string[] {
-  const changes: string[] = [];
-  if (typeof delta.tension === "number" && delta.tension !== 0) {
-    changes.push(`긴장 ${delta.tension > 0 ? "+" : ""}${delta.tension}`);
-  }
-  if (typeof delta.danger === "number" && delta.danger !== 0) {
-    changes.push(`위험 ${delta.danger > 0 ? "+" : ""}${delta.danger}`);
-  }
-  if (delta.locationId) {
-    changes.push(`위치 ${delta.locationId}`);
-  }
-  if (delta.backgroundId) {
-    changes.push(`배경 ${delta.backgroundId}`);
-  }
-  if (delta.sceneMode) {
-    changes.push(`모드 ${delta.sceneMode}`);
-  }
-  return changes;
-}
-
-/**
- * Reconstruct a minimal ScenarioPack from session data.
- * In production this would load from disk; here we reconstruct from persisted session.
- */
-function reconstructPack(session: SessionStateV2): ScenarioPack {
-  // The session stores characters and worldState but not the full pack prompts.
-  // For now, return a minimal pack. The full implementation will cache loaded packs.
-  return {
-    manifest: {
-      id: session.scenarioPackId,
-      title: session.title,
-      subtitle: "",
-      genre: "horror", // TODO: persist genre in session
-      version: "1.0.0",
-      engineVersion: ">=2.0.0",
-    },
-    scenarioCard: {
-      id: session.scenarioPackId,
-      title: session.title,
-      subtitle: "",
-      description: "",
-      spaceRules: [],
-      chatRules: [],
-      toneRules: [],
-      hardNos: [],
-      backgroundIds: [],
-      initialLocationId: session.worldState.locationId,
-      initialBackgroundId: session.worldState.backgroundId,
-      initialSceneMode: "messenger",
-      interventionPrompt: "",
-      openingBeats: [],
-    },
-    characters: session.characters,
-    directorPrompt: "", // Will be loaded from pack cache
-    narratorPrompt: "",
-    mainObjective: {
-      id: session.worldState.mainObjective.id,
-      description: session.worldState.mainObjective.description,
-    },
-    eventTriggers: [],
   };
 }

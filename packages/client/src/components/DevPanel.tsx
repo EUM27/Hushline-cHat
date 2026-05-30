@@ -17,9 +17,7 @@ export function DevPanel({
   stateLaw?: StateLawSnapshot | null;
   caseRuntime?: CaseRuntimeTrace | null;
 }) {
-  // v2 세션이면 worldState/handouts가 있음
-  const worldState = (session as any).worldState;
-  const handouts = (session as any).handouts;
+  const { worldState, handouts } = session;
   const scene = session.scene;
 
   return (
@@ -82,7 +80,7 @@ export function DevPanel({
           {worldState?.subObjectives?.length > 0 && (
             <section className="dev-section">
               <h4>Sub-Objectives</h4>
-              {worldState.subObjectives.map((obj: any) => (
+              {worldState.subObjectives.map((obj) => (
                 <p key={obj.id} className="dev-sub-obj">
                   <span className={`dev-status ${obj.status}`}>{obj.status}</span> {obj.description}
                 </p>
@@ -93,7 +91,7 @@ export function DevPanel({
           {handouts && (
             <section className="dev-section">
               <h4>Handouts</h4>
-              {Object.entries(handouts).map(([charId, handout]: [string, any]) => (
+              {Object.entries(handouts).map(([charId, handout]) => (
                 <details key={charId} className="dev-handout">
                   <summary>{charId}</summary>
                   <div className="dev-handout-content">
@@ -114,8 +112,8 @@ export function DevPanel({
           {worldState?.relationshipGraph?.length > 0 && (
             <section className="dev-section">
               <h4>Relationship Graph</h4>
-              {worldState.relationshipGraph.map((edge: any, i: number) => (
-                <p key={i} className="dev-edge">
+              {worldState.relationshipGraph.map((edge, index) => (
+                <p key={`${edge.sourceId}-${edge.targetId}-${index}`} className="dev-edge">
                   {edge.sourceId} → {edge.targetId}: <strong>{edge.descriptor}</strong> ({edge.intensity}/10)
                 </p>
               ))}
@@ -125,7 +123,7 @@ export function DevPanel({
           {worldState?.characterStates && (
             <section className="dev-section">
               <h4>Character States</h4>
-              {Object.entries(worldState.characterStates).map(([id, state]: [string, any]) => (
+              {Object.entries(worldState.characterStates).map(([id, state]) => (
                 <div key={id} className="dev-char-state">
                   <strong>{id}</strong>
                   <span>목표: {state.currentObjective}</span>
@@ -140,7 +138,7 @@ export function DevPanel({
           {worldState?.recentEvents?.length > 0 && (
             <section className="dev-section">
               <h4>Recent Events</h4>
-              {worldState.recentEvents.slice(-5).map((evt: any) => (
+              {worldState.recentEvents.slice(-5).map((evt) => (
                 <p key={evt.id} className="dev-event">T{evt.turnNumber}: {evt.description}</p>
               ))}
             </section>

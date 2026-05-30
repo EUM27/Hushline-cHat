@@ -1,0 +1,87 @@
+/* ── 16. Responsive ── */
+
+@media (max-width: 980px) {
+  body { overflow: auto; }
+  .app-shell {
+    min-height: 100svh;
+    height: auto;
+    overflow: visible;
+  }
+  .scene-open.app-shell {
+    height: 100svh;
+    overflow: hidden;
+  }
+.stage-layout { grid-template-columns: 1fr; height: auto; min-height: 100svh; padding: var(--space-4); }
+  .scenario-card { grid-column: 1; order: 1; }
+  .scenario-card h1 { font-size: clamp(2.5rem, 12vw, 4rem); }
+  .scenario-shell {
+    grid-column: 1;
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    order: 2;
+  }
+  .chat-frame { grid-column: 1; order: 3; min-height: 60vh; }
+  .connection-drawer .connection-panel {
+    width: calc(100vi - (var(--space-2) * 2));
+    height: calc(100svh - (var(--space-2) * 2));
+    margin: var(--space-2);
+    grid-template-columns: 1fr;
+  }
+  .scene-open .stage-layout { height: 100svh; min-height: 100svh; overflow: hidden; padding: var(--space-2); }
+  .scene-open .scenario-card { display: none; }
+  .scene-open .scenario-shell { grid-template-columns: minmax(0, 1fr); height: calc(100svh - (var(--space-2) * 2)); overflow: hidden; }
+  .messenger-open .stage-layout,
+  .invitation-open .stage-layout { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .persona-panel, .advisor-panel { grid-column: 1; }
+}
+
+@media (max-width: 560px) {
+  .stage-layout { padding: var(--space-2); }
+  .chat-frame { min-height: calc(100svh - (var(--space-2) * 2)); border-radius: var(--radius-lg); }
+  .scene-open .scenario-card { display: none; }
+  .composer { grid-template-columns: 1fr auto; }
+  .input-mode-btn { min-height: calc(var(--space-5) - var(--space-1)); padding: 0 var(--space-2); }
+  .app-tool-strip.floating {
+    top: var(--space-3);
+    right: var(--space-3);
+  }
+}
+
+
+@media (max-width: 980px) {
+  .scenario-shell.vn-split-skin {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    overflow: visible;
+  }
+
+  .phone-panel,
+  .vn-stage-panel {
+    grid-column: 1;
+  }
+
+  .vn-visual-area {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+@media (max-width: 560px) {
+  .vn-system-bar,
+  .vn-system-actions,
+  .vn-input-bar,
+  .vn-reply-shell {
+    flex-wrap: wrap;
+  }
+
+  .vn-command-dock {
+    padding: 0 var(--space-3) var(--space-3);
+  }
+
+  .vn-dialogue-main {
+    padding: var(--space-5);
+  }
+
+  .vn-dialogue-text {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

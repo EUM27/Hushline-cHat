@@ -1,5 +1,6 @@
 import type { CaseFact, Claim, ClaimId, FactId, NpcId } from "@hushline/shared";
 import { extractClaimFromApprovedDialogue } from "./claim-ledger.js";
+import { containsUnintroducedUserName, maskUnintroducedUserName } from "./user-identity.js";
 
 export type BoundaryViolation =
   | "embedded_narration"
@@ -11,6 +12,8 @@ export type BoundaryViolation =
   | "hidden_truth_leak"
   | "reveal_budget_exceeded"
   | "claim_contradiction_unhandled"
+  | "unsupported_user_proposal"
+  | "unintroduced_user_name"
   | "format_violation";
 
 export interface BoundaryGateResult {
@@ -29,6 +32,9 @@ export function validateCharacterDraft(input: {
   knownClaimIds: ClaimId[];
   caseFacts: CaseFact[];
   currentTurn: number;
+  userInput?: string;
+  userPersonaName?: string;
+  userNameIntroduced?: boolean;
 }): BoundaryGateResult {
   const violations: BoundaryViolation[] = [];
   const draft = input.draft.trim();
@@ -48,6 +54,12 @@ export function validateCharacterDraft(input: {
   if (hasUserAgencyViolation(draft)) {
     violations.push("user_agency_violation");
   }
+  if (hasUnsupportedUserProposalAttribution(draft, input.userInput)) {
+    violations.push("unsupported_user_proposal");
+  }
+  if (containsUnintroducedUserName(draft, input.userPersonaName, input.userNameIntroduced ?? false)) {
+    violations.push("unintroduced_user_name");
+  }
   if (mentionsHiddenTruth(draft, input.hiddenTruthIds, input.caseFacts)) {
     violations.push("hidden_truth_leak");
   }
@@ -59,6 +71,20 @@ export function validateCharacterDraft(input: {
     return {
       status: "replace_with_deflection",
       finalText: "그건... 지금 말할 수 없습니다.",
+      violations,
+    };
+  }
+  if (violations.includes("unsupported_user_proposal")) {
+    return {
+      status: "replace_with_deflection",
+      finalText: "\"...지금은 그렇게 단정하지 말자.\"",
+      violations,
+    };
+  }
+  if (violations.includes("unintroduced_user_name")) {
+    return {
+      status: "replace_with_deflection",
+      finalText: maskUnintroducedUserName(draft, input.userPersonaName, false, "당신"),
       violations,
     };
   }
@@ -106,6 +132,45 @@ function hasForeignActorPattern(text: string, npcId: string): boolean {
 
 function hasUserAgencyViolation(text: string): boolean {
   return /(당신|유저|\{\{user\}\}|\{\{유저\}\})\s*(은|는|이|가)?[^.!?\n]*(생각|확신|말했|대답했|움직|집어|고개|웃었|울었)/i.test(text);
+}
+
+function hasUnsupportedUserProposalAttribution(text: string, userInput: string | undefined): boolean {
+  if (!userInput) return false;
+  const compactDraft = normalize(text);
+  if (!mentionsExitProposalAttribution(compactDraft)) {
+    return false;
+  }
+  return !mentionsExitProposal(normalize(userInput));
+}
+
+function mentionsExitProposalAttribution(compactText: string): boolean {
+  return [
+    "나가자는말",
+    "나가자는건",
+    "나가자고",
+    "나가려는거",
+    "나갈생각",
+    "밖에나가자는",
+    "밖으로나가자는",
+    "하산하자는",
+    "내려가자는",
+  ].some((marker) => compactText.includes(marker));
+}
+
+function mentionsExitProposal(compactText: string): boolean {
+  return [
+    "나가자",
+    "나가도",
+    "나갈까요",
+    "나갑시다",
+    "나가려고",
+    "나가야",
+    "밖에나가",
+    "밖으로나가",
+    "하산하자",
+    "내려가자",
+    "산을내려",
+  ].some((marker) => compactText.includes(marker));
 }
 
 function mentionsHiddenTruth(text: string, hiddenTruthIds: FactId[], facts: CaseFact[]): boolean {

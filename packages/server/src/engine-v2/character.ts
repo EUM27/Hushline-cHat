@@ -25,6 +25,7 @@ import {
   assertNoSolutionGraph,
   buildCharacterChatContext,
 } from "./context-builder.js";
+import { hasUserIntroducedName, isPlaceholderPersonaName, normalizePersonaName } from "./user-identity.js";
 
 export interface CharacterInvocationResult {
   characterId: string;
@@ -57,10 +58,11 @@ export async function invokeCharacter(
     };
   }
 
+  const userNameIntroduced = hasUserIntroducedName(messages, personaName, userInput);
   const systemPrompt = buildCharacterSystemPrompt(
-    character, handout, directorIntent, inputMode, publicContext, pack, personaName, answerScope,
+    character, handout, directorIntent, inputMode, publicContext, pack, personaName, userNameIntroduced, answerScope,
   );
-  const chatContext = buildCharacterChatContext(messages, character.id, personaName);
+  const chatContext = buildCharacterChatContext(messages, character.id, personaName, userNameIntroduced);
   const contextMessages = [
     ...chatContext.map((entry) => `${entry.label}: ${entry.content}`),
     `{{user}}: ${userInput}`,
@@ -113,6 +115,7 @@ function buildCharacterSystemPrompt(
   publicContext: PublicContext,
   pack: ScenarioPack,
   personaName: string,
+  userNameIntroduced: boolean,
   answerScope?: CaseAnswerScope,
 ): string {
   const displayName = character.anonymousLabel ?? character.name;
@@ -132,7 +135,8 @@ function buildCharacterSystemPrompt(
     "",
     "[사용자/플레이어]",
     "{{user}}는 사용자/플레이어다.",
-    personaName && personaName !== "{{user}}" ? `현재 사용자 표시명: ${personaName}` : "",
+    "사용자 표시명은 시스템/UI용 메타 정보다.",
+    ...formatUserNameVisibility(personaName, userNameIntroduced),
     "사용자와 모든 캐릭터는 서로 다른 인물이다.",
     "",
     "[그룹 인물 목록]",
@@ -143,7 +147,7 @@ function buildCharacterSystemPrompt(
     "[Conversation Target]",
     conversationTarget ? `이번 턴 입력의 수신자: ${conversationTarget}` : "이번 턴 입력의 수신자: (명시 없음)",
     "수신자가 특정 인물이라면 그 인물에게 답하듯 반응한다. 명시가 없으면 유저에게 답한다.",
-    "'너' 같은 모호한 2인칭을 남발하지 말고, 필요하면 이름으로 대상을 명확히 한다.",
+    "'너' 같은 모호한 2인칭을 남발하지 말고, 필요하면 이름으로 대상을 명확히 한다. 단, 사용자 이름은 공개 소개된 경우에만 쓴다.",
     "",
     "[Actor Contract]",
     `너는 오직 ${displayName}만 연기한다.`,
@@ -155,6 +159,8 @@ function buildCharacterSystemPrompt(
     "Output NEVER narration, stage directions, body actions, facial expressions outside spoken dialogue, other character actions, other character dialogue, user actions, user thoughts, speaker labels, bracketed roleplay text, unauthorized case facts, or hidden truth implications.",
     "사용자 입력에는 대사와 행동 지문이 섞일 수 있다.",
     "그 형식을 따라 하지 않는다.",
+    "사용자가 하지 않은 제안, 의도, 결정, 행동을 전제로 반응하지 않는다.",
+    "\"갇혀 있다\"는 말을 \"나가자\"는 제안으로 바꾸지 않는다.",
     "최종 출력은 \"실제 발화\" 또는 '짧은 내면 반응'만 쓴다.",
     "실제 입 밖으로 말한 대사는 반드시 큰따옴표로 감싼다: \"대사\".",
     "입 밖으로 말하지 않은 생각은 반드시 작은따옴표로 감싼다: '생각'.",
@@ -219,6 +225,30 @@ function buildCharacterSystemPrompt(
   ];
 
   return sections.filter(Boolean).join("\n");
+}
+
+function formatUserNameVisibility(personaName: string, userNameIntroduced: boolean): string[] {
+  if (isPlaceholderPersonaName(personaName)) {
+    return [
+      "사용자 표시명(메타/UI): (없음)",
+      "장면 내 사용자 이름 공개 상태: 미소개",
+      "이름이 공개되기 전에는 이름 대신 '당신', '그쪽', 상황에 맞는 호칭을 쓴다.",
+    ];
+  }
+
+  const normalizedName = normalizePersonaName(personaName);
+  if (userNameIntroduced) {
+    return [
+      `사용자 표시명(메타/UI): ${normalizedName}`,
+      `장면 내 사용자 이름 공개 상태: 공개됨. 이 캐릭터는 ${normalizedName}이라는 이름을 들어 알고 있다.`,
+    ];
+  }
+
+  return [
+    `사용자 표시명(메타/UI): ${normalizedName}`,
+    `장면 내 사용자 이름 공개 상태: 미소개. 이 캐릭터는 ${normalizedName}이라는 이름을 아직 소개받지 않았다.`,
+    `미소개 상태에서는 ${normalizedName}을 발화에 쓰지 않는다. 이름 대신 '당신', '그쪽', 상황에 맞는 호칭을 쓴다.`,
+  ];
 }
 
 function formatAnswerScopeForCharacter(characterId: string, answerScope: CaseAnswerScope | undefined): string[] {

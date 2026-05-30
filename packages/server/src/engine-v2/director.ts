@@ -43,7 +43,7 @@ export async function invokeDirector(
   const characterIds = pack.characters.map((c) => c.id);
 
   if (!isConnectionReady(connection)) {
-    const fallback = getFallbackDirectorOutput(characterIds, worldState.recentSpeakerIds);
+    const fallback = getFallbackDirectorOutput(characterIds, worldState.recentSpeakerIds, userInput);
     return {
       output: normalizeDirectorOutput(fallback, pack.characters, worldState, userInput),
       source: "fallback",
@@ -68,7 +68,7 @@ export async function invokeDirector(
       })),
     });
   } catch (reason: unknown) {
-    const fallback = getFallbackDirectorOutput(characterIds, worldState.recentSpeakerIds);
+    const fallback = getFallbackDirectorOutput(characterIds, worldState.recentSpeakerIds, userInput);
     return {
       output: normalizeDirectorOutput(fallback, pack.characters, worldState, userInput),
       source: "fallback",
@@ -78,7 +78,7 @@ export async function invokeDirector(
 
   const validated = validateDirectorOutput(raw);
   if (!validated) {
-    const fallback = getFallbackDirectorOutput(characterIds, worldState.recentSpeakerIds);
+    const fallback = getFallbackDirectorOutput(characterIds, worldState.recentSpeakerIds, userInput);
     return {
       output: normalizeDirectorOutput(fallback, pack.characters, worldState, userInput),
       source: "fallback",
@@ -301,16 +301,26 @@ export function normalizeDirectorOutput(
   let speakers = uniqueSpeakers;
   const explicitTargets = findExplicitTargets(userInput, characters);
   const groupAddressed = isGroupAddressed(userInput);
+  const implicitReplyTarget = explicitTargets.size === 0
+    && !groupAddressed
+    ? findImplicitReplyTarget(userInput, worldState.recentSpeakerIds, characterIds)
+    : undefined;
+  const targetSpeakers = explicitTargets.size > 0
+    ? explicitTargets
+    : new Set(implicitReplyTarget ? [implicitReplyTarget] : []);
   if (speakers.length === 0) {
-    const fallback = pickLeastRecentCharacter(characterIds, worldState.recentSpeakerIds);
+    const fallback = implicitReplyTarget ?? pickLeastRecentCharacter(characterIds, worldState.recentSpeakerIds);
     speakers = fallback ? [fallback] : [];
+  }
+  if (targetSpeakers.size > 0) {
+    speakers = prioritizeTargetSpeakers(speakers, targetSpeakers, characterIds).slice(0, 2);
   }
 
   const primarySpeaker = speakers[0];
   if (
     primarySpeaker
     && speakers.length === 1
-    && !explicitTargets.has(primarySpeaker)
+    && !targetSpeakers.has(primarySpeaker)
     && (groupAddressed || countConsecutiveRecentSpeaker(worldState.recentSpeakerIds, primarySpeaker) >= 2)
   ) {
     const diversitySpeaker = pickDiversitySpeaker(characters, speakers, worldState);
@@ -322,7 +332,9 @@ export function normalizeDirectorOutput(
   const characterIntents = { ...output.characterIntents };
   for (const speaker of speakers) {
     if (!characterIntents[speaker]) {
-      characterIntents[speaker] = speaker === primarySpeaker
+      characterIntents[speaker] = speaker === implicitReplyTarget
+        ? "직전 발화에 대한 유저의 직접 반응을 먼저 받는다. 방금 받은 말에 자기 성격과 이해관계대로 즉각 답한다."
+        : speaker === primarySpeaker
         ? "직전 입력에 짧게 반응하되, 현재 장소·시간·관계·감정과 자신의 목표에 맞는 태도로 반응한다."
         : "최근 말한 인물과 다른 관점에서, 현재 장소·시간·관계·감정과 자신의 이해관계에 맞게 각자 다른 방식으로 짧게 반응한다.";
     }
@@ -356,6 +368,25 @@ function normalizeMessagePlan(
     }
     return hasSystemMessage(output);
   });
+  const plannedSpeakers = new Set(normalized
+    .filter((item) => item.kind === "character" && item.speakerId)
+    .map((item) => item.speakerId!));
+  const missingSpeakers = speakers
+    .filter((speakerId) => !plannedSpeakers.has(speakerId))
+    .map((speakerId) => ({ kind: "character" as const, speakerId }));
+  if (missingSpeakers.length > 0) {
+    const firstCharacterIndex = normalized.findIndex((item) => item.kind === "character");
+    if (firstCharacterIndex >= 0) {
+      normalized.splice(firstCharacterIndex, 0, ...missingSpeakers);
+    } else {
+      const firstSystemIndex = normalized.findIndex((item) => item.kind === "system");
+      if (firstSystemIndex >= 0) {
+        normalized.splice(firstSystemIndex, 0, ...missingSpeakers);
+      } else {
+        normalized.push(...missingSpeakers);
+      }
+    }
+  }
 
   return normalized.length > 0 ? normalized : undefined;
 }
@@ -383,6 +414,47 @@ function findExplicitTargets(userInput: string, characters: CharacterDefinition[
   }
 
   return targets;
+}
+
+function findImplicitReplyTarget(
+  userInput: string,
+  recentSpeakerIds: string[],
+  characterIds: string[],
+): string | undefined {
+  const previousSpeaker = recentSpeakerIds[0];
+  if (!previousSpeaker || !characterIds.includes(previousSpeaker)) {
+    return undefined;
+  }
+  return looksLikeDirectReply(userInput) ? previousSpeaker : undefined;
+}
+
+function looksLikeDirectReply(userInput: string): boolean {
+  const normalizedInput = userInput
+    .replace(/[“”"']/g, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  if (!normalizedInput) return false;
+  return [
+    "뭐라고",
+    "뭔소리",
+    "무슨뜻",
+    "시비",
+    "방금",
+    "그말",
+    "말이",
+    "어쩌라고",
+    "너",
+    "당신",
+  ].some((marker) => normalizedInput.includes(marker));
+}
+
+function prioritizeTargetSpeakers(
+  speakers: string[],
+  targets: Set<string>,
+  characterIds: string[],
+): string[] {
+  const validTargets = [...targets].filter((id) => characterIds.includes(id));
+  return [...new Set([...validTargets, ...speakers])].filter((id) => characterIds.includes(id));
 }
 
 function isGroupAddressed(userInput: string): boolean {

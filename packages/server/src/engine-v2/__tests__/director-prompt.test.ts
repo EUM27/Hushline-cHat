@@ -105,6 +105,47 @@ describe("director prompt", () => {
     expect(normalized.speakers).toEqual(["ha-jinwoo", "cho-minseo"]);
     expect(normalized.characterIntents["cho-minseo"]).toContain("다른 관점");
   });
+
+  test("anchors direct replies to the previous speaker before allowing an interjection", () => {
+    const characters = [
+      minimalCharacter("kang-mujin"),
+      minimalCharacter("yoon-haeon"),
+      minimalCharacter("yoon-seha"),
+    ];
+    const normalized = normalizeDirectorOutput(
+      {
+        speakers: ["yoon-haeon"],
+        silence: false,
+        event: null,
+        narratorInstruction: null,
+        characterIntents: { "yoon-haeon": "불안하게 끼어든다." },
+        stateDelta: {},
+        subObjectiveUpdate: null,
+        relationshipUpdate: null,
+        directives: [],
+        delay: null,
+        messagePlan: [{ kind: "character", speakerId: "yoon-haeon" }],
+      },
+      characters,
+      {
+        ...minimalWorldState(),
+        characterStates: {
+          "kang-mujin": minimalCharacterState("kang-mujin", "거칠게 버틴다", 3, 0.7),
+          "yoon-haeon": minimalCharacterState("yoon-haeon", "불안해한다", 1, 0.6),
+          "yoon-seha": minimalCharacterState("yoon-seha", "논리로 버틴다", -1, 0.5),
+        },
+        recentSpeakerIds: ["kang-mujin"],
+      },
+      "\"뭐라고요? 왜 시빕니까.\"",
+    );
+
+    expect(normalized.speakers).toEqual(["kang-mujin", "yoon-haeon"]);
+    expect(normalized.characterIntents["kang-mujin"]).toContain("직전 발화에 대한 유저의 직접 반응");
+    expect(normalized.messagePlan).toEqual([
+      { kind: "character", speakerId: "kang-mujin" },
+      { kind: "character", speakerId: "yoon-haeon" },
+    ]);
+  });
 });
 
 function minimalPack(): ScenarioPack {

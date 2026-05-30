@@ -8,7 +8,7 @@ goal:
   slug: "codebase-audit-refactor"
   kind: open_ended
   tranche: "Run successive evidence-backed repo audit, safe refactor, verification, and improvement-mapping slices until the full original outcome is complete."
-  status: active
+  status: done
   intake:
     original_request: "전체 코드베이스에 대해 필요한 경우 전체 감사 및 리팩토링을 완료하고, 동시에 개선 및 확장을 위한 다양한 영역을 식별하세요"
     interpreted_outcome: "Audit the whole codebase, complete safe necessary refactors, and identify concrete improvement and expansion areas."
@@ -60,7 +60,7 @@ visual_board:
     command: "npx goalbuddy extend github-projects"
     missing: []
 
-active_task: T001
+active_task: null
 
 tasks:
   - id: T000
@@ -88,7 +88,7 @@ tasks:
   - id: T001
     type: scout
     assignee: Scout
-    status: active
+    status: done
     reasoning_hint: default
     objective: "Map repo purpose, architecture, package layout, local instructions, verification commands, and current dirty-file context."
     inputs:
@@ -106,11 +106,41 @@ tasks:
       - "Verification command inventory"
       - "Dirty-file context and risk notes"
       - "Candidate audit focus areas"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Mapped Hushline as a pnpm TypeScript workspace with React/Vite client, Hono/Bun server, and shared engine-v2 contracts. Current worktree already contains a broad behavior-preserving refactor: App.tsx, styles.css, app-v2.ts, shared engine-v2, hooks/components/styles/app-v2 modules, Director Law, and engine-v2 runtime changes are dirty or untracked."
+      evidence:
+        - "CODEX.md"
+        - "package.json"
+        - "packages/client/package.json"
+        - "packages/server/package.json"
+        - "packages/shared/package.json"
+        - "docs/superpowers/plans/2026-05-29-hushline-codebase-refactor.md"
+        - "git status --short"
+        - "git diff --stat"
+        - "packages/client/src/App.tsx"
+        - "packages/server/src/app-v2.ts"
+        - "packages/shared/src/engine-v2.ts"
+      verification_inventory:
+        - "corepack pnpm check"
+        - "corepack pnpm test"
+        - "corepack pnpm --filter @hushline/server test src/engine-v2"
+        - "corepack pnpm --filter @hushline/server test src/__tests__/api-v2.test.ts"
+        - "corepack pnpm --filter @hushline/client exec bun test tests"
+        - "corepack pnpm --filter @hushline/client build"
+      dirty_context:
+        - "No staged files."
+        - "No merge-conflict files."
+        - "Existing modified and untracked implementation files must be treated as user-owned until a bounded Worker task selects them."
+        - "Goal state dirty fingerprint was stale; current dirty status includes client extraction, CSS split, server app-v2 split, shared contract split, Director Law/state law, and engine-v2 runtime files."
+      candidate_focus_areas:
+        - "Audit whether the already-present refactor compiles and preserves API/client behavior."
+        - "Prioritize fixing verification failures over adding new refactor surface."
+        - "Review unsafe any casts in DevPanel and engine helpers as potential follow-up, not first slice unless checks point there."
   - id: T002
     type: scout
     assignee: Scout
-    status: queued
+    status: done
     reasoning_hint: default
     objective: "Audit code health and stability risks across source, tests, docs, and specs."
     inputs:
@@ -127,11 +157,32 @@ tasks:
       - "Missing or weak verification areas"
       - "Safe refactor candidates"
       - "Improvement and extension candidates"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Audited current refactor health. Full typecheck, server tests, client tests, client build, and diff whitespace check pass. The broad extraction already reduces App.tsx, styles.css, app-v2.ts, and shared engine-v2 into named modules. First narrow health risk found: DevPanel still uses any casts for v2 session internals even though ClientSessionState now exposes typed worldState and handouts."
+      evidence:
+        - "corepack pnpm check: pass"
+        - "corepack pnpm test: pass, 95 server tests"
+        - "corepack pnpm --filter @hushline/client exec bun test tests: pass, 31 client tests"
+        - "corepack pnpm --filter @hushline/client build: pass"
+        - "git diff --check: pass"
+        - "packages/client/src/components/DevPanel.tsx"
+        - "packages/shared/src/index.ts"
+        - "packages/shared/src/engine-v2/session.ts"
+      ranked_health_findings:
+        - "High confidence, low risk: remove DevPanel any casts and render typed worldState/handouts directly."
+        - "Medium risk: runtime visual smoke is still needed because CSS was split and build/tests do not prove no overlap."
+        - "Medium risk: large existing dirty diff needs final behavior-preserving diff review before completion."
+      safe_refactor_candidates:
+        - "Type DevPanel v2 session fields without changing UI copy or layout."
+        - "Run browser/runtime smoke after the typed cleanup."
+      improvement_candidates:
+        - "Add a follow-up visual smoke checklist receipt for setup, connection drawer, VN view, Director Law panel, and DevPanel."
+        - "Consider follow-up extraction for the remaining large visual-novel.css only after runtime smoke is green."
   - id: T003
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Choose the first safe implementation slice from Scout findings."
     inputs:
@@ -148,25 +199,59 @@ tasks:
       - "verify"
       - "stop_if"
       - "Deferred or blocked candidates"
-    receipt: null
+    receipt:
+      result: done
+      decision: "Execute the typed DevPanel cleanup first. It directly improves type safety in a newly extracted developer surface, stays inside one client component, and has strong verification coverage through client tests, client build, and workspace typecheck."
+      next_allowed_task: T004
+      worker_objective: "Remove any casts and any-typed map callbacks from DevPanel by using the typed ClientSessionState worldState and handouts fields."
+      allowed_files:
+        - "packages/client/src/components/DevPanel.tsx"
+      verify:
+        - "corepack pnpm --filter @hushline/client check"
+        - "corepack pnpm --filter @hushline/client exec bun test tests/ui-helpers.test.ts tests/director-law-panel.test.ts"
+        - "corepack pnpm check"
+      stop_if:
+        - "Need files outside packages/client/src/components/DevPanel.tsx."
+        - "Typed cleanup changes visible copy, layout classes, provider hierarchy, or player-facing UI."
+        - "Verification fails twice with the same normalized signature."
+      deferred_candidates:
+        - "Runtime browser smoke for the CSS/UI extraction after this typed cleanup."
+        - "Final behavior-preserving diff review for the broad existing refactor."
   - id: T004
     type: worker
     assignee: Worker
-    status: queued
+    status: done
     reasoning_hint: default
-    objective: "Execute the first safe implementation task selected by Judge."
-    allowed_files: []
-    verify: []
+    objective: "Remove any casts and any-typed map callbacks from DevPanel by using the typed ClientSessionState worldState and handouts fields."
+    allowed_files:
+      - "packages/client/src/components/DevPanel.tsx"
+    verify:
+      - "corepack pnpm --filter @hushline/client check"
+      - "corepack pnpm --filter @hushline/client exec bun test tests/ui-helpers.test.ts tests/director-law-panel.test.ts"
+      - "corepack pnpm check"
     stop_if:
       - "Need files outside allowed_files."
       - "Behavior is ambiguous."
       - "Dirty user-owned file needs modification but was not explicitly selected by Judge."
       - "Verification fails twice with the same normalized signature."
-    receipt: null
+    receipt:
+      result: done
+      changed_files:
+        - "packages/client/src/components/DevPanel.tsx"
+      commands:
+        - cmd: "corepack pnpm --filter @hushline/client check"
+          status: pass
+        - cmd: "corepack pnpm --filter @hushline/client exec bun test tests/ui-helpers.test.ts tests/director-law-panel.test.ts"
+          status: pass
+        - cmd: "rg -n \"as any|: any|\\bany\\b\" packages\\client\\src\\components\\DevPanel.tsx"
+          status: pass
+        - cmd: "corepack pnpm check"
+          status: pass
+      summary: "DevPanel now reads typed ClientSessionState worldState and handouts directly and no longer uses any casts or any-typed callbacks. Visible copy, class names, provider hierarchy, and player-facing UI were unchanged."
   - id: T005
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Audit the completed implementation slice and decide whether to continue with another safe slice."
     inputs:
@@ -183,11 +268,93 @@ tasks:
       - "full_outcome_complete: true | false"
       - "missing evidence"
       - "next Worker or Scout task if not complete"
-    receipt: null
+    receipt:
+      result: done
+      decision: "T004 slice is complete, but the full goal is not complete; continue with runtime smoke and final diff review."
+      slice_complete: true
+      full_outcome_complete: false
+      summary: "T004 satisfies the selected typed-cleanup slice with passing checks. The full audit/refactor/improvement-map goal remains incomplete because the existing broad client CSS/App shell extraction still needs runtime smoke and the large dirty diff still needs final behavior-preserving review."
+      missing_evidence:
+        - "Fresh local browser/runtime smoke after CSS split and App shell extraction."
+        - "Final diff review proving extraction did not rewrite behavior or provider hierarchy."
+      next_task: T006
+  - id: T006
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Run a local runtime smoke for the current refactor without source edits, covering client/API reachability and the main setup/tool surfaces."
+    allowed_files: []
+    verify:
+      - "Identify existing or newly started client/API ports."
+      - "Open the client in a browser and confirm the app renders without a blank screen."
+      - "Check browser console for fresh runtime errors."
+      - "Record API health or scenario-list response."
+    stop_if:
+      - "Runtime smoke reveals a source bug requiring file edits."
+      - "Dev server cannot start because of repeated identical port/process errors."
+      - "Browser tooling is unavailable after fallback attempts."
+    receipt:
+      result: done
+      changed_files: []
+      commands:
+        - cmd: "Get-NetTCPConnection -State Listen | ports 4187,7871"
+          status: pass
+        - cmd: "Invoke-RestMethod http://localhost:7871/api/v2/scenarios"
+          status: pass
+        - cmd: "Invoke-WebRequest http://localhost:4187"
+          status: pass
+        - cmd: "Codex Browser smoke at http://localhost:4187"
+          status: pass
+      summary: "Existing Hushline dev servers were running from this checkout: Vite on 4187 and Bun API on 7871. Browser smoke rendered the setup screen, opened the model connection panel, selected locked-room-mystery, created a session, rendered the VN scene, and opened DevPanel. Fresh browser console error/warning logs were empty."
+      evidence:
+        - "Client title: Hushline Chat"
+        - "API scenarios: locked-room-mystery, school-life-anomaly"
+        - "Setup buttons: 다음, 모델 설정 열기"
+        - "Session/VN buttons: 새 게임, 개발자 패널 열기, NEXT, MENU, LOG, SAVE, AUTO, ACT"
+        - "DevPanel visible with World State, Main Objective, Handouts, Relationship Graph, Character States"
+  - id: T007
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Review the broad dirty refactor diff for behavior-preserving extraction and produce the ranked improvement/extension map."
+    inputs:
+      - "T001 receipt"
+      - "T002 receipt"
+      - "T004 receipt"
+      - "T006 receipt"
+      - "Current diff and untracked extraction modules"
+      - "Original request"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if diff review finds behavior rewrites, provider hierarchy drift, or missing verification evidence."
+      - "Keep ChatGPT/OpenAI peer-level with other providers."
+    expected_output:
+      - "Extraction review"
+      - "Ranked improvement and extension map"
+      - "Completion readiness for T999"
+    receipt:
+      result: done
+      decision: "The broad dirty diff is extraction-oriented and ready for final audit after fresh full verification."
+      summary: "Reviewed the broad dirty refactor. The main changes are extraction-oriented: App.tsx delegates to components/hooks, styles.css is an ordered style manifest, ui-helpers.ts is a barrel, app-v2.ts is a route composition root, shared engine-v2.ts is a contract barrel, and pipeline helper logic moved to named runtime modules. Provider UI remains peer-level: NanoGPT, OpenRouter, and ChatGPT are options in the same provider select, with ChatGPT-only OAuth controls gated by the selected provider."
+      extraction_review:
+        - "App.tsx reduced to composition/state orchestration while existing setup, tool, session, and VN surfaces still render in browser smoke."
+        - "styles.css now imports surface styles in documented order; client build emits a CSS asset and runtime smoke showed no blank screen or console errors."
+        - "app-v2.ts keeps /api/v2/scenarios and registers maker/session route modules; API v2 tests pass."
+        - "shared engine-v2.ts keeps the old import path stable through exports from focused contract modules; workspace typecheck passes."
+        - "engine-v2 pipeline still owns orchestration while turn message and runtime option helpers are named modules with focused tests."
+      ranked_improvement_extension_map:
+        - "P1: Keep runtime browser smoke as the release gate for future CSS/App shell changes, because build/tests do not prove visual overlap."
+        - "P1: Add a dedicated diff-review checklist before committing broad refactors, focused on provider neutrality, route URLs, DTO shapes, and generationModel provenance."
+        - "P2: Consider a second CSS tranche only for visual-novel.css after screenshot baselines are captured; it remains the largest client file."
+        - "P2: Keep app-v2 route modules covered with focused presenter/route tests before adding new maker/session endpoints."
+        - "P3: Dedicated GoalBuddy agents can be installed later with npx goalbuddy agents, but PM fallback was enough for this tranche."
+      completion_readiness: "Ready for T999 final audit after one fresh full verification pass."
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Final audit: prove whether the whole codebase audit/refactor/improvement-map outcome is complete."
     inputs:
@@ -204,15 +371,77 @@ tasks:
       - "full_outcome_complete: true | false"
       - "evidence mapping back to original request"
       - "residual risk and deferred work"
-    receipt: null
+    receipt:
+      result: done
+      decision: "complete"
+      full_outcome_complete: true
+      summary: "The current codebase audit/refactor/improvement-map tranche is complete. The refactor was reviewed as extraction-oriented, necessary follow-up type-safety cleanup was implemented, full static/test/build checks pass, browser runtime smoke passes, and the ranked improvement/extension map is recorded in T007."
+      evidence_mapping:
+        - "Audit findings: T001, T002, and T007 receipts map repo structure, dirty-file context, health findings, and final extraction review."
+        - "Safe refactor implemented: T004 removed DevPanel any usage within the bounded allowed file."
+        - "Verification: corepack pnpm check passed."
+        - "Verification: corepack pnpm test passed with 95 server tests."
+        - "Verification: corepack pnpm --filter @hushline/client exec bun test tests passed with 31 client tests."
+        - "Verification: corepack pnpm --filter @hushline/client build passed."
+        - "Verification: git diff --check passed."
+        - "Runtime smoke: existing Vite 4187 and Bun API 7871 servers responded, browser rendered setup, model connection panel, session VN screen, and DevPanel with no fresh console error/warning logs."
+        - "Provider neutrality: final diff review found ChatGPT-only OAuth controls still gated by selected provider and provider options remain peer-level in the same select."
+      residual_risk:
+        - "Dedicated GoalBuddy Scout/Worker/Judge agents are not installed; PM fallback completed the tranche and checker accepts the state with warnings."
+        - "visual-novel.css remains the largest client stylesheet and should be a separate screenshot-baselined tranche if further CSS extraction is desired."
 
 checks:
   dirty_fingerprint:
     status_short:
-      - " M .kiro/specs/multi-agent-turn-engine/PROGRESS.md"
-      - "?? character-personality-map.html"
+      - " M .kiro/specs/multi-agent-turn-engine/case-knowledge-design.md"
+      - " M packages/client/src/App.tsx"
+      - " M packages/client/src/styles.css"
+      - " M packages/client/src/utils/ui-helpers.ts"
+      - " M packages/server/src/app-v2.ts"
+      - " M packages/server/src/engine-v2/__tests__/character-prompt.test.ts"
+      - " M packages/server/src/engine-v2/__tests__/director-fallback.test.ts"
+      - " M packages/server/src/engine-v2/__tests__/director-prompt.test.ts"
+      - " M packages/server/src/engine-v2/__tests__/runtime-boundary-gate.test.ts"
+      - " M packages/server/src/engine-v2/character.ts"
+      - " M packages/server/src/engine-v2/director.ts"
+      - " M packages/server/src/engine-v2/output-sanitizer.ts"
+      - " M packages/server/src/engine-v2/pipeline.ts"
+      - " M packages/server/src/engine-v2/runtime-boundary-gate.ts"
+      - " M packages/shared/src/engine-v2.ts"
+      - "?? packages/client/src/components/AppToolStrip.tsx"
+      - "?? packages/client/src/components/ScenarioShell.tsx"
+      - "?? packages/client/src/components/setup/"
+      - "?? packages/client/src/hooks/"
+      - "?? packages/client/src/styles/"
+      - "?? packages/client/src/utils/advisors.ts"
+      - "?? packages/client/src/utils/assets.ts"
+      - "?? packages/client/src/utils/connections.ts"
+      - "?? packages/client/src/utils/dev-panel-format.ts"
+      - "?? packages/client/src/utils/message-format.ts"
+      - "?? packages/client/src/utils/rich-html.ts"
+      - "?? packages/client/src/utils/session-input.ts"
+      - "?? packages/client/src/utils/stage-messages.ts"
+      - "?? packages/client/src/utils/theme.ts"
+      - "?? packages/client/tests/app-hooks.test.tsx"
+      - "?? packages/client/tests/app-shell-components.test.tsx"
+      - "?? packages/client/tests/styles-entry.test.ts"
+      - "?? packages/server/src/app-v2/"
+      - "?? packages/server/src/engine-v2/__tests__/turn-messages.test.ts"
+      - "?? packages/server/src/engine-v2/director-pipeline.ts"
+      - "?? packages/server/src/engine-v2/narrator-pipeline.ts"
+      - "?? packages/server/src/engine-v2/runtime-options.ts"
+      - "?? packages/server/src/engine-v2/session-helpers.ts"
+      - "?? packages/server/src/engine-v2/turn-messages.ts"
+      - "?? packages/server/src/engine/README.md"
+      - "?? packages/shared/src/engine-v2/"
     conflicts: []
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: pass
+    task: T999
+    commands:
+      - "corepack pnpm check"
+      - "corepack pnpm test"
+      - "corepack pnpm --filter @hushline/client exec bun test tests"
+      - "corepack pnpm --filter @hushline/client build"
+      - "git diff --check"
+      - "node C:\\Users\\limoj\\.agents\\skills\\goalbuddy\\scripts\\check-goal-state.mjs docs\\goals\\codebase-audit-refactor\\state.yaml"

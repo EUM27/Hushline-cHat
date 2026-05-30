@@ -25,6 +25,7 @@ import type {
   HiddenTruthVault,
 } from "@hushline/shared";
 import { getAgentKnowledge } from "./visibility-graph.js";
+import { maskUnintroducedUserName } from "./user-identity.js";
 
 const PUBLIC_CHAT_LOG_SIZE = 20;
 const CHARACTER_CONTEXT_SIZE = 12;
@@ -41,6 +42,8 @@ export function buildPublicContext(
   worldState: WorldState,
   messages: TurnMessage[],
   pack: ScenarioPack,
+  personaName?: string,
+  userNameIntroduced = false,
 ): PublicContext {
   const recentMessages = messages.slice(-PUBLIC_CHAT_LOG_SIZE);
 
@@ -53,16 +56,21 @@ export function buildPublicContext(
     tension: worldState.tension,
     danger: worldState.danger,
     turnNumber: worldState.turnNumber,
-    publicChatLog: recentMessages.map(messageToPublicEntry),
+    publicChatLog: recentMessages.map((message) => messageToPublicEntry(message, personaName, userNameIntroduced)),
     publicEvents: worldState.recentEvents.slice(-10).map((e) => e.description),
     mainObjectiveDescription: worldState.mainObjective.description,
   };
 }
 
-function messageToPublicEntry(message: TurnMessage): PublicChatEntry {
+function messageToPublicEntry(
+  message: TurnMessage,
+  personaName: string | undefined,
+  userNameIntroduced: boolean,
+): PublicChatEntry {
+  const rawLabel = message.speakerLabel ?? message.characterId ?? (message.role === "user" ? "유저" : "");
   return {
     role: message.role,
-    label: message.speakerLabel ?? message.characterId ?? (message.role === "user" ? "유저" : ""),
+    label: maskUnintroducedUserName(rawLabel, personaName, userNameIntroduced, "{{user}}"),
     content: message.content,
     ...(message.inputMode ? { inputMode: message.inputMode } : {}),
   };
@@ -199,6 +207,7 @@ export function buildCharacterChatContext(
   messages: TurnMessage[],
   characterId: string,
   personaName: string,
+  userNameIntroduced = false,
 ): PublicChatEntry[] {
   return messages.slice(-CHARACTER_CONTEXT_SIZE).map((message) => {
     let label: string;
@@ -211,7 +220,7 @@ export function buildCharacterChatContext(
     }
     return {
       role: message.role,
-      label,
+      label: maskUnintroducedUserName(label, personaName, userNameIntroduced, "{{user}}"),
       content: message.content,
       ...(message.inputMode ? { inputMode: message.inputMode } : {}),
     };

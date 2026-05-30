@@ -121,8 +121,9 @@ export function validateDirectorOutput(raw: string): DirectorOutput | null {
 export function getFallbackDirectorOutput(
   characterIds: string[],
   recentSpeakerIds: string[] = [],
+  userInput = "",
 ): DirectorOutput {
-  const speakerId = pickLeastRecentSpeaker(characterIds, recentSpeakerIds);
+  const speakerId = pickFallbackSpeaker(characterIds, recentSpeakerIds, userInput);
   return {
     ...FALLBACK_DIRECTOR_OUTPUT,
     speakers: speakerId ? [speakerId] : [],
@@ -284,11 +285,15 @@ function looksLikeNarration(text: string): boolean {
   return narrationScore >= 2 && narrationScore > dialogueScore;
 }
 
-function pickLeastRecentSpeaker(
+function pickFallbackSpeaker(
   characterIds: string[],
   recentSpeakerIds: string[],
+  userInput: string,
 ): string | undefined {
   if (characterIds.length === 0) return undefined;
+  if (recentSpeakerIds.length === 0 && userInput.trim()) {
+    return characterIds[hashString(userInput) % characterIds.length];
+  }
 
   const recentIndex = new Map<string, number>();
   for (const [index, id] of recentSpeakerIds.entries()) {
@@ -303,4 +308,13 @@ function pickLeastRecentSpeaker(
     if (aRank !== bRank) return bRank - aRank;
     return characterIds.indexOf(a) - characterIds.indexOf(b);
   })[0];
+}
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (const char of value.normalize("NFKC")) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash;
 }

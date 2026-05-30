@@ -1,0 +1,1095 @@
+/* ── 21. Visual Novel Split Skin ── */
+
+.scenario-shell.vn-split-skin {
+  --vn-phone-track: 0.24fr;
+  --vn-main-track: 1fr;
+  --vn-stage-bg: #05070b;
+  --vn-panel-radius: calc(var(--radius-xl) + var(--space-1));
+  --vn-system-bar-block: calc(var(--control-block-md) + (var(--space-3) * 2) + var(--vn-thin-line));
+  --vn-phone-notch-inline: calc(var(--space-8) * 2);
+  --vn-phone-notch-block: var(--space-3);
+  --vn-phone-speaker-inline: var(--space-8);
+  --vn-thin-line: 1px;
+  --vn-dot-block: calc(var(--space-2) - var(--space-1) / 2);
+  --vn-character-inline: min(50vw, 680px);
+  --vn-character-block: 150%;
+  --vn-bottom-safe-block: calc(var(--space-3) + (var(--space-1) / 2));
+  --vn-dialogue-min-block: calc(var(--control-block-md) * 3);
+  --vn-stamp-inline: calc(var(--space-8) + var(--space-6));
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, var(--vn-phone-track)) minmax(0, var(--vn-main-track));
+  gap: var(--space-5);
+  align-items: stretch;
+  justify-self: stretch;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  max-width: none;
+  overflow: hidden;
+  color: var(--vn-stage-text);
+}
+
+.phone-panel,
+.vn-stage-panel {
+  min-width: 0;
+  min-height: 0;
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--vn-panel-radius);
+  box-shadow: 0 var(--space-5) var(--space-8) color-mix(in srgb, var(--vn-accent) 16%, transparent);
+  overflow: hidden;
+}
+
+.phone-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  background: var(--vn-phone-bg);
+  color: var(--vn-phone-text);
+}
+
+.phone-notch {
+  position: absolute;
+  inset-block-start: var(--space-1);
+  inset-inline-start: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  inline-size: var(--vn-phone-notch-inline);
+  block-size: var(--vn-phone-notch-block);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: #000;
+  transform: translateX(-50%);
+}
+
+.phone-notch span {
+  inline-size: var(--vn-phone-speaker-inline);
+  block-size: calc(var(--space-1) / 2);
+  border-radius: var(--radius-full);
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.phone-screen {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: calc(var(--vn-panel-radius) - var(--space-1));
+  background: var(--vn-phone-surface);
+  overflow: hidden;
+}
+
+.phone-status-row,
+.phone-room-header,
+.phone-input-bar,
+.phone-home-indicator {
+  flex: 0 0 auto;
+}
+
+.phone-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-1);
+  color: var(--vn-phone-muted);
+  font: var(--font-label-xs);
+}
+
+.phone-status-row span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.phone-room-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-block-end: var(--vn-thin-line) solid var(--vn-phone-border);
+  background: var(--vn-phone-header);
+}
+
+.phone-room-title,
+.phone-room-tools,
+.phone-room-title > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.phone-room-title {
+  gap: var(--space-1);
+}
+
+.phone-room-title > div {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.phone-room-title strong,
+.phone-theme-list strong {
+  overflow: hidden;
+  color: var(--vn-phone-text);
+  font: var(--font-body-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-room-title span,
+.phone-theme-list small {
+  color: var(--vn-phone-muted);
+  font: var(--font-label-xs);
+}
+
+.phone-room-tools {
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+
+.phone-room-title .phone-static-icon,
+.phone-room-tools button,
+.phone-room-tools .phone-static-icon,
+.phone-theme-drawer header button,
+.phone-round-btn {
+  display: grid;
+  place-items: center;
+  inline-size: var(--control-block-sm);
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--vn-phone-text);
+}
+
+.phone-room-tools button:hover,
+.phone-round-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--vn-accent) 16%, transparent);
+}
+
+.phone-static-icon {
+  opacity: 0.82;
+}
+
+.phone-menu-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--vn-phone-header) 82%, transparent);
+  color: var(--vn-phone-text);
+}
+
+.phone-menu-card div {
+  display: grid;
+  gap: calc(var(--space-1) / 2);
+}
+
+.phone-menu-card strong {
+  color: var(--vn-phone-muted);
+  font: var(--font-label-xs);
+}
+
+.phone-menu-card span,
+.phone-menu-card li {
+  font: var(--font-body-sm);
+}
+
+.phone-menu-card ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-inline-start: var(--space-4);
+  color: var(--vn-phone-muted);
+}
+
+.phone-message-feed {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.phone-date-pill {
+  align-self: center;
+  padding: var(--space-1) var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--vn-phone-header) 72%, transparent);
+  color: var(--vn-phone-muted);
+  font: var(--font-label-xs);
+}
+
+.phone-message-row {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.phone-message-row.system {
+  align-self: center;
+  max-width: 86%;
+}
+
+.phone-message-row.outbound {
+  justify-content: flex-end;
+}
+
+.phone-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: var(--control-block-sm);
+  aspect-ratio: 1;
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--radius-full);
+  background: #1e1f21;
+  color: var(--vn-accent);
+  font: var(--font-mono-sm);
+}
+
+.phone-message-stack {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.phone-bubble-line {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.phone-bubble {
+  max-width: min(100%, 34ch);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--radius-lg);
+  background: var(--vn-phone-other-bubble);
+  color: var(--vn-phone-text);
+  font: var(--font-body-sm);
+}
+
+.phone-message-row.outbound .phone-bubble {
+  background: var(--vn-phone-my-bubble);
+}
+
+.phone-message-row.system .phone-bubble {
+  max-width: none;
+  background: color-mix(in srgb, var(--vn-phone-header) 70%, transparent);
+  color: var(--vn-phone-muted);
+  text-align: center;
+}
+
+.phone-sender,
+.phone-time {
+  color: var(--vn-phone-muted);
+  font: var(--font-label-xs);
+}
+
+.phone-input-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-block-start: var(--vn-thin-line) solid var(--vn-phone-border);
+  background: var(--vn-phone-header);
+}
+
+.phone-input-shell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--control-block-sm);
+  padding: 0 var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--radius-full);
+  background: var(--vn-input-bg);
+  color: var(--vn-phone-text);
+}
+
+.phone-input-shell input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  outline: none;
+}
+
+.phone-inline-clear {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  inline-size: var(--control-block-sm);
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--vn-phone-muted);
+}
+
+.phone-inline-clear:hover {
+  color: var(--vn-phone-text);
+  background: color-mix(in srgb, var(--vn-accent) 16%, transparent);
+}
+
+.phone-send-btn:not(:disabled) {
+  background: var(--vn-accent);
+  color: #fff;
+}
+
+.phone-round-btn:disabled {
+  opacity: 0.38;
+}
+
+.phone-home-indicator {
+  display: grid;
+  place-items: center;
+  min-block-size: var(--vn-bottom-safe-block);
+  padding: 0;
+  background: var(--vn-phone-header);
+}
+
+.phone-home-indicator::before {
+  content: "";
+  inline-size: var(--vn-phone-speaker-inline);
+  block-size: calc(var(--space-1) / 2);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--vn-phone-muted) 48%, transparent);
+}
+
+.phone-theme-drawer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--vn-phone-surface) 94%, #000);
+  backdrop-filter: blur(var(--space-2));
+}
+
+.phone-theme-drawer header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-block-end: var(--vn-thin-line) solid var(--vn-phone-border);
+  background: var(--vn-phone-header);
+  color: var(--vn-phone-text);
+  font: var(--font-mono-sm);
+}
+
+.phone-theme-drawer header span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.phone-theme-list {
+  display: grid;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.phone-theme-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--vn-phone-header) 64%, transparent);
+  color: var(--vn-phone-text);
+  text-align: left;
+}
+
+.phone-theme-list button.selected {
+  border-color: var(--vn-accent);
+  background: var(--vn-accent-soft);
+}
+
+.phone-theme-list button > span:first-child {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.theme-select-dot {
+  inline-size: var(--space-4);
+  aspect-ratio: 1;
+  border: var(--vn-thin-line) solid var(--vn-phone-border);
+  border-radius: var(--radius-full);
+}
+
+.phone-theme-list button.selected .theme-select-dot {
+  border-color: var(--vn-accent);
+  background: var(--vn-accent);
+}
+
+.vn-stage-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--vn-stage-bg);
+  color: var(--vn-stage-text);
+  border-color: var(--vn-stage-border);
+  isolation: isolate;
+}
+
+.vn-system-bar {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex: 0 0 auto;
+  min-block-size: var(--vn-system-bar-block);
+  padding: var(--space-3) var(--space-6);
+  border-block-end: var(--vn-thin-line) solid var(--vn-stage-border);
+  background: color-mix(in srgb, var(--vn-stage-bg) 82%, transparent);
+  backdrop-filter: blur(var(--space-2));
+}
+
+.vn-panel-layer {
+  position: absolute;
+  inset-block-start: var(--vn-system-bar-block);
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 20;
+  display: grid;
+  justify-content: end;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+.vn-panel-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  justify-content: end;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+.vn-panel-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--vn-stage-bg) 48%, transparent);
+  cursor: default;
+  pointer-events: auto;
+}
+
+.vn-panel-layer .connection-panel,
+.vn-panel-layer .dev-panel,
+.vn-panel-layer .vn-right-tool-panel {
+  position: relative;
+  z-index: 1;
+  justify-self: end;
+  align-self: stretch;
+  inline-size: min(var(--drawer-inline-md), 48%);
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 0;
+  margin: 0;
+  border: 0;
+  border-inline-start: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-block-start: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-lg) 0 0 0;
+  background: color-mix(in srgb, var(--vn-stage-panel) 94%, #000);
+  box-shadow: 0 var(--space-5) var(--space-8) color-mix(in srgb, var(--vn-accent) 18%, transparent);
+  color: var(--vn-stage-text);
+  pointer-events: auto;
+  overflow-y: auto;
+}
+
+.vn-panel-layer .vn-right-tool-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.vn-right-tool-tabs {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) 0;
+}
+
+.vn-right-tool-tabs button {
+  min-height: var(--control-block-sm);
+  padding: 0 var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--vn-stage-bg) 72%, transparent);
+  color: var(--vn-stage-muted);
+  font: var(--font-label-xs);
+  cursor: pointer;
+}
+
+.vn-right-tool-tabs button.active,
+.vn-right-tool-tabs button:hover {
+  border-color: var(--vn-accent);
+  background: var(--vn-accent-soft);
+  color: var(--vn-accent);
+}
+
+.vn-panel-layer .connection-panel {
+  grid-template-columns: 1fr 1fr;
+  max-height: none;
+  border: 0;
+  box-shadow: none;
+  inline-size: 100%;
+}
+
+.director-law-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  color: var(--vn-stage-text);
+}
+
+.director-law-panel section {
+  display: grid;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--vn-thin-line) solid var(--vn-stage-border);
+}
+
+.director-law-panel h2 {
+  margin: 0;
+  color: var(--vn-stage-muted);
+  font: var(--font-label-xs);
+}
+
+.director-law-panel p,
+.director-law-panel ul {
+  margin: 0;
+  color: var(--vn-stage-text);
+  font: var(--font-body-sm);
+}
+
+.director-law-panel ul {
+  padding-left: var(--space-4);
+}
+
+.vn-panel-layer .connection-header strong,
+.vn-panel-layer .dev-panel-content h3 {
+  color: var(--vn-accent);
+}
+
+.vn-panel-layer .connection-hint,
+.vn-panel-layer .connection-panel label,
+.vn-panel-layer .connection-panel > p {
+  color: var(--vn-stage-muted);
+}
+
+.vn-panel-layer .connection-panel input,
+.vn-panel-layer .connection-panel select {
+  border-color: var(--vn-stage-border);
+  background: var(--vn-input-bg);
+  color: var(--vn-stage-text);
+}
+
+.vn-panel-layer .slot-tab,
+.vn-panel-layer .connection-actions button,
+.vn-panel-layer .oauth-key-placeholder {
+  border-color: var(--vn-stage-border);
+  background: color-mix(in srgb, var(--vn-stage-bg) 72%, transparent);
+  color: var(--vn-stage-text);
+}
+
+.vn-panel-layer .slot-tab.selected,
+.vn-panel-layer .connection-actions button.primary {
+  border-color: var(--vn-accent);
+  background: var(--vn-accent-soft);
+  color: var(--vn-accent);
+}
+
+.vn-system-title,
+.vn-system-actions,
+.vn-system-actions span,
+.vn-system-actions button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.vn-system-title {
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--vn-accent);
+  font: var(--font-mono-sm);
+  text-transform: uppercase;
+}
+
+.vn-system-title span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vn-live-dot {
+  flex: 0 0 auto;
+  inline-size: var(--vn-dot-block);
+  aspect-ratio: 1;
+  border-radius: var(--radius-full);
+  background: var(--vn-accent);
+  box-shadow: 0 0 var(--space-2) var(--vn-accent);
+}
+
+.vn-system-actions {
+  gap: var(--space-3);
+  flex: 0 0 auto;
+  color: var(--vn-stage-muted);
+  font: var(--font-mono-sm);
+}
+
+.vn-system-actions span,
+.vn-system-actions button {
+  gap: var(--space-1);
+}
+
+.vn-system-actions button,
+.vn-menu-row button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.vn-provider-pill {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--vn-accent-soft);
+  color: var(--vn-accent);
+}
+
+.vn-visual-area {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background-color: #05070b;
+}
+
+.vn-scene-backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: #05070b;
+  background-image: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.34)), var(--vn-bg);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.vn-character-standee,
+.vn-svg-standee {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  inline-size: auto;
+  block-size: var(--vn-character-block);
+  max-inline-size: var(--vn-character-inline);
+  max-block-size: none;
+  object-fit: contain;
+  object-position: center bottom;
+  transform: translateY(28%);
+  filter: drop-shadow(0 var(--space-4) var(--space-5) rgba(0,0,0,0.44));
+}
+
+.vn-character-standee[data-character-id="kang-mujin"] {
+  --vn-character-inline: min(53vw, 740px);
+  --vn-character-block: 164%;
+  transform: translate(3%, 38%);
+}
+
+.vn-character-standee[data-character-id="yoon-haeon"] {
+  --vn-character-inline: min(43vw, 535px);
+  --vn-character-block: 143%;
+  transform: translate(-4%, 36%);
+}
+
+.vn-character-standee[data-character-id="yoon-seha"] {
+  --vn-character-inline: min(47vw, 620px);
+  --vn-character-block: 149%;
+  transform: translate(-2%, 37%);
+}
+
+.vn-svg-standee {
+  display: grid;
+  place-items: end center;
+  align-self: stretch;
+}
+
+.vn-svg-standee svg {
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.vn-character-aura {
+  position: absolute;
+  inset-block-end: 22%;
+  inline-size: 80%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-full);
+  background: var(--vn-accent-soft);
+  filter: blur(var(--space-8));
+}
+
+.vn-character-accent-stroke,
+.vn-character-mouth {
+  stroke: var(--vn-character-highlight);
+  fill: none;
+  stroke-linecap: round;
+}
+
+.vn-character-accent-stroke { stroke-width: 2; opacity: 0.62; }
+.vn-character-accent-stroke.soft { stroke-width: 1.5; opacity: 0.5; }
+.vn-character-eye { fill: var(--vn-character-highlight); }
+.vn-character-mouth { stroke: var(--vn-character-eye); stroke-width: 1.5; }
+.vn-expression-face * { transition: opacity var(--duration-normal) var(--ease-standard), fill var(--duration-normal) var(--ease-standard), stroke var(--duration-normal) var(--ease-standard); }
+
+.vn-command-dock {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 4;
+  flex: 0 0 auto;
+  min-block-size: 0;
+  block-size: auto;
+  padding: 0 var(--space-6) var(--vn-bottom-safe-block);
+  background: linear-gradient(0deg, color-mix(in srgb, var(--vn-stage-bg) 94%, transparent), transparent);
+}
+
+.vn-command-dock.log-open {
+  flex: 1 1 auto;
+  block-size: calc(100% - var(--vn-system-bar-block));
+  max-block-size: calc(100% - var(--vn-system-bar-block));
+}
+
+.vn-dialogue-card {
+  position: relative;
+  flex: 0 0 auto;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+  max-block-size: 100%;
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-xl);
+  background: var(--vn-stage-panel);
+  box-shadow: 0 var(--space-5) var(--space-8) rgba(0,0,0,0.42);
+  overflow: hidden;
+  backdrop-filter: blur(var(--space-4));
+}
+
+.vn-dialogue-card.log-open {
+  flex: 1 1 auto;
+}
+
+.vn-dialogue-main {
+  position: relative;
+  flex: 0 0 auto;
+  min-block-size: var(--vn-dialogue-min-block);
+  padding: var(--space-6);
+  overflow-y: auto;
+}
+
+.vn-dialogue-card.log-open .vn-dialogue-main {
+  flex: 0 1 auto;
+  block-size: var(--vn-dialogue-min-block);
+}
+
+.vn-speaker-tag {
+  position: absolute;
+  inset-block-start: var(--space-3);
+  inset-inline-start: var(--space-5);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-accent);
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--vn-accent), color-mix(in srgb, var(--vn-accent) 55%, #000));
+  color: #fff;
+  font: var(--font-label-xs);
+  text-transform: uppercase;
+}
+
+.vn-dialogue-text {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-4);
+  padding-block-start: var(--space-6);
+  color: var(--vn-stage-text);
+}
+
+.vn-dialogue-text .message-content,
+.vn-empty-line {
+  min-width: 0;
+  margin: 0;
+  font: var(--font-body-md);
+  line-height: 1.75;
+}
+
+.vn-next-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  min-block-size: var(--control-block-sm);
+  padding: 0 var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-md);
+  background: var(--vn-accent-soft);
+  color: var(--vn-accent);
+  font: var(--font-mono-sm);
+}
+
+.vn-next-btn:disabled {
+  opacity: 0.36;
+}
+
+.vn-error-line {
+  margin: 0 var(--space-5) var(--space-2);
+}
+
+.vn-menu-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: 0 var(--space-5) var(--space-3);
+  color: var(--vn-stage-muted);
+  font: var(--font-mono-sm);
+}
+
+.vn-menu-row > span,
+.vn-menu-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.vn-menu-row button {
+  padding: var(--space-1) var(--space-2);
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--vn-stage-panel) 78%, transparent);
+}
+
+.vn-menu-row button.active,
+.vn-menu-row button[aria-pressed="true"] {
+  border-color: var(--vn-accent);
+  color: var(--vn-accent);
+  background: var(--vn-accent-soft);
+}
+
+.vn-menu-row button:disabled,
+.vn-system-actions button:disabled {
+  opacity: 0.38;
+}
+
+.vn-log-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-block-size: 0;
+  flex: 1 1 auto;
+  border-block-end: var(--vn-thin-line) solid var(--vn-stage-border);
+  background: color-mix(in srgb, var(--vn-stage-panel) 96%, #000);
+  color: var(--vn-stage-text);
+  overflow: hidden;
+}
+
+.vn-log-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-block-end: var(--vn-thin-line) solid var(--vn-stage-border);
+  color: var(--vn-stage-muted);
+  font: var(--font-mono-sm);
+}
+
+.vn-log-panel header button {
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--vn-stage-bg) 72%, transparent);
+  color: var(--vn-stage-muted);
+  font: inherit;
+}
+
+.vn-log-list {
+  display: grid;
+  gap: var(--space-3);
+  min-block-size: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.vn-log-entry {
+  display: grid;
+  gap: var(--space-1);
+  padding-block-end: var(--space-3);
+  border-block-end: var(--vn-thin-line) solid color-mix(in srgb, var(--vn-stage-border) 68%, transparent);
+}
+
+.vn-log-entry span {
+  color: var(--vn-accent);
+  font: var(--font-label-xs);
+}
+
+.vn-log-entry p {
+  margin: 0;
+  color: var(--vn-stage-text);
+  font: var(--font-body-sm);
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.vn-input-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-5);
+  border-block-start: var(--vn-thin-line) solid var(--vn-stage-border);
+  background: color-mix(in srgb, var(--vn-stage-bg) 72%, transparent);
+}
+
+.vn-quick-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+
+.vn-quick-btn {
+  display: grid;
+  place-items: center;
+  inline-size: var(--control-block-sm);
+  aspect-ratio: 1;
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--vn-stage-panel) 78%, transparent);
+  color: var(--vn-stage-muted);
+}
+
+.vn-quick-btn.active,
+.vn-quick-btn:hover:not(:disabled) {
+  border-color: var(--vn-accent);
+  color: var(--vn-accent);
+}
+
+.vn-quick-btn:disabled {
+  opacity: 0.32;
+}
+
+.vn-reply-shell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--control-block-md);
+  padding: 0 var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-md);
+  background: var(--vn-input-bg);
+  color: var(--vn-stage-text);
+}
+
+.vn-reply-shell.action {
+  flex-basis: 0;
+}
+
+.vn-reply-shell > span,
+.enter-send-inline {
+  flex: 0 0 auto;
+  color: var(--vn-stage-muted);
+  font: var(--font-mono-sm);
+  white-space: nowrap;
+}
+
+.vn-reply-shell > span {
+  padding-inline-end: var(--space-2);
+  border-inline-end: var(--vn-thin-line) solid var(--vn-stage-border);
+}
+
+.vn-input-mode-label {
+  color: var(--vn-accent);
+  font-weight: 700;
+}
+
+.vn-reply-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--control-block-sm);
+  max-height: calc(var(--control-block-md) * 3);
+  padding: var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: var(--font-body-sm);
+  line-height: 1.4;
+  outline: none;
+  resize: none;
+}
+
+.vn-reply-input::placeholder {
+  color: color-mix(in srgb, var(--vn-stage-muted) 58%, transparent);
+}
+
+.enter-send-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.vn-reply-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  min-block-size: var(--control-block-md);
+  padding: 0 var(--space-3);
+  border: var(--vn-thin-line) solid var(--vn-stage-border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--vn-accent), color-mix(in srgb, var(--vn-accent) 56%, #000));
+  color: #fff;
+  font: var(--font-label-xs);
+}
+
+.vn-reply-send:disabled {
+  opacity: 0.42;
+}
+
+.vn-reply-send.secondary {
+  background: color-mix(in srgb, var(--vn-accent) 18%, var(--vn-stage-panel));
+  color: var(--vn-accent);
+}

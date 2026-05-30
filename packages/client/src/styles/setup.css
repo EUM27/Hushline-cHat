@@ -1,0 +1,219 @@
+/* ── 13. Setup Panels ── */
+
+.persona-panel, .advisor-panel, .invitation-panel {
+  grid-column: 2;
+  align-self: center;
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-surface);
+  border: var(--border-default);
+  box-shadow: var(--shadow-floating);
+}
+
+.persona-copy { display: flex; align-items: center; gap: var(--space-2); font: var(--font-title-md); color: var(--color-brand-emerald-500); }
+.persona-panel form, .advisor-panel form { display: grid; gap: var(--space-3); }
+.persona-panel label { display: grid; gap: var(--space-1); font: var(--font-label-xs); color: var(--color-text-secondary); }
+.persona-panel input { height: 44px; padding: 0 var(--space-3); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); outline: none; }
+.persona-panel input:focus { border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(45,95,79,0.12); }
+.persona-panel button, .advisor-panel button { height: 44px; border: none; border-radius: var(--radius-md); background: var(--color-brand-mustard-500); color: var(--color-text-on-mustard); font: var(--font-title-md); cursor: pointer; }
+.persona-panel button:disabled, .advisor-panel button:disabled { opacity: 0.5; cursor: wait; }
+
+.advisor-list { display: grid; gap: var(--space-3); }
+.advisor-card { display: grid; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface-alt); }
+.advisor-card strong { font: var(--font-title-md); }
+.advisor-card p { margin: 0; font: var(--font-body-sm); color: var(--color-text-secondary); }
+.advisor-card span { width: fit-content; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-brand-emerald-100); font: var(--font-label-xs); color: var(--color-brand-emerald-700); }
+.advisor-actions { display: grid; grid-template-columns: auto auto 1fr; gap: var(--space-2); }
+.advisor-actions form { display: block; }
+.advisor-actions form button { width: 100%; }
+
+.error-line { margin: 0; font: var(--font-body-sm); color: var(--color-state-danger); }
+.setup-error { margin: 0; }
+
+
+/* ── 18. Scenario Selection ── */
+
+.scenario-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.scenario-card-btn {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface-alt);
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--motion-fast);
+}
+
+.scenario-card-btn:hover {
+  border-color: var(--color-brand-emerald-500);
+  background: var(--color-brand-emerald-50);
+}
+
+.scenario-card-btn.selected {
+  border-color: var(--color-brand-emerald-500);
+  background: var(--color-brand-emerald-100);
+  box-shadow: 0 0 0 2px var(--color-brand-emerald-200);
+}
+
+.scenario-card-btn strong {
+  font: var(--font-title-md);
+  text-transform: capitalize;
+}
+
+.scenario-empty {
+  margin: 0;
+  font: var(--font-body-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* ── 19. UI Layout Updates ── */
+
+.setup-open .stage-layout {
+  --setup-panel-inline: calc(var(--space-8) * 10);
+  --setup-panel-block: calc(var(--space-8) * 12);
+  grid-template-columns: minmax(0, min(100%, var(--setup-panel-inline)));
+}
+
+.setup-open .persona-panel, .setup-open .advisor-panel {
+  inline-size: min(100%, var(--setup-panel-inline));
+  max-inline-size: var(--setup-panel-inline);
+  block-size: min(80svh, var(--setup-panel-block));
+  max-block-size: min(80svh, var(--setup-panel-block));
+  justify-self: center;
+}
+
+.setup-open .persona-panel, .setup-open .advisor-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── 20. Scenario Dropdown & Detail Box ── */
+
+.scenario-dropdown {
+  width: 100%;
+  min-height: calc(var(--space-4) * 2);
+  padding: 0 var(--space-2);
+  border: var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: var(--font-body-sm);
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+}
+.scenario-dropdown:focus { border-color: var(--color-border-focus); }
+
+.scenario-step .persona-panel button {
+  min-height: calc(var(--space-4) * 2);
+  border-radius: var(--radius-sm);
+  font: var(--font-label-xs);
+}
+
+.scenario-detail-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface-alt);
+  border: var(--border-default);
+}
+
+.scenario-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.scenario-detail-meta {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.scenario-badge {
+  padding: calc(var(--space-1) / 2) var(--space-2);
+  border-radius: var(--radius-full);
+  font: var(--font-label-xs);
+  background: var(--color-bg-surface);
+  border: var(--border-default);
+}
+.scenario-badge.genre-badge { color: var(--color-state-info); }
+.scenario-badge.version-badge { color: var(--color-text-tertiary); }
+
+.scenario-detail-title {
+  margin: 0;
+  font: var(--font-title-md);
+  color: var(--color-text-primary);
+}
+
+.scenario-detail-subtitle {
+  margin: 0;
+  font: var(--font-body-sm);
+  color: var(--color-text-secondary);
+}
+
+.scenario-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  max-block-size: none;
+  overflow-y: visible;
+  overflow-x: hidden;
+  padding-right: var(--space-1);
+}
+
+.scenario-section h3 {
+  margin: 0 0 var(--space-2);
+  font: var(--font-label-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+}
+
+.scenario-description {
+  margin: 0;
+  font: var(--font-body-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.scenario-objective {
+  margin: 0;
+  font: var(--font-body-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.scenario-characters-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-block-size: none;
+  overflow-y: visible;
+  overflow-x: hidden;
+  padding-right: var(--space-1);
+}
+
+.scenario-char-preview-badge {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 calc(var(--space-8) * 3 + var(--space-4));
+  min-width: 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  border: var(--border-default);
+}
+.scenario-char-preview-badge strong { font: var(--font-body-sm); color: var(--color-text-primary); }
+.scenario-char-preview-badge span { font: var(--font-label-xs); color: var(--color-text-tertiary); }

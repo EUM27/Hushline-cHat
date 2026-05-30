@@ -73,4 +73,60 @@ describe("runtime boundary gate", () => {
     expect(unauthorized.violations).toContain("unauthorized_fact");
     expect(hidden.violations).toContain("hidden_truth_leak");
   });
+
+  test("blocks character drafts that attribute an unmade exit proposal to the user", () => {
+    const result = validateCharacterDraft({
+      draft: "\"밖에 나가자는 말은 하지 말자, 정해윤.\"",
+      npcId: "yoon-haeon",
+      userInput: "\"누가 사람 죽였는지도 모르는 판국에 설산에 갇혀있는 게 보통 일입니까.\"",
+      allowedFactIds: [],
+      blockedFactIds: [],
+      hiddenTruthIds: ["truth_killer_identity"],
+      knownClaimIds: [],
+      caseFacts: [...caseFacts],
+      currentTurn: 6,
+    });
+
+    expect(result.violations).toContain("unsupported_user_proposal");
+    expect(result.finalText).not.toContain("나가자는");
+  });
+
+  test("masks persona names that were not introduced in scene", () => {
+    const result = validateCharacterDraft({
+      draft: "\"정해윤 씨, 지금은 움직이지 마.\"",
+      npcId: "kang-mujin",
+      userInput: "\"전화선이 완전히 죽었네요.\"",
+      userPersonaName: "정해윤",
+      userNameIntroduced: false,
+      allowedFactIds: [],
+      blockedFactIds: [],
+      hiddenTruthIds: ["truth_killer_identity"],
+      knownClaimIds: [],
+      caseFacts: [...caseFacts],
+      currentTurn: 6,
+    });
+
+    expect(result.violations).toContain("unintroduced_user_name");
+    expect(result.finalText).toBe("\"당신, 지금은 움직이지 마.\"");
+    expect(result.finalText).not.toContain("정해윤");
+  });
+
+  test("allows persona names after an explicit in-scene introduction", () => {
+    const result = validateCharacterDraft({
+      draft: "\"정해윤 씨, 그 말은 맞는 것 같습니다.\"",
+      npcId: "yoon-haeon",
+      userInput: "\"제 이름은 정해윤입니다.\"",
+      userPersonaName: "정해윤",
+      userNameIntroduced: true,
+      allowedFactIds: [],
+      blockedFactIds: [],
+      hiddenTruthIds: ["truth_killer_identity"],
+      knownClaimIds: [],
+      caseFacts: [...caseFacts],
+      currentTurn: 7,
+    });
+
+    expect(result.status).toBe("approved");
+    expect(result.violations).not.toContain("unintroduced_user_name");
+  });
 });

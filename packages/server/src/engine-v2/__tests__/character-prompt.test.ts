@@ -74,6 +74,8 @@ describe("character prompt boundaries", () => {
     expect(capturedSystemPrompt).toContain("최종 출력은 \"실제 발화\" 또는 '짧은 내면 반응'만 쓴다.");
     expect(capturedSystemPrompt).toContain("실제 입 밖으로 말한 대사는 반드시 큰따옴표로 감싼다");
     expect(capturedSystemPrompt).toContain("입 밖으로 말하지 않은 생각은 반드시 작은따옴표로 감싼다");
+    expect(capturedSystemPrompt).toContain("사용자가 하지 않은 제안, 의도, 결정, 행동을 전제로 반응하지 않는다.");
+    expect(capturedSystemPrompt).toContain("\"갇혀 있다\"는 말을 \"나가자\"는 제안으로 바꾸지 않는다.");
     expect(capturedSystemPrompt).not.toContain("자기 몸짓");
     expect(capturedSystemPrompt).not.toContain("짧은 추임새");
     expect(capturedSystemPrompt).toContain("혼잣말");
@@ -187,6 +189,72 @@ describe("character prompt boundaries", () => {
     expect(capturedUserPayload).toContain("{{user}}: 나는 피곤한 얼굴로 이마를 문질렀다.");
     expect(capturedUserPayload).toContain("{{user}}: 서하 씨 말고 무진 씨가 답해 주세요.");
     expect(capturedUserPayload).not.toContain("한서윤:");
+  });
+
+  test("marks persona name as unintroduced scene knowledge until the user introduces it", async () => {
+    let capturedSystemPrompt = "";
+    let capturedUserPayload = "";
+    globalThis.fetch = capturePayload((payload) => {
+      capturedSystemPrompt = payload.systemPrompt;
+      capturedUserPayload = payload.userPayload;
+      return "전화선 말고 지금 봐야 할 게 있겠지.";
+    });
+
+    await invokeCharacter(
+      character("kang-mujin", "강무진", "무진"),
+      handout("kang-mujin", "수사 자료 일부를 숨기고 있다."),
+      "유저의 말에 냉소적으로 답한다.",
+      "chat",
+      "전화선이 완전히 죽었네요.",
+      publicContext(),
+      [
+        {
+          id: "opening-user",
+          sessionId: "s1",
+          role: "narrator",
+          speakerKind: "named-actor",
+          speakerLabel: "[정해윤]",
+          content: "……정말 골치 아프네요. 전화도 안 됩니다.",
+          isOpeningBeat: true,
+          createdAt: "2026-05-28T00:00:00.000Z",
+        },
+      ],
+      "정해윤",
+      pack([character("kang-mujin", "강무진", "무진")]),
+      connection(),
+    );
+
+    expect(capturedSystemPrompt).toContain("사용자 표시명은 시스템/UI용 메타 정보다.");
+    expect(capturedSystemPrompt).toContain("사용자 표시명(메타/UI): 정해윤");
+    expect(capturedSystemPrompt).toContain("이 캐릭터는 정해윤이라는 이름을 아직 소개받지 않았다.");
+    expect(capturedSystemPrompt).toContain("미소개 상태에서는 정해윤을 발화에 쓰지 않는다.");
+    expect(capturedSystemPrompt).not.toContain("현재 사용자 표시명: 정해윤");
+    expect(capturedUserPayload).toContain("[{{user}}]: ……정말 골치 아프네요. 전화도 안 됩니다.");
+    expect(capturedUserPayload).not.toContain("정해윤");
+  });
+
+  test("allows persona name after an explicit in-scene introduction", async () => {
+    let capturedSystemPrompt = "";
+    globalThis.fetch = captureSystemPrompt((prompt) => {
+      capturedSystemPrompt = prompt;
+      return "그래, 정해윤. 그럼 똑바로 봐.";
+    });
+
+    await invokeCharacter(
+      character("kang-mujin", "강무진", "무진"),
+      handout("kang-mujin", "수사 자료 일부를 숨기고 있다."),
+      "유저의 말에 냉소적으로 답한다.",
+      "chat",
+      "일단 제 이름은 정해윤입니다.",
+      publicContext(),
+      [],
+      "정해윤",
+      pack([character("kang-mujin", "강무진", "무진")]),
+      connection(),
+    );
+
+    expect(capturedSystemPrompt).toContain("사용자 표시명(메타/UI): 정해윤");
+    expect(capturedSystemPrompt).toContain("이 캐릭터는 정해윤이라는 이름을 들어 알고 있다.");
   });
 });
 

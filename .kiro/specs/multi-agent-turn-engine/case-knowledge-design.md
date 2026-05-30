@@ -226,20 +226,17 @@ function validateAnswerScope(scope, packCase, worldState): AnswerScope {
 
 ### 6.1 Character Agent에 답변 범위 전달
 
-`character.ts` 시스템 프롬프트에 **answerScope 발췌**를 주입한다 (전지적 정보는 빼고):
+`character.ts` 시스템 프롬프트에 **allowed 항목만** 발췌해서 주입한다 (전지적 정보·금지 주제는 뺀다):
 
 ```
 [Answer Scope — 이번 턴]
-이번 턴 inquiryType: testimony_query
 당신이 말할 수 있는 사실:
-  - 어젯밤 23:00–01:00 사이 비서실에 있었음 (ts-jinwoo-last-night, partial)
-당신이 말하면 안 되는 주제:
-  - 회계 감사 (defaultBehavior: lie — "정상이라고 단언")
-  - 데드볼트 트릭 (forbidden)
-  - 범인의 정체 (forbidden)
+  - 어젯밤 23:00–01:00 사이 비서실에 있었음 (partial)
+당신이 모르거나 확인되지 않은 것:
+  - (그 외 사건 정보는 모른다고 간주)
 ```
 
-캐릭터가 자기가 모르는/말하면 안 되는 정보를 우연히 끌어내지 못하게.
+forbiddenTopics는 **여기 적지 않는다.** (결정 3 — 비명시) 금지는 Director 판정 + Boundary 검증으로만 막는다. 모델에게 "말하면 안 되는 것"을 알려주면 우회 시도를 유발하므로, "말할 수 있는 것"만 명시하고 나머지는 모른다는 전제로 둔다.
 
 ### 6.2 출력 계약 강화
 
@@ -322,23 +319,24 @@ function approveCharacterDraft(draft, character, scope, packCase): ApprovalResul
 
 ```
 Phase A — 데이터 (코드 손 안 댐)
-  1. shared 타입 추가: PublicFact, ObservableFact, TestimonySeed, HiddenTruth, AnswerScope, InquirySignals
-  2. scenario-loader 확장: case/*.json 로딩 + Zod 검증
+  1. shared 타입 추가: PublicFact, ObservableFact, TestimonySeed, HiddenTruth,
+     CasePack, InquiryType, AnswerScope (+ DirectorOutput 확장 필드)
+  2. scenario-loader 확장: case/*.json 옵션 로딩 + Zod 검증 (없으면 skip)
   3. 백화장 case 데이터 작성
 
-Phase B — Inquiry Router
-  4. classifyInquiry() 함수 (heuristic) + 단위 테스트
-  5. pipeline.ts에서 classifyInput 다음에 호출, Director에 InquirySignals 주입
+Phase B — Director 흡수 (inquiry + answerScope)
+  4. directorOutputSchema에 inquiry + answerScope 필드 + 기본값
+  5. Director 시스템 프롬프트에 CasePack(자기 관점 발췌) + inquiry/scope 결정 규칙 주입
+  6. omniscient context에 hiddenTruth + 전체 testimony 주입 (Director만)
 
-Phase C — Answer Scope
-  6. Director 시스템 프롬프트에 Answer Scope 결정 규칙 추가
-  7. directorOutputSchema에 answerScope 필드 + 기본값
-  8. validateAnswerScope() 코드 검증
-  9. Character 시스템 프롬프트에 발췌된 scope 주입
+Phase C — Answer Scope 검증 + 캐릭터 주입
+  7. validateAnswerScope() 코드 검증 (미확보 key evidence 제거, 조건 미충족 testimony 제거, hiddenTruth 항상 차단)
+  8. Character 시스템 프롬프트에 allowed만 발췌 주입 (forbidden 비노출)
+  9. Character 출력 계약 강화 ("scope 밖 사건 정보 금지, 모르면 모른다")
 
 Phase D — Boundary Approver
   10. output-sanitizer.ts → approveCharacterDraft() 확장
-  11. hidden_truth_leak / out_of_scope_fact 키워드 매칭
+  11. hidden_truth_leak / out_of_scope_fact 키워드 매칭 → 잘라내기 + fallback
   12. ApprovalResult를 TurnMessage에 첨부 (디버그용)
 
 Phase E — DevPanel
@@ -356,10 +354,23 @@ A → B → C 까지 가면 즉흥 생성은 거의 잡힌다. D는 안전망, E
 
 ## 10. 결정 사항 (확정)
 
-1. **Inquiry Router는 LLM 호출 사용** — Director 호출 직전 단계에서 어차피 분류 정확도가 직접 품질에 영향을 미치므로 heuristic 1차 + LLM 보강을 처음부터 채택. (Director가 답변 범위를 잠그기 전에 잘못 분류되면 나머지가 무너짐.)
-2. **공포 시나리오 적용 여부** — 미정. 추리부터 우선 적용. 공포에는 공포 규칙(이벤트 트리거, 분위기 침식)이 따로 있되, fact ledger / inquiry router 자체는 통할 가능성 높음. 추리에서 검증 끝나면 공포 적용 시 어떤 부분이 공통화되는지 다시 본다.
-3. **forbiddenTopics는 캐릭터 프롬프트에 명시하지 않음** — 출력 후 Boundary Approver가 사후 검사로 잘라낸다. 모델이 "말 못 하지만 힌트는 줄 수 있다" 식 우회를 시도하지 못하게 한다.
-4. **Boundary 위반 시 잘라내기 (재생성 안 함)** — API 비용·응답 시간 우선. 잘려서 부자연스러우면 fallback 응답으로 대체. 품질 부족하면 후속 단계에서 재생성 옵션 추가 검토.
+1. **Inquiry 분류는 Director가 흡수 (B)** — 별도 Router 단계를 두지 않는다. 어차피 캐릭터 대답 전에 Director를 한 번 거치므로, Director가 inquiryType 판정 + AnswerScope 결정을 같은 JSON으로 출력한다. → `classifyInquiry()` 별도 단계 삭제, Director Output에 `inquiry` + `answerScope` 통합.
+2. **공포 시나리오 적용 여부 — 보류** — 추리부터 우선. 공포에는 공포 규칙(이벤트 트리거, 분위기 침식)이 따로 있되 통하는 부분은 있음. case layer를 **옵션 모듈**로 만들어서 시나리오 팩에 `case/`가 있으면 켜고 없으면 기존 흐름 유지. 추리에서 검증 끝난 뒤 공포 공통화 범위 재검토.
+3. **forbiddenTopics는 캐릭터 프롬프트에 비명시 (B)** — 캐릭터에겐 "말할 수 있는 것"(allowedFacts/allowedTestimonies)만 준다. 금지 주제는 프롬프트에 안 보여주고 Director 판정 + 코드 검증으로만 막는다. 모델 우회 시도 차단.
+4. **Boundary 위반 시 잘라내기 (A)** — 재생성 안 함. 위반 문장만 제거하고 남은 부분 표시, 비면 fallback. 비용·지연 최소. 품질 부족하면 후속에서 재생성 옵션 추가.
+
+### 확정에 따른 구조 변경
+
+```
+pipeline.ts
+  → classifyInput              // 기존 (chat/action/whisper)
+  → invokeDirector             // 확장: inquiry 판정 + answerScope를 한 JSON으로
+  → validateAnswerScope        // 코드 검증 (안전망)
+  → invokeCharacter            // allowedFacts/allowedTestimonies만 주입 (금지 주제 비노출)
+  → approveCharacterDraft      // 잘라내기 + fallback
+```
+
+§4 별도 Inquiry Router 단계는 제거되어 Director에 흡수된다. §6.1은 "allowed만 주입, forbidden 비노출"로 수정.
 
 ---
 

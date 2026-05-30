@@ -1,0 +1,130 @@
+/* ── 3. App Shell ── */
+
+.app-shell {
+  --scene-bg: none;
+  position: relative;
+  inline-size: 100%;
+  min-inline-size: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--theme-canvas-wash, var(--color-bg-canvas));
+}
+
+.scene-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: var(--scene-bg) center / cover no-repeat;
+  transition: opacity var(--motion-slow);
+}
+
+/* 장면 진입 후에만 배경 활성화 */
+.scene-open .scene-wash {
+  opacity: 1;
+}
+
+.scene-open .scene-wash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(26,26,26,0.4), rgba(26,26,26,0.6));
+}
+
+/* ── 4. Stage Layout (3-column grid) ── */
+
+.stage-layout {
+  --stage-side-track-share: 0.24fr;
+  --stage-main-track-share: 1fr;
+  --stage-tool-track-share: 0.32fr;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns:
+    minmax(0, var(--stage-side-track-share))
+    minmax(0, var(--stage-main-track-share))
+    minmax(0, var(--stage-tool-track-share));
+  grid-template-rows: 1fr;
+  gap: var(--space-5);
+  width: 100%;
+  height: 100%;
+  padding: var(--space-5);
+  overflow: hidden;
+}
+
+.stage-layout > * { min-width: 0; min-height: 0; }
+
+/* ── 5. Scenario Card (left panel) ── */
+
+.scenario-card {
+  grid-column: 1;
+  align-self: start;
+  padding: var(--space-6) var(--space-5);
+  border: var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.room-mark {
+  margin: 0 0 var(--space-4);
+  font: var(--font-label-xs);
+  color: var(--color-brand-emerald-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scenario-card h1 {
+  margin: 0 0 var(--space-3);
+  font: var(--font-display-xl);
+  color: var(--color-text-primary);
+}
+
+.scenario-card p {
+  margin: 0 0 var(--space-4);
+  font: var(--font-title-md);
+  color: var(--color-text-secondary);
+}
+
+.trait-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.trait-row span {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-emerald-100);
+  font: var(--font-label-xs);
+  color: var(--color-brand-emerald-700);
+}
+
+
+/* ── 15. Layout Mode Overrides ── */
+
+.setup-open .stage-layout {
+  --setup-panel-inline: calc(var(--space-8) * 10);
+  grid-template-columns: minmax(0, min(100%, var(--setup-panel-inline)));
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+.setup-open .scenario-card { display: none; }
+.setup-open .persona-panel, .setup-open .advisor-panel { grid-column: 1; }
+
+.invitation-open .stage-layout,
+.messenger-open .stage-layout,
+.scene-open .stage-layout {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: center;
+  align-items: stretch;
+}
+
+.invitation-open .scenario-shell,
+.messenger-open .scenario-shell,
+.scene-open .scenario-shell {
+  grid-column: 1;
+}
+
+.messenger-open .scenario-card { display: none; }
