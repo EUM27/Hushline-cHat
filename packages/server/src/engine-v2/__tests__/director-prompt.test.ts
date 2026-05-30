@@ -46,6 +46,16 @@ describe("director prompt", () => {
     expect(message).toContain("같은 결론을 말투만 바꿔 반복하지 않는다");
   });
 
+  test("adds perception boundaries before assigning model work", () => {
+    const prompt = buildDirectorSystemPrompt(minimalPack(), minimalOmniscientContext());
+
+    expect(prompt).toContain("[Perception Boundary — HARD]");
+    expect(prompt).toContain("Do not react to text the character cannot see.");
+    expect(prompt).toContain("Do not treat unread messages as read.");
+    expect(prompt).toContain("Unverified information must remain uncertain.");
+    expect(prompt).toContain("Do not narrate the user's emotional conclusions.");
+  });
+
   test("normalizes fallback director output so group-addressed dry-run turns can produce multiple speakers", async () => {
     const pack = {
       ...minimalPack(),
@@ -292,5 +302,7 @@ function minimalWorldState(): WorldState {
     relationshipGraph: [],
     recentEvents: [],
     recentSpeakerIds: ["giovanni"],
+    sceneInertiaCounter: 0,
+    recentBeatTypes: [],
   };
 }

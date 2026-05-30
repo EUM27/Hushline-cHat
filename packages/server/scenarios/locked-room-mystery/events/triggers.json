@@ -25,8 +25,8 @@
   },
   {
     "id": "book-evidence",
-    "condition": "turnNumber >= 7 AND 유저가 윤서하의 책이나 소지품을 조사함",
-    "description": "윤서하가 가져온 책등 안쪽에서 젖은 종이 냄새와 말라붙은 갈색 얼룩이 희미하게 드러난다.",
+    "condition": "turnNumber >= 5 AND 유저가 윤서하의 책 꾸러미나 소지품을 조사함",
+    "description": "이미 짐 옆에 놓여 있던 책 꾸러미를 펼치면, 책등 안쪽에서 젖은 종이 냄새와 말라붙은 갈색 얼룩이 희미하게 드러난다.",
     "oneShot": true
   }
 ]

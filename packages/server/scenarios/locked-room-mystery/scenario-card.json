@@ -59,21 +59,35 @@
       "role": "narrator",
       "speakerKind": "scenario-crowd",
       "speakerLabel": "[나레이터]",
-      "content": "피해자는 산장 주인 윤태식. 그는 2층 서재 책상 옆에 쓰러진 채 발견되었다. 목에는 깊게 찢긴 상처가 남아 있었다. 그러나 흉기는 방 어디에서도 발견되지 않았다."
+      "content": "2층 서재 문 앞에는 젖은 발자국도, 부서진 흔적도 없었다. 안쪽에서 잠겨 있던 문을 열고 들어서자, 산장 주인 윤태식이 책상 옆에 쓰러져 있었다."
+    },
+    {
+      "id": "corpse-confirmed",
+      "role": "narrator",
+      "speakerKind": "scenario-crowd",
+      "speakerLabel": "[나레이터]",
+      "content": "윤태식의 손목은 차갑게 식어 있었고, 맥박은 느껴지지 않았다. 목의 깊은 상처 아래로 굳어 가는 피가 책상 다리와 바닥 틈에 검게 말라붙어 있었다."
     },
     {
       "id": "locked-room",
       "role": "narrator",
       "speakerKind": "scenario-crowd",
       "speakerLabel": "[나레이터]",
-      "content": "서재 문은 안쪽에서 잠겨 있었다. 창문의 걸쇠도 채워져 있었고, 창밖 발코니에는 아무 흔적도 없었다. 발자국 하나 남아 있지 않았다. 지금도 계속 내리는 눈이 그 사실을 분명히 증명하고 있었다."
+      "content": "서재 안에는 흉기로 보이는 물건이 없었다. 창문의 걸쇠도 안쪽에서 채워져 있었고, 창밖 발코니와 눈밭에는 발자국 하나 남아 있지 않았다."
+    },
+    {
+      "id": "return-to-lounge",
+      "role": "narrator",
+      "speakerKind": "scenario-crowd",
+      "speakerLabel": "[나레이터]",
+      "content": "시신을 확인한 뒤, 사람들은 서재 문을 다시 닫고 1층 라운지로 내려왔다. 현관 옆 유선전화기만이 아직 외부와 이어질 수 있는 유일한 물건처럼 보였다."
     },
     {
       "id": "power-outage-key",
       "role": "narrator",
       "speakerKind": "scenario-crowd",
       "speakerLabel": "[나레이터]",
-      "content": "시신이 발견된 직후, 한 차례 정전이 있었다. 그리고 불이 다시 들어왔을 때, 라운지 테이블 위에는 열쇠 하나가 놓여 있었다. 그 열쇠가 어디서 나온 것인지, 누구도 말하지 않았다. 아니, 누구도 아무 말도 하지 않았다."
+      "content": "전화기 쪽으로 손이 뻗기 전, 한 차례 정전이 있었다. 불이 다시 들어왔을 때 라운지 테이블 위에는 열쇠 하나가 놓여 있었고, 그 열쇠가 어디서 나온 것인지 누구도 말하지 않았다."
     },
     {
       "id": "dead-phone-dialogue",

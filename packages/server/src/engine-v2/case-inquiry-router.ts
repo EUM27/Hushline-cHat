@@ -3,6 +3,7 @@ import type { CaseInquiryFrame, CaseInquiryType, CaseKnowledge, CaseRequestedTru
 const TOPIC_MARKERS: Array<{ tag: string; markers: string[]; objectId?: string; locationId?: string }> = [
   { tag: "key", markers: ["열쇠", "키"], objectId: "study-key" },
   { tag: "table", markers: ["테이블", "탁자"], objectId: "lounge-table" },
+  { tag: "book", markers: ["책", "책꾸러미", "책등", "메모지"], objectId: "seha-book-bundle" },
   { tag: "blackout", markers: ["정전", "불이 꺼", "불 꺼", "불꺼"] },
   { tag: "last_seen", markers: ["마지막", "최근", "직전", "근처", "누가 있었"] },
   { tag: "lounge", markers: ["라운지", "거실", "응접실"], locationId: "lodge-foyer" },
@@ -73,9 +74,10 @@ function classifyInquiry(
   if (/마지막|언제|시간|동선|전후|정전전|정전중|정전후/.test(normalized)) return "timeline_query";
   if ((hasTargetCharacter || /[가-힣]{2,4}[,아야씨]/.test(normalized)) && /봤|보았|목격|기억|말해|알아|들은|들었/.test(normalized)) return "witness_testimony";
   if (/봤|보았|들었|목격|증언|기억/.test(normalized)) return "witness_testimony";
+  if (topicTags.includes("key") || topicTags.includes("table") || topicTags.includes("book")) return "object_query";
   if (/조사|뒤져|살펴|확인/.test(normalized) && topicTags.some((tag) => ["lounge", "study"].includes(tag))) return "location_search";
   if (hasAccusationTarget || /수상|의심|했지|가져갔|죽였/.test(normalized)) return "accusation";
-  if (topicTags.includes("key") || topicTags.includes("table") || topicTags.includes("locked_room")) return "object_query";
+  if (topicTags.includes("locked_room")) return "object_query";
   if (topicTags.length > 0 && /보여|있어|확인|조사|살펴/.test(normalized)) return "observable_scene_request";
   return "general_dialogue";
 }

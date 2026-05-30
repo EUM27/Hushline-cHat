@@ -63,6 +63,11 @@ describe("Hushline API v2", () => {
     expect(created.session.scenario.initialSceneMode).toBe("dialogue");
     expect(created.session.worldState.sceneMode).toBe("dialogue");
     expect(created.session.messages.some((message: { speakerLabel?: string }) => message.speakerLabel === "[한서윤]")).toBe(true);
+    const openingText = created.session.messages.map((message: { content: string }) => message.content).join("\n");
+    expect(openingText).toContain("맥박은 느껴지지 않았다");
+    expect(openingText).toContain("1층 라운지로 내려왔다");
+    expect(openingText.indexOf("맥박은 느껴지지 않았다")).toBeLessThan(openingText.indexOf("전화도 안 됩니다"));
+    expect(openingText.indexOf("1층 라운지로 내려왔다")).toBeLessThan(openingText.indexOf("전화도 안 됩니다"));
   });
 
   test("keeps v1-compatible session shape after create advance reroll and undo", async () => {

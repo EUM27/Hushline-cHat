@@ -108,6 +108,43 @@ export const eventTriggerSchema = z.object({
   oneShot: z.boolean().default(true),
 });
 
+// ── Scene Occurrence Device ──
+
+export const sceneOccurrenceDeviceSchema = z.object({
+  id: z.string().min(1).max(120),
+  type: z.enum([
+    "relational", "informational", "npc_driven", "social", "logistical", "quiet_texture", "timed_optional",
+  ]),
+  trigger: z.object({
+    conditionType: z.string().min(1).max(80),
+    conditionValue: z.unknown(),
+    requiresAll: z.array(z.string().min(1).max(120)).optional(),
+    requiresAny: z.array(z.string().min(1).max(120)).optional(),
+    blocksIf: z.array(z.string().min(1).max(120)).optional(),
+  }),
+  effect: z.object({
+    sceneBeat: z.string().min(1).max(2000),
+    stateDelta: z.object({
+      tension: z.number().min(-10).max(10).optional(),
+      danger: z.number().min(-10).max(10).optional(),
+      factReveals: z.array(z.string().min(1).max(120)).optional(),
+      relationshipChanges: z.array(z.object({
+        sourceId: z.string().min(1).max(120),
+        targetId: z.string().min(1).max(120),
+        descriptor: z.string().min(1).max(100),
+        intensityDelta: z.number().min(-10).max(10),
+      })).optional(),
+    }).optional(),
+    npcReactions: z.array(z.object({
+      npcId: z.string().min(1).max(120),
+      reaction: z.string().min(1).max(500),
+    })).optional(),
+  }),
+  oneShot: z.boolean(),
+  cooldown: z.number().int().min(0).max(100).optional(),
+  priority: z.number().min(0).max(100).optional(),
+});
+
 // ── Case Knowledge ──
 
 export const caseInquiryTypeSchema = z.enum([

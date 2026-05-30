@@ -1,4 +1,4 @@
-import type { CharacterHandoutDefinition, SessionStateV2 } from "./engine-v2.js";
+import type { CaseBoardView, CharacterHandoutDefinition, SessionStateV2 } from "./engine-v2.js";
 
 export type ProviderKind = "dry-run" | "openai-compatible" | "gemini";
 
@@ -221,7 +221,10 @@ export interface SessionState {
 export type ClientSessionState = Omit<
   SessionStateV2,
   "persona" | "characters" | "messages" | "title" | "createdAt" | "updatedAt"
-> & SessionState;
+> & SessionState & {
+  /** Player-safe case board projection (clues, statements, contradictions, dossiers). */
+  caseBoard?: CaseBoardView;
+};
 
 export interface AssetManifest {
   backgrounds: Array<{

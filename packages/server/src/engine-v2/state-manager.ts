@@ -18,8 +18,10 @@ import type {
   SubObjective,
   Objective,
 } from "@hushline/shared";
+import type { GeneratedBeat } from "./scene-beat-generator.js";
 
 const MAX_RECENT_EVENTS = 20;
+const MAX_RECENT_BEAT_TYPES = 5;
 
 // ──────────────────────────────────────────────
 // Create Initial State
@@ -73,6 +75,10 @@ export function createInitialWorldState(
     relationshipGraph,
     recentEvents: [],
     recentSpeakerIds: [],
+    sceneInertiaCounter: 0,
+    recentBeatTypes: [],
+    revealedCaseFacts: {},
+    encounteredCharacters: {},
   };
 }
 
@@ -297,6 +303,43 @@ export function addNarrativeEvent(
 ): WorldState {
   const recentEvents = [...state.recentEvents, event].slice(-MAX_RECENT_EVENTS);
   return { ...state, recentEvents };
+}
+
+// ──────────────────────────────────────────────
+// Scene Beat
+// ──────────────────────────────────────────────
+
+/**
+ * Apply a generated scene beat to world state:
+ * - clamp tension/danger deltas
+ * - reset scene inertia
+ * - record beat type (bounded) and a narrative event
+ */
+export function applySceneBeat(
+  state: WorldState,
+  beat: GeneratedBeat,
+): WorldState {
+  const tensionDelta = beat.stateDelta.tension ?? 0;
+  const dangerDelta = beat.stateDelta.danger ?? 0;
+  const recentBeatTypes = [...(state.recentBeatTypes ?? []), beat.beatType].slice(-MAX_RECENT_BEAT_TYPES);
+  const recentEvents = [
+    ...state.recentEvents,
+    {
+      id: crypto.randomUUID(),
+      turnNumber: state.turnNumber,
+      description: `[scene-beat:${beat.deviceId}] ${beat.description}`,
+      affectedCharacterIds: beat.involvedNpcs,
+    },
+  ].slice(-MAX_RECENT_EVENTS);
+
+  return {
+    ...state,
+    tension: clamp(state.tension + tensionDelta, 0, 10),
+    danger: clamp(state.danger + dangerDelta, 0, 10),
+    sceneInertiaCounter: 0,
+    recentBeatTypes,
+    recentEvents,
+  };
 }
 
 // ──────────────────────────────────────────────

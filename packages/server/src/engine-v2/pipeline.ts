@@ -20,8 +20,16 @@ import { buildPublicContext, buildPrivateHandout, buildOmniscientContext } from 
 import { invokeDirector } from "./director.js";
 import { invokeNarrator } from "./narrator.js";
 import { invokeCharacter } from "./character.js";
-import { applyDirectorOutput, markCharacterSpoke } from "./state-manager.js";
+import { getCurrentAgenda, selectAutonomousSpeaker } from "./agenda-scheduler.js";
+import { applyDirectorOutput, markCharacterSpoke, applySceneBeat } from "./state-manager.js";
 import { parseBackgroundTags } from "./background-tags.js";
+import {
+  selectBeat,
+  sanitizeBeat,
+  shouldInjectBeat,
+  turnHadMeaningfulEvent,
+  updateInertia,
+} from "./scene-beat-generator.js";
 import {
   enforceCharacterBoundary,
   enforceNarratorBoundary,
@@ -41,6 +49,7 @@ import { validateCharacterDraft, type BoundaryGateResult } from "./runtime-bound
 import { extractClaimFromApprovedDialogue } from "./claim-ledger.js";
 import { propagateKnowledgeFromTurn } from "./knowledge-propagation.js";
 import { buildSceneStateSnapshot } from "./scene-state-snapshot.js";
+import { recordRevealedCaseFacts, recordEncounteredCharacters } from "./case-state.js";
 import { updateAmbiguityZone } from "./ambiguity-zone.js";
 import { attachCaseRuntimeToDirectorOutput, buildContradictionPlan } from "./director-pipeline.js";
 import { buildNarratorInstruction } from "./narrator-pipeline.js";
@@ -218,8 +227,68 @@ export async function runTurnV2(
 
   // ── Step 5: Character Invocations ──
   const characterMessages: TurnMessage[] = [];
-  const characterBoundaryReports = [];
+  const characterBoundaryReports: BoundaryReport[] = [];
   const characterGateResults: Array<{ npcId: string; gate: BoundaryGateResult }> = [];
+
+  // Shared per-result processing for both Director-selected and autonomous speakers.
+  // Applies boundary gate, character runtime gate, answerScope fact filtering, and
+  // background-tag parsing, then appends a character message.
+  const processCharacterResult = (
+    result: { characterId: string; content: string; source: "api" | "dry-run"; error?: string },
+    connection: ReturnType<typeof getConnection>,
+  ): void => {
+    const activeCharacter = session.characters.find((c) => c.id === result.characterId);
+    const characterBoundary = enforceCharacterBoundary(result.content, result.characterId, pack, undefined, caseAnswerScope);
+    characterBoundaryReports.push(characterBoundary.report);
+    const witness = caseAnswerScope.allowedWitnesses.find((candidate) => candidate.characterId === result.characterId);
+    const characterGate = validateCharacterDraft({
+      draft: characterBoundary.content || result.content,
+      npcId: result.characterId,
+      userInput: userContent,
+      userPersonaName: session.persona.name,
+      userNameIntroduced,
+      allowedFactIds: [
+        ...caseAnswerScope.publicFactIds,
+        ...caseAnswerScope.observableFactIds,
+        ...(witness?.factIds ?? []),
+      ],
+      blockedFactIds: caseAnswerScope.blockedFactIds,
+      hiddenTruthIds,
+      knownClaimIds: existingClaims.map((claim) => claim.id),
+      caseFacts,
+      currentTurn: session.worldState.turnNumber + 1,
+      privateLeakTexts: activeCharacter
+        ? [
+            activeCharacter.handout.secret,
+            activeCharacter.handout.desire,
+            activeCharacter.handout.objective,
+            activeCharacter.handout.fear ?? "",
+            ...(activeCharacter.handout.behaviorRules ?? []),
+          ]
+        : [],
+    });
+    characterGateResults.push({ npcId: result.characterId, gate: characterGate });
+    const characterContent = characterGate.finalText || characterBoundary.content || result.content;
+    const parsedContent = parseBackgroundTags(characterContent, allowedBackgroundIds);
+    if (parsedContent.backgroundId) {
+      taggedBackgroundId = parsedContent.backgroundId;
+    }
+    const generationModel = result.source === "api" ? snapshotGenerationModel(connection) : undefined;
+    characterMessages.push({
+      id: crypto.randomUUID(),
+      sessionId: session.id,
+      role: "character",
+      content: parsedContent.content || characterContent,
+      characterId: result.characterId,
+      speakerLabel: session.characters.find((c) => c.id === result.characterId)?.anonymousLabel
+        ?? session.characters.find((c) => c.id === result.characterId)?.name
+        ?? result.characterId,
+      generationSource: result.source === "api" ? "api" : "dry-run",
+      ...(generationModel ? { generationModel } : {}),
+      ...(result.error ? { fallbackReason: result.error } : {}),
+      createdAt: new Date().toISOString(),
+    });
+  };
 
   if (!directorOutput.silence && directorOutput.speakers.length > 0) {
     // Invoke characters — parallel if 2 speakers
@@ -250,48 +319,40 @@ export async function runTurnV2(
 
     for (const characterResult of characterResults) {
       if (!characterResult) continue;
-      const { result, connection } = characterResult;
-      const characterBoundary = enforceCharacterBoundary(result.content, result.characterId, pack, undefined, caseAnswerScope);
-      characterBoundaryReports.push(characterBoundary.report);
-      const witness = caseAnswerScope.allowedWitnesses.find((candidate) => candidate.characterId === result.characterId);
-      const characterGate = validateCharacterDraft({
-        draft: characterBoundary.content || result.content,
-        npcId: result.characterId,
-        userInput: userContent,
-        userPersonaName: session.persona.name,
-        userNameIntroduced,
-        allowedFactIds: [
-          ...caseAnswerScope.publicFactIds,
-          ...caseAnswerScope.observableFactIds,
-          ...(witness?.factIds ?? []),
-        ],
-        blockedFactIds: caseAnswerScope.blockedFactIds,
-        hiddenTruthIds,
-        knownClaimIds: existingClaims.map((claim) => claim.id),
-        caseFacts,
-        currentTurn: session.worldState.turnNumber + 1,
-      });
-      characterGateResults.push({ npcId: result.characterId, gate: characterGate });
-      const characterContent = characterGate.finalText || characterBoundary.content || result.content;
-      const parsedContent = parseBackgroundTags(characterContent, allowedBackgroundIds);
-      if (parsedContent.backgroundId) {
-        taggedBackgroundId = parsedContent.backgroundId;
-      }
-      const generationModel = result.source === "api" ? snapshotGenerationModel(connection) : undefined;
-      characterMessages.push({
-        id: crypto.randomUUID(),
-        sessionId: session.id,
-        role: "character",
-        content: parsedContent.content || characterContent,
-        characterId: result.characterId,
-        speakerLabel: session.characters.find((c) => c.id === result.characterId)?.anonymousLabel
-          ?? session.characters.find((c) => c.id === result.characterId)?.name
-          ?? result.characterId,
-        generationSource: result.source === "api" ? "api" : "dry-run",
-        ...(generationModel ? { generationModel } : {}),
-        ...(result.error ? { fallbackReason: result.error } : {}),
-        createdAt: new Date().toISOString(),
-      });
+      processCharacterResult(characterResult.result, characterResult.connection);
+    }
+  }
+
+  // ── Step 5.5: Autonomous Speaker Fallback ──
+  // When the Director picked nobody (and did not request silence), let a high-autonomy
+  // NPC that has been quiet act on its own agenda. Reuses the exact same boundary path.
+  if (!directorOutput.silence && directorOutput.speakers.length === 0 && characterMessages.length === 0) {
+    const currentTurn = session.worldState.turnNumber + 1;
+    const autoSpeakerId = selectAutonomousSpeaker(session.characters, session.worldState, currentTurn);
+    const autoCharacter = autoSpeakerId
+      ? session.characters.find((c) => c.id === autoSpeakerId)
+      : undefined;
+    const autoState = autoSpeakerId ? session.worldState.characterStates[autoSpeakerId] : undefined;
+    if (autoCharacter && autoState) {
+      const handout = buildPrivateHandout(autoCharacter.id, session.worldState, session.characters);
+      const agenda = getCurrentAgenda(autoCharacter, autoState, currentTurn);
+      const intent = `누가 시키지 않았지만 자기 안건에 따라 먼저 말을 꺼낸다: ${agenda.nextAction}. `
+        + "현재 장소·시간·관계·감정에 맞게 짧게 반응하고, 자기 비밀과 이해관계를 지킨다.";
+      const charConnection = getConnection(connections, autoCharacter.id);
+      const result = await invokeCharacter(
+        autoCharacter,
+        handout,
+        intent,
+        inputMode,
+        userContent,
+        publicContext,
+        session.messages,
+        session.persona.name,
+        pack,
+        charConnection,
+        caseAnswerScope,
+      );
+      processCharacterResult(result, charConnection);
     }
   }
 
@@ -407,6 +468,17 @@ export async function runTurnV2(
       ...(nextWorldState.sceneSnapshots ?? []),
       nextSnapshot,
     ].slice(-10),
+    revealedCaseFacts: recordRevealedCaseFacts(
+      nextWorldState.revealedCaseFacts,
+      [...caseAnswerScope.publicFactIds, ...caseAnswerScope.observableFactIds],
+      new Set(hiddenTruthIds),
+      session.worldState.turnNumber + 1,
+    ),
+    encounteredCharacters: recordEncounteredCharacters(
+      nextWorldState.encounteredCharacters,
+      speakerIds,
+      session.worldState.turnNumber + 1,
+    ),
   };
   directorOutput = {
     ...directorOutput,
@@ -419,6 +491,52 @@ export async function runTurnV2(
       selectedSpeakerReason: directorOutput.caseDebug?.selectedSpeakerReason ?? "director/default speaker selection",
     },
   };
+
+  // ── Step 6.5: Scene Beat Injection (anti-stall pacing) ──
+  let sceneBeatMessage: TurnMessage | null = null;
+  {
+    const hadCharacterSpeech = characterMessages.length > 0;
+    const hadDirectorEvent = Boolean(directorOutput.event);
+    const hadStateChange = (directorOutput.stateDelta.tension ?? 0) !== 0
+      || (directorOutput.stateDelta.danger ?? 0) !== 0;
+    const meaningful = turnHadMeaningfulEvent({ hadCharacterSpeech, hadDirectorEvent, hadStateChange });
+    const prevInertia = nextWorldState.sceneInertiaCounter ?? 0;
+    const nextInertia = updateInertia(prevInertia, meaningful);
+    const sceneDevices = pack.sceneDevices ?? [];
+    const inertiaThreshold = (pack.manifest as { sceneBeat?: { inertiaThreshold?: number } }).sceneBeat?.inertiaThreshold;
+
+    if (sceneDevices.length > 0 && shouldInjectBeat(nextInertia, inertiaThreshold)) {
+      const recentBeatTypes = nextWorldState.recentBeatTypes ?? [];
+      const rawBeat = selectBeat(sceneDevices, nextWorldState, recentBeatTypes);
+      if (rawBeat) {
+        const beat = sanitizeBeat(rawBeat, hiddenTruthIds);
+        // Runtime defense: filter the beat text through the narrator gate.
+        const beatGate = validateNarratorDraft({
+          draft: beat.description,
+          scope: narratorScope,
+          hiddenTruthIds,
+          caseFacts,
+        });
+        const safeBeatText = beatGate.status === "approved"
+          ? beat.description
+          : beatGate.finalText ?? beat.description;
+        nextWorldState = applySceneBeat(nextWorldState, { ...beat, description: safeBeatText });
+        sceneBeatMessage = {
+          id: crypto.randomUUID(),
+          sessionId: session.id,
+          role: "narrator",
+          content: safeBeatText,
+          speakerLabel: "[장면]",
+          generationSource: "dry-run",
+          createdAt: new Date().toISOString(),
+        };
+      } else {
+        nextWorldState = { ...nextWorldState, sceneInertiaCounter: nextInertia };
+      }
+    } else {
+      nextWorldState = { ...nextWorldState, sceneInertiaCounter: nextInertia };
+    }
+  }
 
   // ── Step 7: Message Assembly ──
   const turnMessages: TurnMessage[] = [];
@@ -471,6 +589,10 @@ export async function runTurnV2(
   }
 
   turnMessages.push(...composeSceneMessages(directorOutput, narratorMessage, characterMessages, systemMessage));
+
+  if (sceneBeatMessage) {
+    turnMessages.push(sceneBeatMessage);
+  }
 
   const stateLaw = buildStateLawSnapshot(nextWorldState, pack);
 

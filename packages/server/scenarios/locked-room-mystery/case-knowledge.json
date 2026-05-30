@@ -78,8 +78,8 @@
       "id": "lodge-foyer",
       "name": "라운지",
       "tags": ["lounge", "table"],
-      "observableFactIds": ["fact_table_key_seen", "fact_key_not_accounted_for"],
-      "objectIds": ["study-key", "lounge-table"]
+      "observableFactIds": ["fact_table_key_seen", "fact_key_not_accounted_for", "fact_seha_book_bundle_present"],
+      "objectIds": ["study-key", "lounge-table", "seha-book-bundle"]
     },
     {
       "id": "lodge-study-crime-scene",
@@ -103,6 +103,18 @@
       "tags": ["table", "lounge"],
       "initialLocationId": "lodge-foyer",
       "factRefs": ["fact_table_key_seen", "pub_key_after_blackout"]
+    },
+    {
+      "id": "seha-book-bundle",
+      "name": "윤서하의 책 꾸러미",
+      "tags": ["book", "books", "책", "책꾸러미", "책등", "메모지", "bundle", "seha", "윤서하", "delivery"],
+      "initialLocationId": "lodge-foyer",
+      "factRefs": [
+        "pub_seha_book_delivery",
+        "fact_seha_book_bundle_present",
+        "fact_book_delivery_note",
+        "fact_book_spine_damp_stain"
+      ]
     }
   ],
   "timeline": [
@@ -114,8 +126,8 @@
       "locationStates": {
         "lodge-foyer": {
           "present": ["kang-mujin", "yoon-haeon", "yoon-seha"],
-          "observableObjects": ["study-key", "lounge-table"],
-          "observableFactIds": ["fact_table_key_seen"]
+          "observableObjects": ["study-key", "lounge-table", "seha-book-bundle"],
+          "observableFactIds": ["fact_table_key_seen", "fact_seha_book_bundle_present"]
         }
       }
     }
@@ -133,6 +145,14 @@
       "text": "산장은 폭설로 고립되어 있고 통신도 끊겨 있다.",
       "tags": ["snow", "isolation", "phone", "case_basic"],
       "category": "briefing",
+      "knownBy": "all"
+    },
+    {
+      "id": "pub_seha_book_delivery",
+      "text": "윤서하는 윤태식이 부탁한 책 꾸러미를 전달하러 산장에 왔다고 소개되어 있다.",
+      "tags": ["book", "seha", "delivery", "victim", "case_basic"],
+      "category": "briefing",
+      "objectIds": ["seha-book-bundle"],
       "knownBy": "all"
     },
     {
@@ -169,6 +189,30 @@
       "category": "clue",
       "locationId": "lodge-foyer",
       "objectIds": ["study-key", "lounge-table"]
+    },
+    {
+      "id": "fact_seha_book_bundle_present",
+      "text": "윤서하의 짐 옆에는 눈에 젖은 천으로 감싼 책 꾸러미가 놓여 있다.",
+      "tags": ["book", "bundle", "seha", "luggage", "wet", "lounge"],
+      "category": "object",
+      "locationId": "lodge-foyer",
+      "objectIds": ["seha-book-bundle"]
+    },
+    {
+      "id": "fact_book_delivery_note",
+      "text": "책 꾸러미 사이에는 윤태식에게 전달할 책 제목이 적힌 얇은 메모지가 끼워져 있다.",
+      "tags": ["book", "delivery_note", "victim", "seha", "document"],
+      "category": "clue",
+      "locationId": "lodge-foyer",
+      "objectIds": ["seha-book-bundle"]
+    },
+    {
+      "id": "fact_book_spine_damp_stain",
+      "text": "책등 안쪽 종이가 유난히 축축하고, 오래 닦아낸 듯한 갈색 얼룩이 가장자리로 번져 있다.",
+      "tags": ["book", "spine", "damp", "brown_stain", "paper", "critical"],
+      "category": "clue",
+      "locationId": "lodge-foyer",
+      "objectIds": ["seha-book-bundle"]
     }
   ],
   "testimonySeeds": [
@@ -210,6 +254,25 @@
         "inquiryTypes": ["object_query", "timeline_query", "truth_request"],
         "topicTags": ["key", "table"]
       }
+    },
+    {
+      "id": "testimony_seha_book_delivery",
+      "characterId": "yoon-seha",
+      "factIds": ["pub_seha_book_delivery", "fact_seha_book_bundle_present"],
+      "topicTags": ["book", "seha", "delivery", "bundle"],
+      "defaultRevealLevel": "hint",
+      "certainty": "certain",
+      "canSay": [
+        "윤태식이 부탁한 책을 전달하러 왔고, 책 꾸러미는 자신의 짐 옆에 있다고 말할 수 있다."
+      ],
+      "mustNotSay": [
+        "책등 안쪽 상태, 갈색 얼룩, 흉기, 범인, 밀실 트릭을 언급하지 않는다."
+      ],
+      "revealWhen": {
+        "inquiryTypes": ["object_query", "witness_testimony"],
+        "topicTags": ["book", "delivery", "bundle", "seha"],
+        "objectIds": ["seha-book-bundle"]
+      }
     }
   ],
   "hiddenTruths": [
@@ -236,13 +299,19 @@
           "id": "opportunity_window",
           "type": "timeline",
           "requiredRefs": ["fact_table_key_seen", "fact_key_not_accounted_for"],
-          "weight": 0.4
+          "weight": 0.25
+        },
+        {
+          "id": "means_hidden_weapon_trace",
+          "type": "means",
+          "requiredRefs": ["fact_seha_book_bundle_present", "fact_book_spine_damp_stain"],
+          "weight": 0.3
         },
         {
           "id": "trick_mechanism",
           "type": "trick_mechanism",
           "requiredRefs": ["contra_key_after_blackout"],
-          "weight": 0.6
+          "weight": 0.45
         }
       ],
       "optionalProofNodes": [],
@@ -273,6 +342,39 @@
         "fullCount": 0,
         "maxHints": 3,
         "maxPartial": 2,
+        "maxFull": 1,
+        "hintCooldownTurns": 1,
+        "partialCooldownTurns": 1,
+        "fullResetPolicy": "never"
+      },
+      "fact_seha_book_bundle_present": {
+        "hintCount": 0,
+        "partialCount": 0,
+        "fullCount": 0,
+        "maxHints": 2,
+        "maxPartial": 2,
+        "maxFull": 1,
+        "hintCooldownTurns": 1,
+        "partialCooldownTurns": 1,
+        "fullResetPolicy": "never"
+      },
+      "fact_book_delivery_note": {
+        "hintCount": 0,
+        "partialCount": 0,
+        "fullCount": 0,
+        "maxHints": 2,
+        "maxPartial": 2,
+        "maxFull": 1,
+        "hintCooldownTurns": 1,
+        "partialCooldownTurns": 1,
+        "fullResetPolicy": "never"
+      },
+      "fact_book_spine_damp_stain": {
+        "hintCount": 0,
+        "partialCount": 0,
+        "fullCount": 0,
+        "maxHints": 1,
+        "maxPartial": 1,
         "maxFull": 1,
         "hintCooldownTurns": 1,
         "partialCooldownTurns": 1,

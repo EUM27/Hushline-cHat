@@ -1,0 +1,55 @@
+[
+  {
+    "id": "device-blizzard-howl",
+    "type": "quiet_texture",
+    "trigger": { "conditionType": "always", "conditionValue": null },
+    "effect": {
+      "sceneBeat": "창밖에서 눈보라가 한층 거세지며 산장 전체가 낮게 삐걱인다. 고립감이 짙어진다.",
+      "stateDelta": { "tension": 1 }
+    },
+    "oneShot": false,
+    "cooldown": 2,
+    "priority": 3
+  },
+  {
+    "id": "device-lights-flicker",
+    "type": "logistical",
+    "trigger": { "conditionType": "state_threshold", "conditionValue": { "field": "tension", "operator": ">=", "value": 6 } },
+    "effect": {
+      "sceneBeat": "천장의 전등이 잠깐 깜빡인다. 정전의 기억이 모두의 등줄기를 스친다.",
+      "stateDelta": { "tension": 1, "danger": 1 }
+    },
+    "oneShot": false,
+    "cooldown": 3,
+    "priority": 5
+  },
+  {
+    "id": "device-lounge-draft",
+    "type": "informational",
+    "trigger": { "conditionType": "turn_count", "conditionValue": 3 },
+    "effect": {
+      "sceneBeat": "라운지 테이블 쪽에서 찬 공기가 새어 든다. 그 열쇠가 어디서 나왔는지는 여전히 아무도 설명하지 못했다.",
+      "stateDelta": { "tension": 1, "factReveals": ["fact_key_not_accounted_for"] },
+      "npcReactions": [
+        { "npcId": "yoon-haeon", "reaction": "테이블 쪽을 흘깃 본다" }
+      ]
+    },
+    "oneShot": true,
+    "priority": 7
+  },
+  {
+    "id": "device-strained-silence",
+    "type": "social",
+    "trigger": { "conditionType": "always", "conditionValue": null },
+    "effect": {
+      "sceneBeat": "대화가 끊기고 무거운 침묵이 내려앉는다. 서로를 살피는 눈빛만 오간다.",
+      "stateDelta": { "tension": 1 },
+      "npcReactions": [
+        { "npcId": "kang-mujin", "reaction": "사람들을 천천히 둘러본다" }
+      ]
+    },
+    "oneShot": false,
+    "cooldown": 2,
+    "priority": 4
+  }
+]

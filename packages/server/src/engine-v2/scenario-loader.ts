@@ -12,6 +12,7 @@ import type {
   CaseKnowledge,
   ObjectiveDefinition,
   EventTrigger,
+  SceneOccurrenceDevice,
 } from "@hushline/shared";
 import {
   scenarioManifestSchema,
@@ -20,6 +21,7 @@ import {
   objectiveDefinitionSchema,
   eventTriggerSchema,
   caseKnowledgeSchema,
+  sceneOccurrenceDeviceSchema,
 } from "./schemas.js";
 
 export interface ScenarioLoadError {
@@ -154,6 +156,42 @@ export function loadScenarioPack(packDir: string): ScenarioLoadResult {
     validateCaseKnowledge(caseKnowledge, characters, scenarioCard!, errors);
   }
 
+  // ── Scene Devices (optional) ──
+  const sceneDevicesPath = join(abs, "scene-devices.json");
+  let sceneDevices: SceneOccurrenceDevice[] = [];
+  if (existsSync(sceneDevicesPath)) {
+    try {
+      const raw = JSON.parse(readFileSync(sceneDevicesPath, "utf-8"));
+      const arr = Array.isArray(raw) ? raw : [];
+      if (!Array.isArray(raw)) {
+        errors.push({
+          file: "scene-devices.json",
+          message: "scene-devices.json은 디바이스 배열이어야 합니다.",
+        });
+      }
+      for (const item of arr) {
+        const parsed = sceneOccurrenceDeviceSchema.safeParse(item);
+        if (parsed.success) {
+          sceneDevices.push(parsed.data as SceneOccurrenceDevice);
+        } else {
+          errors.push({
+            file: "scene-devices.json",
+            message: `장면 장치 검증 실패: ${parsed.error.issues[0]?.message ?? "unknown"}`,
+            details: JSON.stringify(item).slice(0, 200),
+          });
+        }
+      }
+    } catch (e) {
+      errors.push({
+        file: "scene-devices.json",
+        message: `JSON 파싱 실패: ${e instanceof Error ? e.message : "unknown"}`,
+      });
+    }
+    if (sceneDevices.length > 0) {
+      validateSceneDevices(sceneDevices, characters, caseKnowledge, scenarioCard!, errors);
+    }
+  }
+
   // ── Final validation ──
   if (errors.length > 0) {
     return { success: false, errors };
@@ -170,6 +208,7 @@ export function loadScenarioPack(packDir: string): ScenarioLoadResult {
       mainObjective: mainObjective ?? { id: "default", description: "시나리오를 진행한다." },
       eventTriggers,
       ...(caseKnowledge ? { caseKnowledge } : {}),
+      ...(sceneDevices.length > 0 ? { sceneDevices } : {}),
     },
   };
 }
@@ -423,6 +462,85 @@ function isValidSolutionRef(ref: string, factIds: Set<string>): boolean {
     || ref.startsWith("evidence_")
     || ref.startsWith("contra_")
     || ref.startsWith("contradiction_");
+}
+
+/** Collect all known fact ids from case knowledge (public + observable + extended facts). */
+function collectFactIds(caseKnowledge: CaseKnowledge | undefined): Set<string> {
+  if (!caseKnowledge) return new Set();
+  return new Set([
+    ...(caseKnowledge.facts ?? []).map((fact) => fact.id),
+    ...caseKnowledge.publicFacts.map((fact) => fact.id),
+    ...caseKnowledge.observableFacts.map((fact) => fact.id),
+  ]);
+}
+
+/** Collect all hidden-truth fact ids (hiddenTruths refs + vault ids + hidden_truth/solution facts). */
+function collectHiddenTruthIds(caseKnowledge: CaseKnowledge | undefined): Set<string> {
+  if (!caseKnowledge) return new Set();
+  return new Set([
+    ...caseKnowledge.hiddenTruths.map((truth) => truth.id),
+    ...(caseKnowledge.hiddenTruthVault?.hiddenTruthIds ?? []),
+    ...(caseKnowledge.facts ?? [])
+      .filter((fact) => fact.category === "hidden_truth" || fact.category === "solution")
+      .map((fact) => fact.id),
+  ]);
+}
+
+/**
+ * Validate scene devices against character ids and case fact ids.
+ * Enforces the no-hidden-truth-leak invariant on factReveals.
+ */
+function validateSceneDevices(
+  sceneDevices: SceneOccurrenceDevice[],
+  characters: CharacterDefinition[],
+  caseKnowledge: CaseKnowledge | undefined,
+  _scenarioCard: ScenarioCardV2,
+  errors: ScenarioLoadError[],
+): void {
+  const characterIds = new Set(characters.map((character) => character.id));
+  const factIds = collectFactIds(caseKnowledge);
+  const hiddenTruthIds = collectHiddenTruthIds(caseKnowledge);
+
+  for (const device of sceneDevices) {
+    const reveals = device.effect.stateDelta?.factReveals ?? [];
+    for (const factId of reveals) {
+      if (hiddenTruthIds.has(factId)) {
+        errors.push({
+          file: "scene-devices.json",
+          message: `scene device ${device.id} factReveal이 hidden truth를 참조합니다 (누출 위험): ${factId}`,
+        });
+      } else if (!factIds.has(factId)) {
+        errors.push({
+          file: "scene-devices.json",
+          message: `scene device ${device.id} factReveal이 존재하지 않는 factId를 참조합니다: ${factId}`,
+        });
+      }
+    }
+
+    for (const reaction of device.effect.npcReactions ?? []) {
+      if (!characterIds.has(reaction.npcId)) {
+        errors.push({
+          file: "scene-devices.json",
+          message: `scene device ${device.id} npcReaction이 존재하지 않는 npcId를 참조합니다: ${reaction.npcId}`,
+        });
+      }
+    }
+
+    for (const change of device.effect.stateDelta?.relationshipChanges ?? []) {
+      if (!characterIds.has(change.sourceId)) {
+        errors.push({
+          file: "scene-devices.json",
+          message: `scene device ${device.id} relationshipChange sourceId가 존재하지 않습니다: ${change.sourceId}`,
+        });
+      }
+      if (!characterIds.has(change.targetId)) {
+        errors.push({
+          file: "scene-devices.json",
+          message: `scene device ${device.id} relationshipChange targetId가 존재하지 않습니다: ${change.targetId}`,
+        });
+      }
+    }
+  }
 }
 
 function detectHiddenTruthLeakRisks(caseKnowledge: CaseKnowledge): ScenarioValidationReport["hiddenTruthLeakRisks"] {

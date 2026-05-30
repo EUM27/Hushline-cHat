@@ -1,9 +1,19 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Battery, ChevronLeft, Menu, Palette, Plus, Search, Send, Wifi, X } from "lucide-react";
 import type { ChatMessage, ClientSessionState } from "@hushline/shared";
 import { buildPhoneMessages, type PhoneMessage } from "../phone-feed";
 import type { VisualThemePreset, VisualThemeId } from "../types/ui";
 import { formatKoreanTime } from "../utils/ui-helpers";
+import {
+  caseFileSignature,
+  countPhoneChannelMessages,
+  getDefaultPhoneApp,
+  getPhoneAppAvailability,
+  type PhoneAppId,
+} from "../utils/phone-apps";
+import { loadPhoneAppsSeen, savePhoneAppsSeen } from "../utils/phone-apps-storage";
+import { PhoneCaseFile } from "./PhoneCaseFile";
+import { PhoneAppDock } from "./PhoneAppDock";
 
 export function PhoneSubScreen({
   session,
@@ -36,6 +46,61 @@ export function PhoneSubScreen({
   const [pinnedPhoneMessageIds, setPinnedPhoneMessageIds] = useState<string[]>([]);
   const phoneInputRef = useRef<HTMLInputElement | null>(null);
   const phoneFeedRef = useRef<HTMLDivElement | null>(null);
+
+  const caseBoard = session.caseBoard;
+  const uiMode = session.scenario.uiMode;
+  const phoneChannelCount = useMemo(
+    () => countPhoneChannelMessages(visibleMessages),
+    [visibleMessages],
+  );
+  const availability = useMemo(
+    () => getPhoneAppAvailability(caseBoard, uiMode, phoneChannelCount),
+    [caseBoard, uiMode, phoneChannelCount],
+  );
+
+  // Active app: initialise from the default for this session, then user-driven only.
+  const [activeApp, setActiveApp] = useState<PhoneAppId>(() =>
+    getDefaultPhoneApp(getPhoneAppAvailability(caseBoard, uiMode, phoneChannelCount), uiMode),
+  );
+
+  // Track "seen" counts per session for unread badges.
+  const [seen, setSeen] = useState(() => loadPhoneAppsSeen(session.id));
+
+  // Re-derive default app + seen state when the session changes.
+  useEffect(() => {
+    const freshAvailability = getPhoneAppAvailability(
+      session.caseBoard,
+      session.scenario.uiMode,
+      countPhoneChannelMessages(visibleMessages),
+    );
+    setActiveApp(getDefaultPhoneApp(freshAvailability, session.scenario.uiMode));
+    setSeen(loadPhoneAppsSeen(session.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id]);
+
+  const caseSignature = useMemo(() => caseFileSignature(caseBoard), [caseBoard]);
+  const messengerUnread = availability.messenger && phoneChannelCount > seen.seenMessenger;
+  const casefileUnread = availability.casefile && caseSignature > seen.seenCasefile;
+
+  // Mark the active app as seen (clears its badge) and persist.
+  useEffect(() => {
+    setSeen((current) => {
+      const next = { ...current, lastApp: activeApp };
+      if (activeApp === "messenger") next.seenMessenger = phoneChannelCount;
+      if (activeApp === "casefile") next.seenCasefile = caseSignature;
+      if (
+        next.seenMessenger === current.seenMessenger &&
+        next.seenCasefile === current.seenCasefile &&
+        next.lastApp === current.lastApp
+      ) {
+        return current;
+      }
+      savePhoneAppsSeen(session.id, next);
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeApp, phoneChannelCount, caseSignature, session.id]);
+
   const phoneMessages: PhoneMessage[] = buildPhoneMessages(session, visibleMessages);
   const filteredPhoneMessages = phoneFilter.trim()
     ? phoneMessages.filter((message) =>
@@ -48,11 +113,13 @@ export function PhoneSubScreen({
     .map((messageId) => phoneMessages.find((message) => message.id === messageId))
     .filter((message): message is PhoneMessage => Boolean(message));
 
+  const isMessengerApp = activeApp === "messenger";
+
   useEffect(() => {
-    if (phoneFeedRef.current) {
+    if (isMessengerApp && phoneFeedRef.current) {
       phoneFeedRef.current.scrollTop = phoneFeedRef.current.scrollHeight;
     }
-  }, [filteredPhoneMessages.length]);
+  }, [filteredPhoneMessages.length, isMessengerApp]);
 
   function handlePhoneBack() {
     if (isThemeOpen) {
@@ -103,6 +170,8 @@ export function PhoneSubScreen({
     setIsPhoneMenuOpen(true);
   }
 
+  const headerSubtitle = isMessengerApp ? session.scene.locationId : "사건파일";
+
   return (
     <aside className="phone-panel" aria-label="보조 휴대폰 화면">
       <div className="phone-notch" aria-hidden="true">
@@ -124,109 +193,130 @@ export function PhoneSubScreen({
             </button>
             <div>
               <strong>{session.scenario.title}</strong>
-              <span>{session.scene.locationId}</span>
+              <span>{headerSubtitle}</span>
             </div>
           </div>
           <div className="phone-room-tools" aria-label="보조 화면 도구">
             <button type="button" onClick={onToggleTheme} aria-label={isThemeOpen ? "테마 닫기" : "테마 열기"}>
               <Palette size={15} aria-hidden="true" />
             </button>
-            <button type="button" onClick={handlePhoneSearch} aria-label="검색">
-              <Search size={15} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsPhoneMenuOpen((current) => !current)}
-              aria-label={isPhoneMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
-            >
-              <Menu size={15} aria-hidden="true" />
-            </button>
+            {isMessengerApp ? (
+              <>
+                <button type="button" onClick={handlePhoneSearch} aria-label="검색">
+                  <Search size={15} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPhoneMenuOpen((current) => !current)}
+                  aria-label={isPhoneMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
+                >
+                  <Menu size={15} aria-hidden="true" />
+                </button>
+              </>
+            ) : null}
           </div>
         </header>
 
-        <div className="phone-message-feed" aria-live="polite" ref={phoneFeedRef}>
-          {isPhoneMenuOpen ? (
-            <section className="phone-menu-card" aria-label="보조 화면 메뉴">
-              <div>
-                <strong>현재 위치</strong>
-                <span>{session.scene.locationId}</span>
-              </div>
-              <div>
-                <strong>상태</strong>
-                <span>긴장 {session.scene.tension} · 위험 {session.scene.danger}</span>
-              </div>
-              <div>
-                <strong>첨부 단서</strong>
-                <span>{pinnedPhoneMessages.length > 0 ? `${pinnedPhoneMessages.length}개 선택됨` : "선택된 단서 없음"}</span>
-              </div>
-              {pinnedPhoneMessages.length > 0 ? (
-                <ul>
-                  {pinnedPhoneMessages.map((message) => (
-                    <li key={message.id}>{message.text}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
-          ) : null}
-          <div className="phone-date-pill">{session.scenario.subtitle || session.scenario.id}</div>
-          {filteredPhoneMessages.map((message) => (
-            <div key={message.id} className={`phone-message-row ${message.side}`}>
-              {message.side === "inbound" ? <span className="phone-avatar">O</span> : null}
-              <div className="phone-message-stack">
-                {message.side === "inbound" ? <span className="phone-sender">{message.sender}</span> : null}
-                <div className="phone-bubble-line">
-                  {message.side === "outbound" ? <span className="phone-time">{message.time}</span> : null}
-                  <p className="phone-bubble">{message.text}</p>
-                  {message.side === "inbound" ? <span className="phone-time">{message.time}</span> : null}
+        {isMessengerApp ? (
+          <div className="phone-message-feed" aria-live="polite" ref={phoneFeedRef}>
+            {isPhoneMenuOpen ? (
+              <section className="phone-menu-card" aria-label="보조 화면 메뉴">
+                <div>
+                  <strong>현재 위치</strong>
+                  <span>{session.scene.locationId}</span>
+                </div>
+                <div>
+                  <strong>상태</strong>
+                  <span>긴장 {session.scene.tension} · 위험 {session.scene.danger}</span>
+                </div>
+                <div>
+                  <strong>첨부 단서</strong>
+                  <span>{pinnedPhoneMessages.length > 0 ? `${pinnedPhoneMessages.length}개 선택됨` : "선택된 단서 없음"}</span>
+                </div>
+                {pinnedPhoneMessages.length > 0 ? (
+                  <ul>
+                    {pinnedPhoneMessages.map((message) => (
+                      <li key={message.id}>{message.text}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ) : null}
+            <div className="phone-date-pill">{session.scenario.subtitle || session.scenario.id}</div>
+            {filteredPhoneMessages.map((message) => (
+              <div key={message.id} className={`phone-message-row ${message.side}`}>
+                {message.side === "inbound" ? <span className="phone-avatar">O</span> : null}
+                <div className="phone-message-stack">
+                  {message.side === "inbound" ? <span className="phone-sender">{message.sender}</span> : null}
+                  <div className="phone-bubble-line">
+                    {message.side === "outbound" ? <span className="phone-time">{message.time}</span> : null}
+                    <p className="phone-bubble">{message.text}</p>
+                    {message.side === "inbound" ? <span className="phone-time">{message.time}</span> : null}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="phone-message-feed phone-casefile-feed" aria-live="polite">
+            <PhoneCaseFile caseBoard={caseBoard} />
+          </div>
+        )}
 
-        <form className="phone-input-bar" onSubmit={handlePhoneSubmit}>
-          <button type="button" className="phone-round-btn" onClick={handlePinPhoneClue} aria-label="현재 단서 첨부">
-            <Plus size={15} aria-hidden="true" />
-          </button>
-          <label className="phone-input-shell">
-            <Search size={14} aria-hidden="true" />
-            <input
-              ref={phoneInputRef}
-              type="text"
-              value={isFiltering ? phoneFilter : chatInput}
-              onChange={(event) =>
-                isFiltering ? setPhoneFilter(event.target.value) : onChatInputChange(event.target.value)
-              }
-              placeholder={isFiltering ? "단서 필터" : "단톡방에 문자를 보냅니다..."}
-              aria-label={isFiltering ? "보조 화면 단서 필터" : "단톡방 문자 입력"}
-            />
-            {(isFiltering ? phoneFilter.trim() : chatInput.trim()) ? (
-              <button
-                type="button"
-                className="phone-inline-clear"
-                onClick={() => {
-                  if (isFiltering) {
-                    setPhoneFilter("");
-                    setIsFiltering(false);
-                    return;
-                  }
-                  onChatInputChange("");
-                }}
-                aria-label={isFiltering ? "단서 필터 지우기" : "문자 입력 지우기"}
-              >
-                <X size={13} aria-hidden="true" />
-              </button>
-            ) : null}
-          </label>
-          <button
-            className="phone-round-btn phone-send-btn"
-            type="submit"
-            disabled={isSending}
-            aria-label={isFiltering ? "필터 적용" : "문자 보내기"}
-          >
-            {isFiltering ? <Search size={13} aria-hidden="true" /> : <Send size={13} aria-hidden="true" />}
-          </button>
-        </form>
+        {isMessengerApp ? (
+          <form className="phone-input-bar" onSubmit={handlePhoneSubmit}>
+            <button type="button" className="phone-round-btn" onClick={handlePinPhoneClue} aria-label="현재 단서 첨부">
+              <Plus size={15} aria-hidden="true" />
+            </button>
+            <label className="phone-input-shell">
+              <Search size={14} aria-hidden="true" />
+              <input
+                ref={phoneInputRef}
+                type="text"
+                value={isFiltering ? phoneFilter : chatInput}
+                onChange={(event) =>
+                  isFiltering ? setPhoneFilter(event.target.value) : onChatInputChange(event.target.value)
+                }
+                placeholder={isFiltering ? "단서 필터" : "단톡방에 문자를 보냅니다..."}
+                aria-label={isFiltering ? "보조 화면 단서 필터" : "단톡방 문자 입력"}
+              />
+              {(isFiltering ? phoneFilter.trim() : chatInput.trim()) ? (
+                <button
+                  type="button"
+                  className="phone-inline-clear"
+                  onClick={() => {
+                    if (isFiltering) {
+                      setPhoneFilter("");
+                      setIsFiltering(false);
+                      return;
+                    }
+                    onChatInputChange("");
+                  }}
+                  aria-label={isFiltering ? "단서 필터 지우기" : "문자 입력 지우기"}
+                >
+                  <X size={13} aria-hidden="true" />
+                </button>
+              ) : null}
+            </label>
+            <button
+              className="phone-round-btn phone-send-btn"
+              type="submit"
+              disabled={isSending}
+              aria-label={isFiltering ? "필터 적용" : "문자 보내기"}
+            >
+              {isFiltering ? <Search size={13} aria-hidden="true" /> : <Send size={13} aria-hidden="true" />}
+            </button>
+          </form>
+        ) : null}
+
+        {availability.showDock ? (
+          <PhoneAppDock
+            available={availability.available}
+            activeApp={activeApp}
+            unread={{ casefile: casefileUnread, messenger: messengerUnread }}
+            onSelect={setActiveApp}
+          />
+        ) : null}
 
         <div className="phone-home-indicator" aria-hidden="true" />
 

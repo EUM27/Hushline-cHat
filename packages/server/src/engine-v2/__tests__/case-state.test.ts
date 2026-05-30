@@ -21,6 +21,8 @@ describe("case state", () => {
       hasEnteredScene: true,
       mainObjective: { id: "solve", description: "진상을 밝힌다.", status: "active" },
       subObjectives: [],
+      sceneInertiaCounter: 0,
+      recentBeatTypes: [],
       clueLedger: { discovered: [], hypotheses: [] },
     };
     const inquiry: CaseInquiryFrame = {

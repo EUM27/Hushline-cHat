@@ -13,6 +13,7 @@ import type {
 } from "@hushline/shared";
 import { completeWithConnection, isConnectionReady } from "../providers/adapters/index.js";
 import { sanitizeNarratorOutput } from "./output-sanitizer.js";
+import { OBSERVABLE_STORY_ADVANCEMENT_RULES, PERCEPTION_BOUNDARY_RULES } from "./perception-boundary-rules.js";
 
 export interface NarratorInvocationResult {
   content: string | null;
@@ -112,6 +113,9 @@ function buildNarratorSystemPrompt(
     "따옴표 대사와 '말했다/중얼거렸다/대답했다' 발화문을 쓰지 않는다.",
     "허용: 공간, 감각, 물리적 결과, 공개적으로 관찰 가능한 변화.",
     "불가: 캐릭터 속마음, 동기 단정, 유저 행동 대행, 다른 캐릭터 연기.",
+    "",
+    ...PERCEPTION_BOUNDARY_RULES,
+    ...OBSERVABLE_STORY_ADVANCEMENT_RULES,
     "",
     "[공간 규칙]",
     ...pack.scenarioCard.spaceRules,

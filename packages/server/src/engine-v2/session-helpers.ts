@@ -38,5 +38,6 @@ export function reconstructPack(session: SessionStateV2): ScenarioPack {
       description: session.worldState.mainObjective.description,
     },
     eventTriggers: [],
+    sceneDevices: [],
   };
 }

@@ -74,6 +74,49 @@ describe("runtime boundary gate", () => {
     expect(hidden.violations).toContain("hidden_truth_leak");
   });
 
+  test("blocks private thoughts that expose withheld evidence steering", () => {
+    const input = {
+      draft: "'서재 책이 아직 언급되지 않았으니, 이 사람의 관심을 다른 곳으로 돌려야 해.'",
+      npcId: "yoon-seha",
+      allowedFactIds: [],
+      blockedFactIds: [],
+      hiddenTruthIds: ["truth_killer_identity"],
+      knownClaimIds: [],
+      caseFacts: [...caseFacts],
+      currentTurn: 5,
+      privateLeakTexts: [
+        "윤서하가 부탁받은 책 속에 숨겨 온 얇은 제본칼로 윤태식을 살해했다.",
+        "자신이 들고 온 책과 정전 직후 동선은 조사 대상에서 멀어지게 한다.",
+      ],
+    } satisfies Parameters<typeof validateCharacterDraft>[0] & { privateLeakTexts: string[] };
+
+    const result = validateCharacterDraft(input);
+
+    expect(result.status).toBe("replace_with_deflection");
+    expect(result.violations).toContain("private_handout_leak");
+    expect(result.finalText).not.toContain("서재 책");
+    expect(result.finalText).not.toContain("관심을 다른 곳으로");
+  });
+
+  test("allows cautious spoken uncertainty without private evidence steering", () => {
+    const result = validateCharacterDraft({
+      draft: "\"아직 확인 안 됐어. 단정하지 마.\"",
+      npcId: "yoon-seha",
+      allowedFactIds: [],
+      blockedFactIds: [],
+      hiddenTruthIds: ["truth_killer_identity"],
+      knownClaimIds: [],
+      caseFacts: [...caseFacts],
+      currentTurn: 5,
+      privateLeakTexts: [
+        "자신이 들고 온 책과 정전 직후 동선은 조사 대상에서 멀어지게 한다.",
+      ],
+    });
+
+    expect(result.status).toBe("approved");
+    expect(result.violations).not.toContain("private_handout_leak");
+  });
+
   test("blocks character drafts that attribute an unmade exit proposal to the user", () => {
     const result = validateCharacterDraft({
       draft: "\"밖에 나가자는 말은 하지 말자, 정해윤.\"",

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import { routeCaseInquiry } from "../case-inquiry-router";
+import { loadScenarioPack } from "../scenario-loader";
 import { makeCasePack } from "./case-test-helpers";
 
 describe("case inquiry router", () => {
@@ -36,6 +38,19 @@ describe("case inquiry router", () => {
     expect(frame.topicTags).toContain("table");
     expect(frame.topicTags).toContain("last_seen");
     expect(frame.truthLeakRisk).toBeLessThanOrEqual(2);
+  });
+
+  test("routes Korean book investigation to the locked-room book object", () => {
+    const result = loadScenarioPack(resolve(import.meta.dir, "../../../scenarios/locked-room-mystery"));
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    const frame = routeCaseInquiry("윤서하 책을 살펴본다.", result.pack);
+
+    expect(frame.isCaseInquiry).toBe(true);
+    expect(frame.inquiryType).toBe("object_query");
+    expect(frame.targetObjectId).toBe("seha-book-bundle");
+    expect(frame.topicTags).toContain("book");
   });
 
   test("classifies witness, contradiction, and deduction turns without an LLM", () => {

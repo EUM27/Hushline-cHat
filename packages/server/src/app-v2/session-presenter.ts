@@ -1,4 +1,5 @@
 import type { ClientSessionState, ScenarioPack, SessionStateV2 } from "@hushline/shared";
+import { buildCaseBoard } from "./case-board.js";
 
 /**
  * Convert v2 session to v1-compatible shape for the existing client.
@@ -9,6 +10,7 @@ export function toClientSession(session: SessionStateV2, scenarioPack?: Scenario
 
   return {
     ...session,
+    caseBoard: buildCaseBoard(session, scenarioPack),
     scene: {
       sessionId: session.worldState.sessionId,
       scenarioId: session.worldState.scenarioId,

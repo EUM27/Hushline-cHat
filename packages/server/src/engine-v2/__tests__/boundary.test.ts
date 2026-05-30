@@ -210,6 +210,8 @@ function makeWorldState(): WorldState {
     relationshipGraph: [],
     recentEvents: [],
     recentSpeakerIds: [],
+    sceneInertiaCounter: 0,
+    recentBeatTypes: [],
   };
 }
 

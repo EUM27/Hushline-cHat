@@ -19,13 +19,46 @@ export interface GeneratedBeat {
   };
 }
 
-const INERTIA_THRESHOLD = 2;
+const DEFAULT_INERTIA_THRESHOLD = 2;
 
 /**
  * Check if a scene beat should be injected this turn.
+ * @param sceneInertiaCounter turns elapsed without a meaningful event
+ * @param threshold optional override (defaults to 2)
  */
-export function shouldInjectBeat(sceneInertiaCounter: number): boolean {
-  return sceneInertiaCounter >= INERTIA_THRESHOLD;
+export function shouldInjectBeat(sceneInertiaCounter: number, threshold = DEFAULT_INERTIA_THRESHOLD): boolean {
+  return sceneInertiaCounter >= threshold;
+}
+
+/**
+ * Decide whether the just-processed turn carried a meaningful event.
+ * A meaningful event resets scene inertia.
+ */
+export function turnHadMeaningfulEvent(input: {
+  hadCharacterSpeech: boolean;
+  hadDirectorEvent: boolean;
+  hadStateChange: boolean;
+}): boolean {
+  return input.hadCharacterSpeech || input.hadDirectorEvent || input.hadStateChange;
+}
+
+/**
+ * Runtime leak guard: strip any hidden-truth fact ids from a beat's factReveals.
+ * This is a defense-in-depth layer independent of scenario-load validation.
+ */
+export function sanitizeBeat(beat: GeneratedBeat, hiddenTruthIds: string[]): GeneratedBeat {
+  const reveals = beat.stateDelta.factReveals;
+  if (!reveals || reveals.length === 0) return beat;
+  const blocked = new Set(hiddenTruthIds);
+  const safe = reveals.filter((id) => !blocked.has(id));
+  if (safe.length === reveals.length) return beat;
+  const nextDelta = { ...beat.stateDelta };
+  if (safe.length > 0) {
+    nextDelta.factReveals = safe;
+  } else {
+    delete nextDelta.factReveals;
+  }
+  return { ...beat, stateDelta: nextDelta };
 }
 
 /**

@@ -26,6 +26,11 @@ import {
   buildCharacterChatContext,
 } from "./context-builder.js";
 import { hasUserIntroducedName, isPlaceholderPersonaName, normalizePersonaName } from "./user-identity.js";
+import {
+  OBSERVABLE_STORY_ADVANCEMENT_RULES,
+  PERCEPTION_BOUNDARY_RULES,
+  PRIVATE_THOUGHT_SAFETY_RULES,
+} from "./perception-boundary-rules.js";
 
 export interface CharacterInvocationResult {
   characterId: string;
@@ -154,9 +159,14 @@ function buildCharacterSystemPrompt(
     "[Output Role Contract — HARD]",
     "You are this character's line generator only.",
     "Output ONLY formatted character lines: spoken dialogue inside double quotes, and optional private thought inside single quotes.",
-    "Allowed output examples: \"그게... 지금은 말 못 해요.\" or '이건 말하면 안 돼.'",
+    "Allowed output examples: \"그게... 지금은 말 못 해요.\" or '진정해. 숨부터 고르자.'",
     "Never write text outside quote markers. Never use markdown; the client renders quote markers as formatting.",
     "Output NEVER narration, stage directions, body actions, facial expressions outside spoken dialogue, other character actions, other character dialogue, user actions, user thoughts, speaker labels, bracketed roleplay text, unauthorized case facts, or hidden truth implications.",
+    "",
+    ...PERCEPTION_BOUNDARY_RULES,
+    ...OBSERVABLE_STORY_ADVANCEMENT_RULES,
+    ...PRIVATE_THOUGHT_SAFETY_RULES,
+    "",
     "사용자 입력에는 대사와 행동 지문이 섞일 수 있다.",
     "그 형식을 따라 하지 않는다.",
     "사용자가 하지 않은 제안, 의도, 결정, 행동을 전제로 반응하지 않는다.",

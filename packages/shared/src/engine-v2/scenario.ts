@@ -1,5 +1,5 @@
 import type { SceneMode } from "./base.js";
-import type { CaseKnowledge } from "./case.js";
+import type { CaseKnowledge, SceneOccurrenceDevice } from "./case.js";
 // ── Scenario Pack ──
 
 export type ScenarioGenre = "horror" | "romance" | "mystery" | "fantasy" | "scifi" | "slice_of_life" | "thriller";
@@ -104,4 +104,6 @@ export interface ScenarioPack {
   mainObjective: ObjectiveDefinition;
   eventTriggers: EventTrigger[];
   caseKnowledge?: CaseKnowledge;
+  /** Optional scene occurrence devices used by the SceneBeatGenerator for anti-stall pacing. */
+  sceneDevices?: SceneOccurrenceDevice[];
 }

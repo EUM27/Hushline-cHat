@@ -76,6 +76,13 @@ describe("character prompt boundaries", () => {
     expect(capturedSystemPrompt).toContain("입 밖으로 말하지 않은 생각은 반드시 작은따옴표로 감싼다");
     expect(capturedSystemPrompt).toContain("사용자가 하지 않은 제안, 의도, 결정, 행동을 전제로 반응하지 않는다.");
     expect(capturedSystemPrompt).toContain("\"갇혀 있다\"는 말을 \"나가자\"는 제안으로 바꾸지 않는다.");
+    expect(capturedSystemPrompt).toContain("[Perception Boundary — HARD]");
+    expect(capturedSystemPrompt).toContain("Do not react to text the character cannot see.");
+    expect(capturedSystemPrompt).toContain("Unheard information remains unheard.");
+    expect(capturedSystemPrompt).toContain("Do not treat user actions that have not happened as completed.");
+    expect(capturedSystemPrompt).toContain("[Private Thought Safety — HARD]");
+    expect(capturedSystemPrompt).toContain("Private thoughts are not a channel for revealing secrets, evidence, solution logic, or avoidance strategy.");
+    expect(capturedSystemPrompt).toContain("Never mention what has not been brought up yet in order to steer the user away from it.");
     expect(capturedSystemPrompt).not.toContain("자기 몸짓");
     expect(capturedSystemPrompt).not.toContain("짧은 추임새");
     expect(capturedSystemPrompt).toContain("혼잣말");

@@ -14,6 +14,43 @@ describe("scenario loader case knowledge", () => {
     expect(result.pack.caseKnowledge?.hiddenTruths.map((truth) => truth.id)).toContain("truth_killer_identity");
   });
 
+  test("locks the book solution behind a staged clue ladder", () => {
+    const result = loadScenarioPack(resolve(import.meta.dir, "../../../scenarios/locked-room-mystery"));
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const knowledge = result.pack.caseKnowledge;
+    expect(knowledge).toBeDefined();
+    if (!knowledge) return;
+
+    expect(knowledge.objects?.map((object) => object.id)).toContain("seha-book-bundle");
+
+    const publicBookFact = knowledge.publicFacts.find((fact) => fact.id === "pub_seha_book_delivery");
+    expect(publicBookFact?.text).toContain("책");
+    expect(publicBookFact?.text).not.toMatch(/흉기|제본칼|범인|트릭/);
+
+    const observableIds = knowledge.observableFacts.map((fact) => fact.id);
+    expect(observableIds).toContain("fact_seha_book_bundle_present");
+    expect(observableIds).toContain("fact_book_delivery_note");
+    expect(observableIds).toContain("fact_book_spine_damp_stain");
+
+    const bookFacts = knowledge.observableFacts
+      .filter((fact) => fact.objectIds?.includes("seha-book-bundle"))
+      .map((fact) => fact.id);
+    expect(bookFacts).toEqual(expect.arrayContaining([
+      "fact_seha_book_bundle_present",
+      "fact_book_delivery_note",
+      "fact_book_spine_damp_stain",
+    ]));
+
+    const meansNode = knowledge.hiddenTruthVault?.solutionGraph.requiredProofNodes
+      .find((node) => node.id === "means_hidden_weapon_trace");
+    expect(meansNode?.requiredRefs).toEqual(expect.arrayContaining([
+      "fact_seha_book_bundle_present",
+      "fact_book_spine_damp_stain",
+    ]));
+  });
+
   test("fails fast when testimony seeds reference missing fact ids", () => {
     const dir = createMinimalScenarioPack({
       caseKnowledge: {

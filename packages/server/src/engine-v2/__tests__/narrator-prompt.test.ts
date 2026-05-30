@@ -39,6 +39,10 @@ describe("narrator prompt boundaries", () => {
     expect(capturedSystemPrompt).toContain("나레이터는 대사를 쓰지 않는다");
     expect(capturedSystemPrompt).toContain("캐릭터의 목소리, 말투, 문장 결정을 대신하지 않는다");
     expect(capturedSystemPrompt).toContain("따옴표 대사와 '말했다/중얼거렸다/대답했다' 발화문을 쓰지 않는다");
+    expect(capturedSystemPrompt).toContain("[Perception Boundary — HARD]");
+    expect(capturedSystemPrompt).toContain("Do not treat undelivered information as shared knowledge.");
+    expect(capturedSystemPrompt).toContain("Do not narrate the user's emotional conclusions.");
+    expect(capturedSystemPrompt).toContain("Advance the story through external events");
     expect(capturedUserPayload).toContain("{{user}}: 무진 씨, 지금 나가도 되나요?");
     expect(capturedUserPayload).not.toContain("유저: 무진 씨");
   });

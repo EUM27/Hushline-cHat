@@ -89,4 +89,12 @@ export interface WorldState {
   playerHypotheses?: PlayerHypothesis[];
   playerDeductionAttempts?: DeductionAttempt[];
   sceneSnapshots?: SceneStateSnapshot[];
+  /** Turns elapsed without a meaningful event; drives SceneBeatGenerator injection. */
+  sceneInertiaCounter: number;
+  /** Recently injected scene-beat types (bounded), used to avoid repetition. */
+  recentBeatTypes: string[];
+  /** factId → turn first revealed to the player. Source of the progressive clue ledger. */
+  revealedCaseFacts?: Record<string, number>;
+  /** characterId → turn first encountered by the player. Source of the progressive dossier list. */
+  encounteredCharacters?: Record<string, number>;
 }

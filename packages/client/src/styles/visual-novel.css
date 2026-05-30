@@ -501,6 +501,7 @@
 
 .vn-panel-layer .connection-panel,
 .vn-panel-layer .dev-panel,
+.vn-panel-layer .case-board-panel,
 .vn-panel-layer .vn-right-tool-panel {
   position: relative;
   z-index: 1;
@@ -595,6 +596,7 @@
 }
 
 .vn-panel-layer .connection-header strong,
+.vn-panel-layer .case-board-header h3,
 .vn-panel-layer .dev-panel-content h3 {
   color: var(--vn-accent);
 }

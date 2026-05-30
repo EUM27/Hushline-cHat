@@ -107,5 +107,7 @@ function minimalWorldState(): WorldState {
     relationshipGraph: [],
     recentEvents: [],
     recentSpeakerIds: [],
+    sceneInertiaCounter: 0,
+    recentBeatTypes: [],
   };
 }

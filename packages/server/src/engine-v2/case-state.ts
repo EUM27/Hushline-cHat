@@ -7,6 +7,45 @@ const CLAIM_INQUIRY_TYPES = new Set([
   "contradiction_challenge",
 ]);
 
+/**
+ * Accumulate revealed case facts into a monotonic ledger (factId → first-revealed turn).
+ * Hidden-truth facts are never recorded. Existing first-reveal turns are preserved.
+ */
+export function recordRevealedCaseFacts(
+  prev: Record<string, number> | undefined,
+  revealedFactIds: readonly string[],
+  hiddenTruthIds: ReadonlySet<string>,
+  currentTurn: number,
+): Record<string, number> {
+  const next = { ...(prev ?? {}) };
+  for (const factId of revealedFactIds) {
+    if (hiddenTruthIds.has(factId)) continue;
+    if (next[factId] === undefined) {
+      next[factId] = currentTurn;
+    }
+  }
+  return next;
+}
+
+/**
+ * Accumulate characters the player has encountered (monotonic; characterId → first-seen turn).
+ * Used to build the progressive dossier list — only met/mentioned characters appear.
+ */
+export function recordEncounteredCharacters(
+  prev: Record<string, number> | undefined,
+  encounteredCharacterIds: readonly string[],
+  currentTurn: number,
+): Record<string, number> {
+  const next = { ...(prev ?? {}) };
+  for (const characterId of encounteredCharacterIds) {
+    if (!characterId) continue;
+    if (next[characterId] === undefined) {
+      next[characterId] = currentTurn;
+    }
+  }
+  return next;
+}
+
 export function recordCaseClaims(
   worldState: WorldState,
   characterMessages: TurnMessage[],

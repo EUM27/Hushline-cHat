@@ -385,3 +385,204 @@ from_st_lab_to_hushline:
 - [ ] NpcFactRevealEngine을 Character Agent pre-generation에 연결
 - [ ] DirectorOutput reveal permissions 설계/검증
 - [ ] Reveal budget 차감/리셋
+
+---
+
+## 2026-05-30 (세션 — 설계도 재점검 + Case Board UI)
+
+> ⚠️ 이 세션 전까지 PROGRESS.md가 실제 코드보다 한참 뒤처져 있었음.
+> 5/23~5/30 사이 `codex/mystery-runtime-layer` 브랜치에서 mystery runtime이 대거 추가됐는데 문서 미반영.
+> 상세 재점검은 `replan-2026-05-30.md` 참조.
+
+### 먼저: 실제 코드 상태 재점검 (문서 vs 코드)
+
+PROGRESS.md에 "미구현"으로 적혀 있었지만 **이미 구현·연결 완료**된 것들:
+
+- ✅ 코드베이스 리팩토링 (App.tsx 훅/컴포넌트 분리, styles 9분할, shared 6분할, app-v2 라우트 분리, pipeline 헬퍼 분리) — `2026-05-29-hushline-codebase-refactor.md` plan 거의 완수
+- ✅ VisibilityGraph → private handout 연결
+- ✅ NpcFactRevealEngine / RuntimeGenerationContract(`runtime-boundary-gate.ts`)
+- ✅ DirectorOutput `revealPermissions` 필드 + `buildRevealPermissions`
+- ✅ Reveal Budget 차감/리셋 (`reveal-budget-manager.ts` 파이프라인 연결)
+- ✅ ClaimLedger / 모순 감지 / 연역 검증 / 지식 전파 / 모호성 존 (mystery runtime 전체 파이프라인 연결)
+- ✅ Director Law / State Law + DevPanel 노출
+- ✅ 비주얼 테마 3종 (moonlight/dunkshoot/cherryNight)
+
+### 이번 세션에서 한 일: 유저용 Case Board (단서장 + 인물 기록)
+
+서버가 풍부한 case 데이터를 생산하지만 **유저 노출 경로가 없던** Phase 3 항목 완결.
+
+**구현 (전부 빌드/테스트 통과):**
+- [x] `shared`: `engine-v2/case-board.ts` — `CaseBoardView` player-safe 타입 (배럴 + index.ts export)
+- [x] `shared`: `ClientSessionState`에 `caseBoard?` 필드 추가
+- [x] `server`: `app-v2/case-board.ts` — `buildCaseBoard(session, pack)`
+  - hidden_truth/solution fact + hiddenTruthVault id 전부 필터링 (핵심 불변식)
+  - 단서: briefing/public(턴0) + snapshot에서 실제 공개된 observable fact
+  - 진술: claimLedger.claims (이미 boundary gate 통과한 NPC 출력)
+  - 모순: `playerNoticed === true`인 것만
+  - 의문: ambiguousFacts 중 `playerVisibleStatus !== "unnoticed"`
+  - 추리: playerDeductionAttempts + 안전한 verdict
+  - 인물 기록: 표면 정보 + 호감도 + 공개 여부 + 진술 수
+- [x] `server`: `toClientSession`에 `caseBoard` 부착 (create/get/advance/reroll/undo 전부)
+- [x] `server` 테스트: `app-v2/__tests__/case-board.test.ts` 4개
+  - 비-미스터리 팩 → 빈 보드 + dossier만
+  - 미스터리 팩 → briefing/public 단서 노출
+  - **hidden truth 누출 0 검증** (snapshot에 hidden id 강제 주입해도 필터됨, "HIDDEN_TRUTH_REDACTED" 미포함)
+  - playerNoticed 모순만 노출
+- [x] `client`: `components/CaseBoardPanel.tsx` — 단서장/인물기록 2탭
+- [x] `client`: `AppToolStrip`에 사건 기록(NotebookPen) 토글 추가
+- [x] `client`: App.tsx 오버레이 연결 (connection/dev 패널과 상호 배타)
+- [x] `client`: `styles/case-board.css` + manifest 등록 + vn-panel-layer 공통 규칙에 편입
+
+**검증:**
+- `corepack pnpm -r run check` → 통과 (shared/client/server)
+- `corepack pnpm --filter @hushline/server test` → 103 pass / 0 fail (신규 4개 포함)
+- `corepack pnpm --filter @hushline/client build` → 통과
+
+### 아직 안 한 것 (다음 세션 후보, 우선순위순)
+
+- [x] **SceneBeatGenerator 파이프라인 연결** — 완료 (2026-05-30 세션 2, 아래 참조)
+- [ ] **agenda-scheduler 연결** — NPC 자율 행동 (Director 미선택 시 발화). 수렴 방지 효과 검증 필요
+- [ ] Chekhov Tracker (planted_elements)
+- [ ] 테마 시스템 고도화 — 현재 inline style 3종 → plan의 `data-theme` 전환 + DeviceFrame 분리 + 8종 (UI 리아키텍처라 별도 작업)
+- [ ] NPC Tiers / Slopfix / VAD emotion / Background AI 생성 (Phase 4)
+- [ ] v1 엔진 제거 (refactor Task 7 — README 경계만 표시, 제거는 유저 승인 대기)
+
+### 참고
+- 재점검 상세: `.kiro/specs/multi-agent-turn-engine/replan-2026-05-30.md`
+
+---
+
+## 2026-05-30 (세션 2 — SceneBeatGenerator 연결)
+
+> 새 spec: `.kiro/specs/scene-beat-generator/` (requirements + design + tasks).
+> `SceneBeatGenerator` 모듈은 있었지만 파이프라인 미연결 상태였음. 두 공백(팩 데이터 스키마 부재, WorldState 추적 상태/연결 부재)을 메워 정체 방지(anti-stall) 비트 주입을 완결.
+
+**구현 (전부 빌드/테스트 통과):**
+- [x] `shared`: `ScenarioPack.sceneDevices?` 필드 + `WorldState.sceneInertiaCounter`/`recentBeatTypes` 추가
+- [x] `server`: `createInitialWorldState` 초기화 + state-manager `applySceneBeat` (tension/danger 클램프, inertia 리셋, recentBeatTypes/recentEvents 상한)
+- [x] `server`: scene-beat-generator에 `turnHadMeaningfulEvent`/`sanitizeBeat`/`shouldInjectBeat(threshold override)` 추가
+- [x] `server`: `schemas.ts` `sceneOccurrenceDeviceSchema` + scenario-loader `scene-devices.json` 옵셔널 로드 + `validateSceneDevices` (factReveal 존재성/누출, npcId/관계 id 검증)
+- [x] `server`: `runTurnV2` Step 6.5 비트 주입 (meaningful event 판정 → updateInertia → selectBeat → sanitizeBeat → narrator gate → applySceneBeat → `[장면]` 메시지)
+- [x] `data`: `locked-room-mystery/scene-devices.json` 4종 (hidden truth 미사용)
+- [x] 테스트: scene-beat 단위 확장 + 로더 6개 + 파이프라인 통합 2개
+
+**hidden-truth 누출 방지 삼중 방어:** 데이터 검증(로더) + `sanitizeBeat`(런타임) + narrator boundary gate(텍스트).
+
+**검증:**
+- `corepack pnpm -r run check` → 통과 (shared/client/server)
+- 서버 테스트 → 118 pass / 0 fail (103 → +15 신규)
+
+### 다음 세션 후보
+- agenda-scheduler 연결 (NPC 자율 발화) — 다음 우선순위
+
+---
+
+## 2026-05-30 (세션 3 — NPC Agenda Scheduler 연결)
+
+> 새 spec: `.kiro/specs/npc-agenda-scheduler/` (requirements + design + tasks).
+> `agenda-scheduler` 모듈은 있었지만 미연결 + 두 결함(존재하지 않는 `turnNumber` 참조, `Math.random()` 비결정성)이 있었음. Director가 발화자를 비워둔 턴에 한해 자율성 높고 오래 침묵한 NPC 1명이 자기 안건대로 발화하도록 결정적으로 연결.
+
+**구현 (전부 빌드/테스트 통과):**
+- [x] `server/agenda-scheduler`: `Math.random()` 제거 → `isAutonomyEligible` 결정적 게이트, `getCurrentAgenda(currentTurn)` 시그니처 수정(`(state as any).turnNumber` 제거), `selectAutonomousSpeaker` 추가(침묵 기간 → autonomy → 정의 순서)
+- [x] `server/pipeline`: Step 5 캐릭터 처리 로직을 `processCharacterResult` 헬퍼로 추출 + Step 5.5 자율 발화 연결 (Director 미선택 & non-silence & 발화 0건일 때만)
+- [x] 자율 발화도 기존 `invokeCharacter` + boundary gate + answerScope + handout 동일 적용 (새 정보 경로 아님)
+- [x] 테스트: agenda-scheduler 단위 8개 + 파이프라인 회귀 1개 (Director 선택 턴 → 자율 미주입 + 누출 0)
+
+**스코프 한정:** Director가 speaker를 고른 턴은 불변. 자율 발화는 최대 1명. 완전 결정적.
+
+**검증:**
+- `corepack pnpm -r run check` → 통과 (shared/client/server)
+- 서버 테스트 → 128 pass / 0 fail (118 → +10 신규)
+
+### 다음 세션 후보
+- Chekhov Tracker (planted_elements) — 다음 우선순위
+- 테마 시스템 고도화 / Phase 4 품질 항목 / v1 엔진 제거(유저 승인 대기)
+
+---
+
+## 2026-05-30 (세션 4 — 휴대폰 디바이스 앱화: 사건파일 상시 + 메신저 조건부)
+
+> 새 spec: `.kiro/specs/phone-device-apps/` (requirements + design + tasks).
+> 설계도: `phone-case-file-plan.md`, 후보 정리: `remaining-roadmap-2026-05-30.md`.
+> 단서 수첩(사건 기록)을 오른쪽 별도 오버레이에서 떼어, **왼쪽 휴대폰 안의 상시 기본 앱**으로
+> 통합. 메신저(단톡방)는 시나리오/이벤트가 만들 때만 등장하는 조건부 앱으로 강등.
+> **1단계: 순수 클라이언트(서버/shared 무변경).** 메신저 멀티 대화방(channelId)은 2단계 별도 작업.
+
+**구현 (전부 빌드/테스트 통과):**
+- [x] `client/utils/phone-apps.ts` — 앱 가용성/기본 앱 순수 함수 (`uiMode`/`caseBoard`/phone-channel 수 기반)
+- [x] `client/utils/phone-apps-storage.ts` — 세션별 unread seen 상태(localStorage, 방어적 파싱)
+- [x] `client/components/case-board-sections.tsx` — `CaseClues`/`CaseDossiers` 추출 (CaseBoardPanel과 공유)
+- [x] `client/components/PhoneCaseFile.tsx` — 휴대폰 내 사건파일 앱(단서장/인물 2탭, 빈 상태)
+- [x] `client/components/PhoneAppDock.tsx` — 가용 앱 전환 dock + unread 배지
+- [x] `client/components/PhoneSubScreen.tsx` — 앱 셸 개편(activeApp, 본문/입력바 분기, dock, 강제 전환 금지)
+- [x] `client/App.tsx` + `AppToolStrip.tsx` — 오른쪽 CaseBoard 오버레이/토글 제거(휴대폰으로 일원화)
+- [x] `styles/case-board.css` — phone-casefile / phone-app-dock 규칙 추가
+- [x] 테스트: `phone-apps.test.ts` 11개 (가용성 4 + 기본앱 4 + 시그니처 + 엣지)
+
+**동작:** 밀실극(scene-first+caseKnowledge) → 사건파일 기본·dock 숨김. 학교 단톡(messenger-first)
+→ 메신저 기본(기존과 동일). 메신저 메시지가 생기면 dock에 메신저 앱 등장(강제 전환 X, 배지만).
+
+**검증:**
+- `corepack pnpm -r run check` → 통과 (shared/client/server)
+- 클라이언트 빌드 → 통과 (1736 modules)
+- phone-apps 단위 테스트 11 pass / 서버 테스트 132 pass(무영향 확인)
+
+### 다음 세션 후보
+- 메신저 멀티 대화방 2단계 (`TurnMessage.channelId` — 1:1 DM/그룹/익명 분리)
+- Chekhov Tracker (planted_elements)
+- 테마 시스템 고도화 / Phase 4 / v1 엔진 제거(승인 대기)
+
+---
+
+## 2026-05-30 (세션 5 — 단서 점진적 공개)
+
+> 새 spec: `.kiro/specs/case-clue-progressive-reveal/`.
+> 단서장이 briefing/public 사실을 처음부터 전량(`knownSinceTurn:0`) 노출하던 걸,
+> **빈 상태로 시작해 공개될 때마다 누적**되도록 변경. "수첩이 차오르는" 추리 경험.
+
+**구현 (전부 빌드/테스트 통과):**
+- [x] `shared`: `WorldState.revealedCaseFacts?: Record<factId, turn>` (최초 공개 턴 누적 맵)
+- [x] `server/case-state.ts`: `recordRevealedCaseFacts` — 신규만 추가, 최초 턴 보존, hidden truth 제외(단조 증가)
+- [x] `server/state-manager`: `createInitialWorldState`에 `revealedCaseFacts: {}` 초기화
+- [x] `server/pipeline`: Step 6에서 `caseAnswerScope.public/observableFactIds`를 누적 기록
+- [x] `server/case-board`: briefing/public 전량 노출 제거 → `revealedCaseFacts` 기반 단서 구성(factIndex로 source/turn 매핑, 오름차순)
+- [x] 테스트: `recordRevealedCaseFacts` 2개 + case-board "빈 시작"/"누적 표시"로 갱신 + 누출 0 강화
+
+**핵심:** snapshot(최근 10 한정)이 아니라 영구 누적 맵을 진실의 원천으로 → 단서 유실 없음.
+hidden truth는 기록·표시 이중 차단.
+
+**검증:**
+- `corepack pnpm -r run check` → 통과 (shared/client/server)
+- 서버 테스트 → 135 pass / 0 fail (132 → +3 신규)
+
+### 다음 세션 후보
+- 메신저 멀티 대화방 2단계 (`TurnMessage.channelId`)
+- Chekhov Tracker / 테마 고도화 / Phase 4 / v1 제거(승인 대기)
+
+---
+
+## 2026-05-30 (세션 6 — 인물 기록도 점진적 공개)
+
+> 세션 5의 단서 점진 공개와 동일 패턴을 인물 기록(dossier)에 확장.
+> `buildDossiers`가 `session.characters` 전체를 무조건 나열하던 걸, **만난/진술한 인물만** 누적 표시로 변경.
+> spec: `case-clue-progressive-reveal` (확장).
+
+**구현 (전부 빌드/테스트 통과):**
+- [x] `shared`: `WorldState.encounteredCharacters?: Record<characterId, turn>` (최초 조우 턴 누적)
+- [x] `server/case-state.ts`: `recordEncounteredCharacters` — 신규만 추가, 최초 턴 보존(단조 증가)
+- [x] `server/state-manager`: `createInitialWorldState`에 `encounteredCharacters: {}` 초기화
+- [x] `server/pipeline`: Step 6에서 발화/등장 speakerIds를 조우 기록
+- [x] `server/case-board`: `buildDossiers`를 조우 또는 진술 인물만 필터 + 최초 조우 턴 오름차순 정렬
+- [x] 테스트: 인물 빈 시작 / 조우 인물만·정렬 / 진술 인물 포함 (4개 추가·갱신)
+
+**부수 효과:** 휴대폰 앱 가용성이 `dossiers.length > 0`를 쓰는데, 비-미스터리(학교 단톡)도
+dossier가 꽉 차서 사건파일 앱이 잘못 떴던 문제가 함께 해결됨(조우 전엔 0개).
+
+**검증:**
+- `corepack pnpm -r run check` → 통과 (shared/client/server)
+- 서버 테스트 → 137 pass / 0 fail (135 → +2 순증)
+- 클라이언트 빌드 → 통과
+
+### 다음 세션 후보
+- 메신저 멀티 대화방 2단계 (`TurnMessage.channelId`)
+- Chekhov Tracker / 테마 고도화 / Phase 4 / v1 제거(승인 대기)

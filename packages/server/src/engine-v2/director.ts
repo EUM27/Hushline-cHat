@@ -19,6 +19,7 @@ import type {
 } from "@hushline/shared";
 import { completeWithConnection, isConnectionReady } from "../providers/adapters/index.js";
 import { validateDirectorOutput, getFallbackDirectorOutput } from "./output-sanitizer.js";
+import { OBSERVABLE_STORY_ADVANCEMENT_RULES, PERCEPTION_BOUNDARY_RULES } from "./perception-boundary-rules.js";
 import type { PublicChatEntry } from "@hushline/shared";
 
 export interface DirectorInvocationResult {
@@ -104,6 +105,9 @@ export function buildDirectorSystemPrompt(
     pack.directorPrompt,
     "",
     SCENE_CAUSALITY_PRIORITY_RULES,
+    "",
+    ...PERCEPTION_BOUNDARY_RULES,
+    ...OBSERVABLE_STORY_ADVANCEMENT_RULES,
     "",
     MYSTERY_ACCESS_MANAGER_RULES,
     "",

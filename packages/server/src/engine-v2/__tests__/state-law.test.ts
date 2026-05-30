@@ -42,6 +42,8 @@ function makeWorldState(): WorldState {
     relationshipGraph: [],
     recentEvents: [],
     recentSpeakerIds: ["kang-mujin"],
+    sceneInertiaCounter: 0,
+    recentBeatTypes: [],
   };
 }
 

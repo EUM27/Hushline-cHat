@@ -10,6 +10,7 @@ export type BoundaryViolation =
   | "user_agency_violation"
   | "unauthorized_fact"
   | "hidden_truth_leak"
+  | "private_handout_leak"
   | "reveal_budget_exceeded"
   | "claim_contradiction_unhandled"
   | "unsupported_user_proposal"
@@ -35,6 +36,7 @@ export function validateCharacterDraft(input: {
   userInput?: string;
   userPersonaName?: string;
   userNameIntroduced?: boolean;
+  privateLeakTexts?: string[];
 }): BoundaryGateResult {
   const violations: BoundaryViolation[] = [];
   const draft = input.draft.trim();
@@ -63,14 +65,17 @@ export function validateCharacterDraft(input: {
   if (mentionsHiddenTruth(draft, input.hiddenTruthIds, input.caseFacts)) {
     violations.push("hidden_truth_leak");
   }
+  if (mentionsPrivateHandoutLeak(draft, input.privateLeakTexts ?? [])) {
+    violations.push("private_handout_leak");
+  }
   if (mentionsUnauthorizedFact(draft, input.allowedFactIds, input.blockedFactIds, input.caseFacts)) {
     violations.push("unauthorized_fact");
   }
 
-  if (violations.includes("hidden_truth_leak")) {
+  if (violations.includes("hidden_truth_leak") || violations.includes("private_handout_leak")) {
     return {
       status: "replace_with_deflection",
-      finalText: "그건... 지금 말할 수 없습니다.",
+      finalText: "\"지금은 단정할 수 없습니다.\"",
       violations,
     };
   }
@@ -181,6 +186,72 @@ function mentionsHiddenTruth(text: string, hiddenTruthIds: FactId[], facts: Case
   return hiddenFacts.some((fact) => factMatchesText(fact, text));
 }
 
+function mentionsPrivateHandoutLeak(text: string, privateLeakTexts: string[]): boolean {
+  if (!text.trim()) return false;
+  const privateThoughts = extractPrivateThoughts(text);
+  if (privateThoughts.some((thought) => hasPrivateStrategyMarker(thought))) {
+    return true;
+  }
+
+  const privateTerms = extractPrivateLeakTerms(privateLeakTexts);
+  if (privateThoughts.some((thought) => overlapsPrivateTerms(thought, privateTerms))) {
+    return true;
+  }
+
+  return privateTerms.length > 0
+    && hasExternalizedPrivateStrategyMarker(text)
+    && overlapsPrivateTerms(text, privateTerms);
+}
+
+function extractPrivateThoughts(text: string): string[] {
+  const thoughts: string[] = [];
+  const pattern = /['‘]([^'’\n]{1,240})['’]/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    thoughts.push(match[1]?.trim() ?? "");
+  }
+  return thoughts.filter(Boolean);
+}
+
+function hasPrivateStrategyMarker(text: string): boolean {
+  const compact = normalize(text);
+  return [
+    /아직.*(언급|말|묻|조사|확인).*(않|안|전)/,
+    /(관심|시선|주의).*(돌려|돌리|다른곳|분산)/,
+    /(조사|질문|화제).*(멀어|피하|막아|막을|돌려|돌리)/,
+    /(숨겨|감춰|들키|들키면|발각|회피|유도|몰아가|떠넘겨)/,
+    /(말하면안|말해선안|말할수없|모른척|아닌척)/,
+  ].some((pattern) => pattern.test(compact));
+}
+
+function hasExternalizedPrivateStrategyMarker(text: string): boolean {
+  const compact = normalize(text);
+  return [
+    /(관심|시선|주의).*(돌려|돌리|다른곳|분산)/,
+    /(조사|질문|화제).*(멀어|피하|막아|막을|돌려|돌리)/,
+    /(숨겨|감춰|들키|들키면|발각|모른척|아닌척)/,
+  ].some((pattern) => pattern.test(compact));
+}
+
+function extractPrivateLeakTerms(values: string[]): string[] {
+  const terms = new Set<string>();
+  for (const value of values) {
+    for (const rawTerm of extractTerms(value)) {
+      const term = stripKoreanParticles(rawTerm);
+      if (term.length >= 2 && !COMMON_PRIVATE_TERMS.has(term)) {
+        terms.add(normalize(term));
+      }
+    }
+  }
+  return [...terms].filter(Boolean);
+}
+
+function overlapsPrivateTerms(text: string, privateTerms: string[]): boolean {
+  const haystack = normalize(text);
+  const hits = privateTerms.filter((term) => haystack.includes(term));
+  return hits.length >= 2 || hits.some((term) => term.length >= 5);
+}
+
 function mentionsUnauthorizedFact(
   text: string,
   allowedFactIds: FactId[],
@@ -212,6 +283,30 @@ function extractTerms(text: string): string[] {
     .map((term) => term.trim())
     .filter((term) => term.length >= 2);
 }
+
+function stripKoreanParticles(value: string): string {
+  return value.replace(/(으로|에게|에서|부터|까지|처럼|마다|보다|이다|했다|한다|된다|으로는|로는|은|는|이|가|을|를|의|로|과|와|다)$/u, "");
+}
+
+const COMMON_PRIVATE_TERMS = new Set([
+  "상황",
+  "장면",
+  "사건",
+  "반응",
+  "자신",
+  "자기",
+  "유저",
+  "사용자",
+  "질문",
+  "정보",
+  "목표",
+  "현재",
+  "다른",
+  "사람",
+  "캐릭터",
+  "상대",
+  "대화",
+]);
 
 function tagMarkers(tag: string): string[] {
   const markers: Record<string, string[]> = {
