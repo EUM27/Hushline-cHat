@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "dist",
   "functions": {
-    "api/[...route].ts": {
+    "api/**/*.ts": {
       "includeFiles": "../server/scenarios/**/*",
       "maxDuration": 30
     }
