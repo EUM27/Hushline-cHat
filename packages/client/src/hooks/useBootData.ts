@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AssetManifest, ClientSessionState, ProviderProfile } from "@hushline/shared";
 import { getSessionV2 } from "../api-v2";
 import { sessionStorageKey } from "../constants/theme-presets";
+import { offlineAssetManifest, offlineProviderProfiles } from "../offline-demo";
 
 export interface BootDataState {
   assets: AssetManifest | null;
@@ -54,7 +55,11 @@ export function useBootData(): BootDataState {
 
     boot().catch((reason: unknown) => {
       if (!cancelled) {
-        setBootError(reason instanceof Error ? reason.message : "초기화 실패");
+        setAssets(offlineAssetManifest);
+        setProviderProfiles(offlineProviderProfiles);
+        setBootError(
+          `${reason instanceof Error ? reason.message : "초기화 실패"} · 모바일 피드백용 로컬 데모 데이터로 전환했습니다.`,
+        );
       }
     });
 

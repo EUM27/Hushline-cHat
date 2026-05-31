@@ -17,6 +17,15 @@ import type {
   StateLawSnapshot,
   TurnMessage,
 } from "@hushline/shared";
+import {
+  advanceOfflineSession,
+  createOfflineSession,
+  getOfflineSession,
+  offlineScenarioDetail,
+  offlineScenarioIds,
+  rerollOfflineSession,
+  undoOfflineSession,
+} from "./offline-demo";
 
 export interface V2SessionResponse {
   session: ClientSessionState;
@@ -88,16 +97,24 @@ export interface ProviderConnectionTestResponse {
 // ── Scenario Listing ──
 
 export async function listScenarios(): Promise<string[]> {
-  const response = await fetch("/api/v2/scenarios");
-  if (!response.ok) throw new Error("시나리오 목록을 불러올 수 없습니다.");
-  const payload = (await response.json()) as V2ScenarioListResponse;
-  return payload.scenarios;
+  try {
+    const response = await fetch("/api/v2/scenarios");
+    if (!response.ok) throw new Error("시나리오 목록을 불러올 수 없습니다.");
+    const payload = (await response.json()) as V2ScenarioListResponse;
+    return payload.scenarios;
+  } catch {
+    return offlineScenarioIds;
+  }
 }
 
 export async function getScenarioDetail(packId: string): Promise<V2ScenarioDetailResponse> {
-  const response = await fetch(`/api/v2/scenarios/${packId}`);
-  if (!response.ok) throw new Error("시나리오 정보를 불러올 수 없습니다.");
-  return (await response.json()) as V2ScenarioDetailResponse;
+  try {
+    const response = await fetch(`/api/v2/scenarios/${packId}`);
+    if (!response.ok) throw new Error("시나리오 정보를 불러올 수 없습니다.");
+    return (await response.json()) as V2ScenarioDetailResponse;
+  } catch {
+    return offlineScenarioDetail;
+  }
 }
 
 // ── Session Management ──
@@ -108,19 +125,23 @@ export async function createSessionV2(
   advisors?: AdvisorDraft[],
   connections?: Record<string, ModelConnection>,
 ): Promise<ClientSessionState> {
-  const response = await fetch("/api/v2/sessions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      scenarioPackId,
-      persona: personaName ? { name: personaName } : undefined,
-      advisors,
-      connections,
-    }),
-  });
-  if (!response.ok) throw new Error("세션을 생성할 수 없습니다.");
-  const payload = (await response.json()) as V2SessionResponse;
-  return payload.session;
+  try {
+    const response = await fetch("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId,
+        persona: personaName ? { name: personaName } : undefined,
+        advisors,
+        connections,
+      }),
+    });
+    if (!response.ok) throw new Error("세션을 생성할 수 없습니다.");
+    const payload = (await response.json()) as V2SessionResponse;
+    return payload.session;
+  } catch {
+    return createOfflineSession(scenarioPackId, personaName, advisors);
+  }
 }
 
 // ── Draft Makers ──
@@ -168,11 +189,15 @@ export async function testProviderConnection(
 }
 
 export async function getSessionV2(sessionId: string): Promise<ClientSessionState | null> {
-  const response = await fetch(`/api/v2/sessions/${sessionId}`);
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error("세션을 불러올 수 없습니다.");
-  const payload = (await response.json()) as V2SessionResponse;
-  return payload.session;
+  try {
+    const response = await fetch(`/api/v2/sessions/${sessionId}`);
+    if (response.status === 404) return getOfflineSession(sessionId);
+    if (!response.ok) throw new Error("세션을 불러올 수 없습니다.");
+    const payload = (await response.json()) as V2SessionResponse;
+    return payload.session;
+  } catch {
+    return getOfflineSession(sessionId);
+  }
 }
 
 // ── Turn Actions ──
@@ -183,13 +208,17 @@ export async function advanceV2(
   inputMode: InputMode,
   connections: Record<string, ModelConnection>,
 ): Promise<V2AdvanceResponse> {
-  const response = await fetch(`/api/v2/sessions/${sessionId}/advance`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ content, inputMode, connections }),
-  });
-  if (!response.ok) throw new Error("메시지를 보낼 수 없습니다.");
-  return (await response.json()) as V2AdvanceResponse;
+  try {
+    const response = await fetch(`/api/v2/sessions/${sessionId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content, inputMode, connections }),
+    });
+    if (!response.ok) throw new Error("메시지를 보낼 수 없습니다.");
+    return (await response.json()) as V2AdvanceResponse;
+  } catch {
+    return advanceOfflineSession(sessionId, content, inputMode);
+  }
 }
 
 export async function rerollV2(
@@ -197,20 +226,28 @@ export async function rerollV2(
   connections: Record<string, ModelConnection>,
   inputMode?: InputMode,
 ): Promise<V2AdvanceResponse> {
-  const response = await fetch(`/api/v2/sessions/${sessionId}/reroll`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ connections, inputMode }),
-  });
-  if (!response.ok) throw new Error("리롤에 실패했습니다.");
-  return (await response.json()) as V2AdvanceResponse;
+  try {
+    const response = await fetch(`/api/v2/sessions/${sessionId}/reroll`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connections, inputMode }),
+    });
+    if (!response.ok) throw new Error("리롤에 실패했습니다.");
+    return (await response.json()) as V2AdvanceResponse;
+  } catch {
+    return rerollOfflineSession(sessionId);
+  }
 }
 
 export async function undoV2(sessionId: string): Promise<ClientSessionState> {
-  const response = await fetch(`/api/v2/sessions/${sessionId}/undo`, {
-    method: "POST",
-  });
-  if (!response.ok) throw new Error("삭제에 실패했습니다.");
-  const payload = (await response.json()) as V2SessionResponse;
-  return payload.session;
+  try {
+    const response = await fetch(`/api/v2/sessions/${sessionId}/undo`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("삭제에 실패했습니다.");
+    const payload = (await response.json()) as V2SessionResponse;
+    return payload.session;
+  } catch {
+    return undoOfflineSession(sessionId);
+  }
 }
