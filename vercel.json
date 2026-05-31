@@ -4,9 +4,15 @@
   "buildCommand": "corepack pnpm --filter @hushline/client build",
   "outputDirectory": "packages/client/dist",
   "functions": {
-    "api/**/*.ts": {
+    "api/index.ts": {
       "includeFiles": "packages/server/scenarios/**/*",
       "maxDuration": 30
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api"
+    }
+  ]
 }
