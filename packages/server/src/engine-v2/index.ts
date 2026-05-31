@@ -8,5 +8,6 @@ export { createInitialWorldState, rollbackTurn } from "./state-manager.js";
 export { classifyInput, detectInputMode } from "./input-classifier.js";
 export { validateDirectorOutput, getFallbackDirectorOutput } from "./output-sanitizer.js";
 export { buildPublicContext, buildPrivateHandout, buildOmniscientContext } from "./context-builder.js";
-export { importCharaCard, cardToCharacterDefinition, replaceCharacterSlot } from "./card-importer.js";
+export { importCharaCard, cardToCharacterDefinition, importCardJson, importCardPng, replaceCharacterSlot } from "./card-importer.js";
+export { extractCardFromPng } from "./png-card.js";
 export { generateSummary, shouldSummarize, SUMMARY_INTERVAL } from "./summarizer.js";

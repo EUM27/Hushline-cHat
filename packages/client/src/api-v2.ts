@@ -251,3 +251,80 @@ export async function undoV2(sessionId: string): Promise<ClientSessionState> {
     return undoOfflineSession(sessionId);
   }
 }
+
+// ──────────────────────────────────────────────
+// Character card import (PNG / JSON)
+// ──────────────────────────────────────────────
+
+export interface ImportedCharacterCard {
+  id: string;
+  name: string;
+  shortName: string;
+  role: string;
+  mbti: string;
+  autonomy: number;
+  ocean: {
+    openness: number;
+    conscientiousness: number;
+    extraversion: number;
+    agreeableness: number;
+    neuroticism: number;
+  };
+  systemPrompt: string;
+  handout: {
+    secret: string;
+    desire: string;
+    objective: string;
+    initialRelationshipToUser: number;
+    surfacePersonality?: string[];
+    fear?: string;
+    behaviorRules?: string[];
+  };
+  relationships: Array<{ targetId: string; descriptor: string; intensity: number }>;
+}
+
+/** Read a File as base64 (without the data URL prefix). */
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("파일을 읽을 수 없습니다."));
+        return;
+      }
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("파일 읽기 실패"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Upload a character card file (PNG or JSON) and return the converted character preview.
+ */
+export async function importCharacterCard(file: File): Promise<ImportedCharacterCard> {
+  const isPng = file.type === "image/png" || /\.png$/i.test(file.name);
+  const body = isPng
+    ? { kind: "png" as const, data: await readFileAsBase64(file), fileName: file.name }
+    : { kind: "json" as const, data: await file.text(), fileName: file.name };
+
+  const response = await fetch("/api/v2/character-card/import", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | { character: ImportedCharacterCard }
+    | { error: string }
+    | null;
+
+  if (!response.ok || !payload || !("character" in payload)) {
+    const message = payload && "error" in payload ? payload.error : "카드를 불러오지 못했습니다.";
+    throw new Error(message);
+  }
+
+  return payload.character;
+}

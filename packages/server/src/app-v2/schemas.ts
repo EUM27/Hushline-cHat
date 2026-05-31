@@ -77,5 +77,14 @@ export const rerollBodySchema = z.object({
   connections: z.record(z.string(), modelConnectionSchema).optional(),
 }).optional().default({});
 
+// base64 for png, raw JSON text for json. ~8MB base64 ceiling.
+export const MAX_CARD_DATA_LENGTH = 8 * 1024 * 1024;
+
+export const cardImportBodySchema = z.object({
+  kind: z.enum(["png", "json"]),
+  data: z.string().min(1),
+  fileName: z.string().trim().max(200).optional(),
+});
+
 export type AdvisorDraftInput = z.infer<typeof advisorDraftSchema>;
 export type ModelConnectionInput = z.infer<typeof modelConnectionSchema>;

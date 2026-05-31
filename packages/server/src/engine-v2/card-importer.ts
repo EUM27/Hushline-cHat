@@ -6,6 +6,8 @@
 // ──────────────────────────────────────────────
 
 import type { CharacterDefinition, CharacterHandoutDefinition } from "@hushline/shared";
+import { characterCardSchema } from "./schemas.js";
+import { extractCardFromPng } from "./png-card.js";
 
 /**
  * Minimal chara_card_v3 shape we care about.
@@ -247,4 +249,48 @@ export function replaceCharacterSlot(
   };
 
   return characters.map((c) => (c.id === slotId ? merged : c));
+}
+
+// ──────────────────────────────────────────────
+// Unified card import (strict, schema-validated)
+// ──────────────────────────────────────────────
+
+export type ImportedCardResult =
+  | { ok: true; character: CharacterDefinition }
+  | { ok: false; error: string };
+
+/**
+ * Import a character from raw card JSON text.
+ * Validates against characterCardSchema, then converts via cardToCharacterDefinition.
+ */
+export function importCardJson(jsonText: string, fallbackId: string): ImportedCardResult {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(jsonText);
+  } catch {
+    return { ok: false, error: "카드 JSON 파싱에 실패했습니다." };
+  }
+
+  const parsed = characterCardSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      ok: false,
+      error: `카드 형식 검증 실패: ${issue ? `[${issue.path.join(".")}] ${issue.message}` : "unknown"}`,
+    };
+  }
+
+  const character = cardToCharacterDefinition(parsed.data as CharaCardV3, fallbackId);
+  return { ok: true, character };
+}
+
+/**
+ * Import a character from PNG bytes (extract embedded card → importCardJson).
+ */
+export function importCardPng(bytes: Uint8Array, fallbackId: string): ImportedCardResult {
+  const extracted = extractCardFromPng(bytes);
+  if (!extracted.ok) {
+    return { ok: false, error: extracted.error };
+  }
+  return importCardJson(extracted.json, fallbackId);
 }

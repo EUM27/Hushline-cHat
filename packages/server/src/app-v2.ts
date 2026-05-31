@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { loadScenarioPack, listScenarioPacks } from "./engine-v2/index.js";
 import { registerMakerRoutes } from "./app-v2/maker-routes.js";
 import { registerSessionRoutes } from "./app-v2/session-routes.js";
+import { registerCardRoutes } from "./app-v2/card-routes.js";
 import { createMemoryStoreV2 } from "./store/memory-store.js";
 import type { SessionStoreV2 } from "./store/sqlite-store-v2.js";
 
@@ -54,6 +55,7 @@ export function createAppV2(options: CreateAppV2Options = {}) {
   });
 
   registerMakerRoutes(app);
+  registerCardRoutes(app);
   registerSessionRoutes(app, { store, scenariosDir });
 
   return app;

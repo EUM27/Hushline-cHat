@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { Sparkles } from "lucide-react";
 import type { AdvisorDraft } from "@hushline/shared";
+import { CharacterCardImport } from "./CharacterCardImport";
 
 export interface AdvisorSetupPanelProps {
   advisors: AdvisorDraft[];
@@ -35,6 +36,7 @@ export function AdvisorSetupPanel({
         ))}
       </div>
       {error ? <p className="error-line setup-error">{error}</p> : null}
+      <CharacterCardImport />
       <div className="advisor-actions">
         <button type="button" onClick={onBack}>
           이전
