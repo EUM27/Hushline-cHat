@@ -77,6 +77,14 @@ export interface V2AdvisorMakerResponse {
   error?: string;
 }
 
+export interface ProviderConnectionTestResponse {
+  ok: boolean;
+  providerId: ModelConnection["providerId"];
+  model: string;
+  message?: string;
+  error?: string;
+}
+
 // ── Scenario Listing ──
 
 export async function listScenarios(): Promise<string[]> {
@@ -142,6 +150,21 @@ export async function generateAdvisorDraftsV2(
   });
   if (!response.ok) throw new Error("조언자 초안을 만들 수 없습니다.");
   return (await response.json()) as V2AdvisorMakerResponse;
+}
+
+export async function testProviderConnection(
+  connection: ModelConnection,
+): Promise<ProviderConnectionTestResponse> {
+  const response = await fetch(`/api/provider-profiles/${connection.providerId}/test`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(connection),
+  });
+  const payload = (await response.json().catch(() => null)) as ProviderConnectionTestResponse | null;
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error ?? "연결 테스트에 실패했습니다.");
+  }
+  return payload;
 }
 
 export async function getSessionV2(sessionId: string): Promise<ClientSessionState | null> {

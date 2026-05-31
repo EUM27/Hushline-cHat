@@ -354,6 +354,81 @@ describe("Hushline API", () => {
     ]);
   });
 
+  test("tests a provider connection without returning the API key", async () => {
+    const store = createSqliteStore(":memory:");
+    const app = createApp({ store });
+    const requested: Array<{ url: string; authorization: string | null; model: string | undefined }> = [];
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { model?: string };
+      const headers = new Headers(init?.headers);
+      requested.push({
+        url: String(input),
+        authorization: headers.get("authorization"),
+        model: body.model,
+      });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "OK" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+
+    const response = await app.request("/api/provider-profiles/openrouter/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        providerId: "openrouter",
+        apiKey: "secret-test-key",
+        model: "test/model",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload).toEqual({
+      ok: true,
+      providerId: "openrouter",
+      model: "test/model",
+      message: "연결 테스트 성공",
+    });
+    expect(JSON.stringify(payload)).not.toContain("secret-test-key");
+    expect(requested).toEqual([
+      {
+        url: "https://openrouter.ai/api/v1/chat/completions",
+        authorization: "Bearer secret-test-key",
+        model: "test/model",
+      },
+    ]);
+  });
+
+  test("rejects a provider connection test before calling the provider when credentials are incomplete", async () => {
+    const store = createSqliteStore(":memory:");
+    const app = createApp({ store });
+    let called = false;
+
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response("unexpected", { status: 500 });
+    }) as unknown as typeof fetch;
+
+    const response = await app.request("/api/provider-profiles/openrouter/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        providerId: "openrouter",
+        apiKey: "",
+        model: "test/model",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error).toBe("API key and model are required for this provider.");
+    expect(called).toBe(false);
+  });
+
   test("advances the scene with a dry-run fallback when a provider request fails", async () => {
     const store = createSqliteStore(":memory:");
     const app = createApp({ store });

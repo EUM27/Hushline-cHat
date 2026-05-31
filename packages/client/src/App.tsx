@@ -51,10 +51,12 @@ export function App() {
     connections,
     modelOptions,
     modelLoadState,
+    connectionTestState,
     oauthStatus,
     saveStatus,
     setConnections,
     loadModels,
+    testConnection,
     openChatGptLogin,
     checkChatGptAccount,
     saveConnections,
@@ -231,10 +233,12 @@ export function App() {
       connections={connections}
       modelOptions={modelOptions}
       modelLoadState={modelLoadState}
+      connectionTestState={connectionTestState}
       oauthStatus={oauthStatus}
       saveStatus={saveStatus}
       onChange={setConnections}
       onLoadModels={loadModels}
+      onTestConnection={testConnection}
       onOpenChatGptLogin={openChatGptLogin}
       onCheckChatGptAccount={checkChatGptAccount}
       onSave={saveConnections}

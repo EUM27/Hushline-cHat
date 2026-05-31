@@ -1,5 +1,6 @@
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 import type { ModelConnection, ModelOption, ModelProviderId } from "@hushline/shared";
+import { testProviderConnection } from "../api-v2";
 import type { OpenAiOAuthAccount, OpenAiOAuthLoginResult } from "../types/ui";
 import {
   formatKoreanTime,
@@ -11,13 +12,21 @@ export interface ModelConnectionsState {
   connections: Record<string, ModelConnection>;
   modelOptions: Record<string, ModelOption[]>;
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
+  connectionTestState: Record<string, ConnectionTestState>;
   oauthStatus: string | null;
   saveStatus: string;
   setConnections: Dispatch<SetStateAction<Record<string, ModelConnection>>>;
   loadModels: (providerId: ModelProviderId, apiKey?: string) => Promise<void>;
+  testConnection: (slotKey: string, connection: ModelConnection) => Promise<void>;
   openChatGptLogin: () => Promise<void>;
   checkChatGptAccount: () => Promise<void>;
   saveConnections: () => void;
+}
+
+export interface ConnectionTestState {
+  loading: boolean;
+  tone: "success" | "error";
+  message: string;
 }
 
 export function useModelConnections(): ModelConnectionsState {
@@ -28,6 +37,7 @@ export function useModelConnections(): ModelConnectionsState {
   const [modelLoadState, setModelLoadState] = useState<
     Record<string, { loading: boolean; error: string | null }>
   >({});
+  const [connectionTestState, setConnectionTestState] = useState<Record<string, ConnectionTestState>>({});
   const [oauthStatus, setOauthStatus] = useState<string | null>(null);
   const [manualSaveAt, setManualSaveAt] = useState<string | null>(null);
   const [connectionSaveError, setConnectionSaveError] = useState<string | null>(null);
@@ -85,6 +95,38 @@ export function useModelConnections(): ModelConnectionsState {
     }
   }
 
+  async function testConnection(slotKey: string, connection: ModelConnection) {
+    setConnectionTestState((current) => ({
+      ...current,
+      [slotKey]: {
+        loading: true,
+        tone: "success",
+        message: "연결 테스트 중",
+      },
+    }));
+
+    try {
+      const payload = await testProviderConnection(connection);
+      setConnectionTestState((current) => ({
+        ...current,
+        [slotKey]: {
+          loading: false,
+          tone: "success",
+          message: payload.message ?? "연결 테스트 성공",
+        },
+      }));
+    } catch (reason: unknown) {
+      setConnectionTestState((current) => ({
+        ...current,
+        [slotKey]: {
+          loading: false,
+          tone: "error",
+          message: reason instanceof Error ? reason.message : "연결 테스트 실패",
+        },
+      }));
+    }
+  }
+
   function saveConnections() {
     const saved = persistConnections(connections, {
       onSuccess: () => setConnectionSaveError(null),
@@ -129,10 +171,12 @@ export function useModelConnections(): ModelConnectionsState {
     connections,
     modelOptions,
     modelLoadState,
+    connectionTestState,
     oauthStatus,
     saveStatus: connectionSaveError ?? (manualSaveAt ? `저장됨 ${manualSaveAt}` : "브라우저에 자동 저장됨"),
     setConnections,
     loadModels,
+    testConnection,
     openChatGptLogin,
     checkChatGptAccount,
     saveConnections,

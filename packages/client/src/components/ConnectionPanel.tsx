@@ -15,10 +15,12 @@ export function ConnectionPanel({
   connections,
   modelOptions,
   modelLoadState,
+  connectionTestState,
   oauthStatus,
   saveStatus,
   onChange,
   onLoadModels,
+  onTestConnection,
   onOpenChatGptLogin,
   onCheckChatGptAccount,
   onSave,
@@ -30,8 +32,10 @@ export function ConnectionPanel({
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
   oauthStatus: string | null;
   saveStatus: string;
+  connectionTestState?: Record<string, { loading: boolean; tone: "success" | "error"; message: string }>;
   onChange: (connections: Record<string, ModelConnection>) => void;
   onLoadModels: (providerId: ModelProviderId, apiKey?: string) => void;
+  onTestConnection?: (slotKey: string, connection: ModelConnection) => void;
   onOpenChatGptLogin: () => void;
   onCheckChatGptAccount: () => void;
   onSave: () => void;
@@ -63,6 +67,10 @@ export function ConnectionPanel({
   const inheritedApiKey = getSharedProviderApiKey(connections, currentConnection.providerId, slotKey);
   const effectiveApiKey = currentConnection.apiKey.trim() || inheritedApiKey;
   const slotStatus = getConnectionStatus(connections[slotKey], profiles, inheritedApiKey);
+  const testState = connectionTestState?.[slotKey] ?? null;
+  const canTestConnection = Boolean(
+    currentConnection.model.trim() && (usesChatGptOAuth || effectiveApiKey),
+  );
 
   useEffect(() => {
     setActiveSlotKey((current) => resolveConnectionSlotKey(slots, current));
@@ -174,11 +182,26 @@ export function ConnectionPanel({
             </button>
           </>
         ) : null}
+        <button
+          type="button"
+          disabled={!canTestConnection || testState?.loading}
+          onClick={() =>
+            onTestConnection?.(slotKey, {
+              ...currentConnection,
+              apiKey: effectiveApiKey,
+            })
+          }
+        >
+          {testState?.loading ? "테스트 중" : "연결 테스트"}
+        </button>
         <button type="button" onClick={onSave}>
           저장
         </button>
         <span>{saveStatus}</span>
       </div>
+      {testState ? (
+        <p className={`connection-test-result ${testState.tone}`}>{testState.message}</p>
+      ) : null}
       <div className={`connection-status ${slotStatus.tone}`}>
         <strong>{slotStatus.label}</strong>
         <span>{slotStatus.detail}</span>

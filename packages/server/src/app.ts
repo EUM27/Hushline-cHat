@@ -3,7 +3,12 @@ import { z } from "zod";
 import type { ChatMessage, ModelConnection } from "@hushline/shared";
 import { assetManifest } from "./assets";
 import { runTurn } from "./engine/turn-engine";
-import { listModelsForProvider, providerProfiles } from "./providers/adapters";
+import {
+  completeWithConnection,
+  isConnectionReady,
+  listModelsForProvider,
+  providerProfiles,
+} from "./providers/adapters";
 import { registerOpenAiOAuthRoutes } from "./providers/openai-oauth";
 import { createSqliteStore, type SessionStore } from "./store/sqlite-store";
 
@@ -101,6 +106,55 @@ export function createApp(options: CreateAppOptions = {}) {
       return context.json(
         {
           error: reason instanceof Error ? reason.message : "Model list request failed",
+        },
+        502,
+      );
+    }
+  });
+
+  app.post("/api/provider-profiles/:providerId/test", async (context) => {
+    const providerId = modelProviderIdSchema.safeParse(context.req.param("providerId"));
+    if (!providerId.success) {
+      return context.json({ error: "Provider not found" }, 404);
+    }
+
+    const parsed = modelConnectionSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success || parsed.data.providerId !== providerId.data) {
+      return context.json({ error: "Invalid connection test request" }, 400);
+    }
+
+    const connection = parsed.data as ModelConnection;
+    if (!isConnectionReady(connection)) {
+      return context.json({ error: "API key and model are required for this provider." }, 400);
+    }
+
+    try {
+      await completeWithConnection({
+        connection,
+        systemPrompt: "You are a connection health check. Reply with exactly OK.",
+        messages: [
+          {
+            id: "connection-test",
+            sessionId: "connection-test",
+            role: "user",
+            content: "Reply with OK to confirm this API connection.",
+            createdAt: new Date(0).toISOString(),
+          },
+        ],
+      });
+      return context.json({
+        ok: true,
+        providerId: connection.providerId,
+        model: connection.model,
+        message: "연결 테스트 성공",
+      });
+    } catch (reason: unknown) {
+      return context.json(
+        {
+          ok: false,
+          providerId: connection.providerId,
+          model: connection.model,
+          error: reason instanceof Error ? reason.message : "Connection test failed",
         },
         502,
       );
