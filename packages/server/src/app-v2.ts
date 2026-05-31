@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 import { loadScenarioPack, listScenarioPacks } from "./engine-v2/index.js";
 import { registerMakerRoutes } from "./app-v2/maker-routes.js";
 import { registerSessionRoutes } from "./app-v2/session-routes.js";
-import { createSqliteStoreV2, type SessionStoreV2 } from "./store/sqlite-store-v2.js";
+import { createMemoryStoreV2 } from "./store/memory-store.js";
+import type { SessionStoreV2 } from "./store/sqlite-store-v2.js";
 
 export interface CreateAppV2Options {
   store?: SessionStoreV2;
@@ -19,7 +20,7 @@ export interface CreateAppV2Options {
 }
 
 export function createAppV2(options: CreateAppV2Options = {}) {
-  const store = options.store ?? createSqliteStoreV2();
+  const store = options.store ?? createMemoryStoreV2();
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const scenariosDir = options.scenariosDir ?? resolve(__dirname, "../scenarios");
   const app = new Hono();

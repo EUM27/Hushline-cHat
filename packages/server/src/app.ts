@@ -10,7 +10,8 @@ import {
   providerProfiles,
 } from "./providers/adapters";
 import { registerOpenAiOAuthRoutes } from "./providers/openai-oauth";
-import { createSqliteStore, type SessionStore } from "./store/sqlite-store";
+import { createMemoryStore } from "./store/memory-store";
+import type { SessionStore } from "./store/sqlite-store";
 
 const messageBodySchema = z.object({
   content: z.string().trim().min(1).max(4000),
@@ -68,7 +69,7 @@ export interface CreateAppOptions {
 }
 
 export function createApp(options: CreateAppOptions = {}) {
-  const store = options.store ?? createSqliteStore();
+  const store = options.store ?? createMemoryStore();
   const app = new Hono();
 
   app.get("/api/health", (context) =>

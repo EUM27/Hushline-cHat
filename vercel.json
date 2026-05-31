@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "corepack pnpm install --frozen-lockfile",
+  "buildCommand": "corepack pnpm --filter @hushline/client build",
+  "outputDirectory": "packages/client/dist",
+  "functions": {
+    "api/[...route].ts": {
+      "includeFiles": "packages/server/scenarios/**/*",
+      "maxDuration": 30
+    }
+  }
+}
