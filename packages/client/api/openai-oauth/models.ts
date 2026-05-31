@@ -1,1 +1,1 @@
-export { default } from "../../../server/src/vercel-node-handler";
+export { default } from "../../../server/src/vercel-web-handler";
