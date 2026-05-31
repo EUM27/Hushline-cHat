@@ -2,7 +2,7 @@
 // Client — v2 API Client
 // ──────────────────────────────────────────────
 // Thin wrapper around v2 endpoints.
-// Handles session creation, advance, reroll, undo.
+// Handles session creation, advance, reroll, undo through the same-origin API.
 // ──────────────────────────────────────────────
 
 import type {
