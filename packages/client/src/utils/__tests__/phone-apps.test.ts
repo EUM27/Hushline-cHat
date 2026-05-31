@@ -4,6 +4,7 @@ import {
   caseFileSignature,
   getDefaultPhoneApp,
   getPhoneAppAvailability,
+  shouldOpenMessengerForLatestOutgoingMessage,
 } from "../phone-apps";
 
 function caseBoard(over: Partial<CaseBoardView> = {}): CaseBoardView {
@@ -78,6 +79,34 @@ describe("default phone app", () => {
   test("empty-state fallback is the case file", () => {
     const a = getPhoneAppAvailability(undefined, "scene-first", 0);
     expect(getDefaultPhoneApp(a, "scene-first")).toBe("casefile");
+  });
+});
+
+describe("phone app focus after outgoing chat", () => {
+  test("opens messenger when the latest visible message is the user's phone chat", () => {
+    const availability = getPhoneAppAvailability(caseBoard({ isCaseScenario: true }), "scene-first", 1);
+
+    expect(shouldOpenMessengerForLatestOutgoingMessage("casefile", availability, {
+      id: "user-1",
+      sessionId: "session-1",
+      role: "user",
+      content: "내 말 보여?",
+      inputMode: "chat",
+      createdAt: "2026-05-25T00:00:01.000Z",
+    })).toBe(true);
+  });
+
+  test("does not steal focus for non-phone scene actions", () => {
+    const availability = getPhoneAppAvailability(caseBoard({ isCaseScenario: true }), "scene-first", 1);
+
+    expect(shouldOpenMessengerForLatestOutgoingMessage("casefile", availability, {
+      id: "user-1",
+      sessionId: "session-1",
+      role: "user",
+      content: "문 쪽으로 걸어간다.",
+      inputMode: "action",
+      createdAt: "2026-05-25T00:00:01.000Z",
+    })).toBe(false);
   });
 });
 

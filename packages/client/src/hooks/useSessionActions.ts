@@ -10,7 +10,10 @@ import type {
 } from "@hushline/shared";
 import { advanceV2, createSessionV2, rerollV2, undoV2 } from "../api-v2";
 import { sessionStorageKey } from "../constants/theme-presets";
-import { appendOptimisticUserMessage } from "../optimistic-session";
+import {
+  appendOptimisticUserMessage,
+  resolveOptimisticSubmitFailure,
+} from "../optimistic-session";
 import {
   activeConnections,
   advisorDraftsFromSession,
@@ -128,10 +131,11 @@ export function useSessionActions(
       setRevealedMessageCount(Math.min(nextVisibleCount, payload.session.messages.length));
       return true;
     } catch (reason: unknown) {
-      setSession(baseSession);
-      setRevealedMessageCount(baseSession.messages.length);
-      setError(reason instanceof Error ? reason.message : "응답 실패");
-      return false;
+      const failureState = resolveOptimisticSubmitFailure(optimisticSession, reason);
+      setSession(failureState.session);
+      setRevealedMessageCount(failureState.revealedMessageCount);
+      setError(failureState.error);
+      return failureState.didSubmitLocally;
     } finally {
       setIsSending(false);
     }

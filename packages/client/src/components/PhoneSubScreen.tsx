@@ -9,6 +9,7 @@ import {
   countPhoneChannelMessages,
   getDefaultPhoneApp,
   getPhoneAppAvailability,
+  shouldOpenMessengerForLatestOutgoingMessage,
   type PhoneAppId,
 } from "../utils/phone-apps";
 import { loadPhoneAppsSeen, savePhoneAppsSeen } from "../utils/phone-apps-storage";
@@ -122,6 +123,13 @@ export function PhoneSubScreen({
     .filter((message): message is PhoneMessage => Boolean(message));
 
   const isMessengerApp = activeApp === "messenger";
+  const latestVisibleMessage = visibleMessages.at(-1);
+
+  useEffect(() => {
+    if (shouldOpenMessengerForLatestOutgoingMessage(activeApp, availability, latestVisibleMessage)) {
+      setActiveApp("messenger");
+    }
+  }, [activeApp, availability, latestVisibleMessage]);
 
   useEffect(() => {
     if (isMessengerApp && phoneFeedRef.current) {

@@ -61,6 +61,19 @@ export function getDefaultPhoneApp(
   return "casefile"; // empty-state fallback
 }
 
+export function shouldOpenMessengerForLatestOutgoingMessage(
+  activeApp: PhoneAppId,
+  availability: PhoneAppAvailability,
+  latestVisibleMessage: ChatMessage | null | undefined,
+): boolean {
+  return (
+    activeApp !== "messenger"
+    && availability.messenger
+    && latestVisibleMessage?.role === "user"
+    && isPhoneChannelMessage(latestVisibleMessage)
+  );
+}
+
 /** Count messages that belong to the phone messenger channel. */
 export function countPhoneChannelMessages(messages: ChatMessage[]): number {
   return messages.filter(isPhoneChannelMessage).length;

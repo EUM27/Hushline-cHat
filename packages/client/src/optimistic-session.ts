@@ -27,3 +27,24 @@ export function appendOptimisticUserMessage(
     updatedAt: createdAt,
   };
 }
+
+export interface OptimisticSubmitFailureState {
+  session: ClientSessionState;
+  revealedMessageCount: number;
+  error: string;
+  didSubmitLocally: boolean;
+}
+
+export function resolveOptimisticSubmitFailure(
+  optimisticSession: ClientSessionState,
+  reason: unknown,
+): OptimisticSubmitFailureState {
+  const detail = reason instanceof Error ? reason.message : "응답 실패";
+
+  return {
+    session: optimisticSession,
+    revealedMessageCount: optimisticSession.messages.length,
+    error: `${detail} · 서버 응답은 실패했지만 보낸 말은 화면에 남겼습니다.`,
+    didSubmitLocally: true,
+  };
+}
