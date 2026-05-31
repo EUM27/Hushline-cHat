@@ -32,6 +32,15 @@ export interface TurnMessage {
   fallbackReason?: string;
 }
 
+export interface TurnCheckpoint {
+  turnNumber: number;
+  beforeWorldState: WorldState;
+  afterWorldState: WorldState;
+  userMessageId: string;
+  generatedMessageIds: string[];
+  createdAt: string;
+}
+
 // ── Session State (v2) ──
 
 export interface SessionStateV2 {
@@ -48,6 +57,7 @@ export interface SessionStateV2 {
   messages: TurnMessage[];
   handouts: Record<string, PrivateHandout>;
   summaries: SceneSummary[];
+  turnCheckpoints?: TurnCheckpoint[];
   createdAt: string;
   updatedAt: string;
 }

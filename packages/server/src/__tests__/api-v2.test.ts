@@ -129,6 +129,93 @@ describe("Hushline API v2", () => {
     expect(undone.session.messages.some((message: { role: string }) => message.role === "user")).toBe(false);
   });
 
+  test("restores the full world state checkpoint when rerolling and undoing a turn", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+    const firstDirectorOutput = {
+      speakers: ["advisor-1"],
+      silence: false,
+      event: null,
+      narratorInstruction: null,
+      characterIntents: {
+        "advisor-1": "첫 응답을 한다.",
+      },
+      stateDelta: { tension: 2 },
+      subObjectiveUpdate: null,
+      relationshipUpdate: null,
+      directives: [],
+      delay: null,
+    };
+    const rerollDirectorOutput = {
+      ...firstDirectorOutput,
+      characterIntents: {
+        "advisor-1": "리롤 응답을 한다.",
+      },
+      stateDelta: { tension: 1 },
+    };
+    const responses = [
+      JSON.stringify(firstDirectorOutput),
+      "첫 응답.",
+      JSON.stringify(rerollDirectorOutput),
+      "리롤 응답.",
+    ];
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() ?? "" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "school-life-anomaly",
+        persona: { name: "정해원" },
+      }),
+    });
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    const initialTension = created.session.worldState.tension;
+
+    const connections = {
+      default: {
+        providerId: "openrouter",
+        apiKey: "test-key",
+        model: "test/model",
+      },
+    };
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "여기 누구 있어?", inputMode: "chat", connections }),
+    });
+    expect(advancedResponse.status).toBe(200);
+    const advanced = await advancedResponse.json();
+    expect(advanced.session.worldState.tension).toBe(initialTension + 2);
+
+    const rerollResponse = await app.request(`/api/v2/sessions/${created.session.id}/reroll`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ inputMode: "chat", connections }),
+    });
+    expect(rerollResponse.status).toBe(200);
+    const rerolled = await rerollResponse.json();
+    expect(rerolled.session.worldState.turnNumber).toBe(1);
+    expect(rerolled.session.worldState.tension).toBe(initialTension + 1);
+    expect(rerolled.turn.messages.some((message: { content: string }) => message.content.includes("리롤 응답"))).toBe(true);
+
+    const undoResponse = await app.request(`/api/v2/sessions/${created.session.id}/undo`, {
+      method: "POST",
+    });
+    expect(undoResponse.status).toBe(200);
+    const undone = await undoResponse.json();
+    expect(undone.session.worldState.turnNumber).toBe(0);
+    expect(undone.session.worldState.tension).toBe(initialTension);
+    expect(undone.session.messages.some((message: { role: string }) => message.role === "user")).toBe(false);
+  });
+
   test("advance response includes developer-only state law snapshot", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
 

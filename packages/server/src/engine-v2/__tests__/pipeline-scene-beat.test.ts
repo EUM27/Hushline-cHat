@@ -69,6 +69,25 @@ describe("pipeline scene beat integration", () => {
       }
     }
   });
+
+  test("carries previously revealed case facts into narrator scope and scene snapshots", async () => {
+    const pack = loadPack();
+    const baseSession = buildSession(pack);
+    const session = {
+      ...baseSession,
+      worldState: {
+        ...baseSession.worldState,
+        revealedCaseFacts: {
+          fact_table_key_seen: 1,
+        },
+      },
+    };
+
+    const result = await runTurnV2(session, "주변을 다시 둘러봅니다.", { scenarioPack: pack });
+
+    expect(result.directorOutput.narratorScope?.allowedToDescribeFactIds).toContain("fact_table_key_seen");
+    expect(result.worldState.sceneSnapshots?.at(-1)?.revealedFactIds).toContain("fact_table_key_seen");
+  });
 });
 
 function loadPack(): ScenarioPack {

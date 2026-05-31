@@ -220,7 +220,7 @@ export interface SessionState {
  */
 export type ClientSessionState = Omit<
   SessionStateV2,
-  "persona" | "characters" | "messages" | "title" | "createdAt" | "updatedAt"
+  "persona" | "characters" | "messages" | "title" | "turnCheckpoints" | "createdAt" | "updatedAt"
 > & SessionState & {
   /** Player-safe case board projection (clues, statements, contradictions, dossiers). */
   caseBoard?: CaseBoardView;

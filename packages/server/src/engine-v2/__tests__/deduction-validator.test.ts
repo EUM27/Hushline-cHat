@@ -68,4 +68,46 @@ describe("deduction validator", () => {
     expect(result.score).toBeGreaterThanOrEqual(0.4);
     expect(result.score).toBeLessThan(1);
   });
+
+  test("does not score uncited existing claims as proof coverage", () => {
+    const attempt = {
+      id: "deduce_uncited",
+      turnNumber: 4,
+      playerClaim: "정전 전에 열쇠가 테이블에 있었으니 누군가 가져간 것 같아.",
+      evidenceRefs: [],
+      claimRefs: [],
+      factRefs: ["fact_table_key_seen"],
+      contradictionRefs: [],
+      logicalSteps: [
+        {
+          text: "정전 전에 열쇠가 테이블에 있었으니 누군가 가져간 것 같아.",
+          referencedIds: ["fact_table_key_seen"],
+          stepType: "causal_link" as const,
+        },
+      ],
+      validationResult: {
+        score: 0,
+        requiredElementCoverage: {},
+        missingEvidence: [],
+        missingClaims: [],
+        missingLogicalLinks: [],
+        wrongElements: [],
+        unsupportedAssumptions: [],
+        verdict: "not_a_deduction" as const,
+      },
+    };
+
+    const result = validateDeductionAttempt({
+      attempt,
+      solutionGraph,
+      revealedFactIds: ["fact_table_key_seen"],
+      claims: [{ id: "claim_key_missing" }],
+      contradictions: [{ id: "contra_key_after_blackout" }],
+    });
+
+    expect(result.requiredElementCoverage.opportunity_window).toBe(false);
+    expect(result.missingClaims).toContain("claim_key_missing");
+    expect(result.score).toBe(0);
+    expect(result.verdict).toBe("insufficient");
+  });
 });

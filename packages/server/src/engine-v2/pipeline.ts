@@ -104,6 +104,7 @@ export async function runTurnV2(
   const caseInquiry = routeCaseInquiry(userContent, pack);
   const caseFacts = getAllCaseFacts(pack.caseKnowledge);
   const hiddenTruthIds = getHiddenTruthIds(pack.caseKnowledge);
+  const revealedFactIds = getRevealedCaseFactIds(session.worldState);
   const existingClaims = session.worldState.claimLedger?.claims ?? [];
   const existingContradictions = (session.worldState.claimLedger?.contradictions ?? [])
     .filter(isContradictionRecord);
@@ -121,7 +122,7 @@ export async function runTurnV2(
   const deductionAttempt = parseDeductionAttempt({
     content: userContent,
     inquiryFrame: caseInquiry,
-    revealedFactIds: [],
+    revealedFactIds,
     claims: existingClaims,
     contradictions: contradictionsWithPlayerNotice,
   });
@@ -129,7 +130,7 @@ export async function runTurnV2(
     ? validateDeductionAttempt({
         attempt: deductionAttempt,
         solutionGraph: pack.caseKnowledge.hiddenTruthVault.solutionGraph,
-        revealedFactIds: [],
+        revealedFactIds,
         claims: existingClaims,
         contradictions: contradictionsWithPlayerNotice,
       })
@@ -141,7 +142,7 @@ export async function runTurnV2(
     ? resolveCaseAnswerScope({
         inquiryFrame: caseInquiry,
         caseKnowledge: pack.caseKnowledge,
-        revealedFactIds: [],
+        revealedFactIds,
         claims: existingClaims,
         currentTurn: session.worldState.turnNumber + 1,
         ...(pack.caseKnowledge.revealBudget ? { revealBudget: pack.caseKnowledge.revealBudget } : {}),
@@ -193,7 +194,7 @@ export async function runTurnV2(
   const narratorScope = resolveNarratorScope({
     inquiryFrame: caseInquiry,
     caseScope: caseAnswerScope,
-    revealedFactIds: [],
+    revealedFactIds,
     currentLocationId: session.worldState.locationId,
     ...(pack.caseKnowledge ? { caseKnowledge: pack.caseKnowledge } : {}),
   });
@@ -432,12 +433,17 @@ export async function runTurnV2(
   const nextDeductionAttempts = deductionAttempt
     ? [...(nextWorldState.playerDeductionAttempts ?? []), deductionAttempt]
     : nextWorldState.playerDeductionAttempts ?? [];
+  const visibleFactIdsForSnapshot = uniqueIds([
+    ...revealedFactIds,
+    ...caseAnswerScope.publicFactIds,
+    ...caseAnswerScope.observableFactIds,
+  ]);
   const nextSnapshot = buildSceneStateSnapshot({
     sessionId: session.id,
     turnNumber: session.worldState.turnNumber + 1,
     locationId: nextWorldState.locationId,
     sceneMode: nextWorldState.sceneMode,
-    revealedFactIds: caseAnswerScope.publicFactIds,
+    revealedFactIds: visibleFactIdsForSnapshot,
     revealedClueIds: [],
     claims: nextClaims,
     propagatedClaims: [
@@ -446,7 +452,7 @@ export async function runTurnV2(
     ],
     contradictions: nextContradictions,
     ambiguousFacts: updatedAmbiguity,
-    npcKnowledgeDigest: buildNpcKnowledgeDigest(pack, nextClaims, propagation.propagatedClaims, caseAnswerScope.publicFactIds),
+    npcKnowledgeDigest: buildNpcKnowledgeDigest(pack, nextClaims, propagation.propagatedClaims, visibleFactIdsForSnapshot),
     npcTrustLevels: buildNpcTrustLevels(pack, nextWorldState),
     playerHypotheses: nextWorldState.playerHypotheses ?? [],
     playerDeductionAttempts: nextDeductionAttempts,
@@ -470,7 +476,7 @@ export async function runTurnV2(
     ].slice(-10),
     revealedCaseFacts: recordRevealedCaseFacts(
       nextWorldState.revealedCaseFacts,
-      [...caseAnswerScope.publicFactIds, ...caseAnswerScope.observableFactIds],
+      visibleFactIdsForSnapshot,
       new Set(hiddenTruthIds),
       session.worldState.turnNumber + 1,
     ),
@@ -660,6 +666,14 @@ function isContradictionRecord(value: unknown): value is import("@hushline/share
 
 function getPresentNpcIds(pack: ScenarioPack, speakerIds: string[]): string[] {
   const ids = speakerIds.length > 0 ? speakerIds : pack.characters.map((character) => character.id);
+  return [...new Set(ids)];
+}
+
+function getRevealedCaseFactIds(worldState: WorldState): string[] {
+  return Object.keys(worldState.revealedCaseFacts ?? {});
+}
+
+function uniqueIds(ids: string[]): string[] {
   return [...new Set(ids)];
 }
 

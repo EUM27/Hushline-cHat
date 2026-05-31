@@ -7,9 +7,10 @@ import { buildCaseBoard } from "./case-board.js";
  */
 export function toClientSession(session: SessionStateV2, scenarioPack?: ScenarioPack): ClientSessionState {
   const scenarioCard = scenarioPack?.scenarioCard;
+  const { turnCheckpoints: _turnCheckpoints, ...clientSession } = session;
 
   return {
-    ...session,
+    ...clientSession,
     caseBoard: buildCaseBoard(session, scenarioPack),
     scene: {
       sessionId: session.worldState.sessionId,

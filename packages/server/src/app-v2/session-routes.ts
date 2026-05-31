@@ -1,12 +1,22 @@
 import type { Hono } from "hono";
 import { resolve } from "node:path";
-import type { ModelConnection, ScenarioPack, SessionStateV2, TurnMessage } from "@hushline/shared";
+import type {
+  ModelConnection,
+  ScenarioPack,
+  SessionStateV2,
+  TurnCheckpoint,
+  TurnMessage,
+  TurnResultV2,
+  WorldState,
+} from "@hushline/shared";
 import { loadScenarioPack, createInitialWorldState, runTurnV2, rollbackTurn } from "../engine-v2/index.js";
 import type { SessionStoreV2 } from "../store/sqlite-store-v2.js";
 import { applyAdvisorDrafts, packWithSessionCharacters } from "./advisor-drafts.js";
 import { advanceBodySchema, createSessionBodySchema, rerollBodySchema } from "./schemas.js";
 import { toClientSession } from "./session-presenter.js";
 import { resolveUserLabel } from "./utils.js";
+
+const MAX_TURN_CHECKPOINTS = 50;
 
 export interface RegisterSessionRoutesOptions {
   store: SessionStoreV2;
@@ -121,6 +131,10 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       ...session,
       worldState: turnResult.worldState,
       messages: [...session.messages, ...turnResult.messages],
+      turnCheckpoints: appendTurnCheckpoint(
+        session.turnCheckpoints ?? [],
+        createTurnCheckpoint(session.worldState, turnResult),
+      ),
       updatedAt: new Date().toISOString(),
     };
     store.saveSession(nextSession);
@@ -155,11 +169,15 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     }
 
     const lastUserMessage = session.messages[lastUserIndex]!;
+    const checkpointMatch = findCheckpointForUserMessage(session.turnCheckpoints ?? [], lastUserMessage.id);
     const rolledBackMessages = session.messages.slice(0, lastUserIndex);
     const rolledBackSession: SessionStateV2 = {
       ...session,
       messages: rolledBackMessages,
-      worldState: rollbackTurn(session.worldState),
+      worldState: checkpointMatch?.checkpoint.beforeWorldState ?? rollbackTurn(session.worldState),
+      turnCheckpoints: checkpointMatch
+        ? (session.turnCheckpoints ?? []).slice(0, checkpointMatch.index)
+        : (session.turnCheckpoints ?? []).slice(0, -1),
     };
 
     const packResult = loadScenarioPack(resolve(scenariosDir, session.scenarioPackId));
@@ -178,6 +196,10 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       ...rolledBackSession,
       worldState: turnResult.worldState,
       messages: [...rolledBackMessages, ...turnResult.messages],
+      turnCheckpoints: appendTurnCheckpoint(
+        rolledBackSession.turnCheckpoints ?? [],
+        createTurnCheckpoint(rolledBackSession.worldState, turnResult),
+      ),
       updatedAt: new Date().toISOString(),
     };
     store.saveSession(nextSession);
@@ -205,10 +227,15 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       return context.json({ error: "No messages to undo" }, 400);
     }
 
+    const lastUserMessage = session.messages[lastUserIndex]!;
+    const checkpointMatch = findCheckpointForUserMessage(session.turnCheckpoints ?? [], lastUserMessage.id);
     const nextSession: SessionStateV2 = {
       ...session,
       messages: session.messages.slice(0, lastUserIndex),
-      worldState: rollbackTurn(session.worldState),
+      worldState: checkpointMatch?.checkpoint.beforeWorldState ?? rollbackTurn(session.worldState),
+      turnCheckpoints: checkpointMatch
+        ? (session.turnCheckpoints ?? []).slice(0, checkpointMatch.index)
+        : (session.turnCheckpoints ?? []).slice(0, -1),
       updatedAt: new Date().toISOString(),
     };
     store.saveSession(nextSession);
@@ -222,4 +249,45 @@ function findLastIndex<T>(array: T[], predicate: (item: T) => boolean): number {
     if (predicate(array[index]!)) return index;
   }
   return -1;
+}
+
+function createTurnCheckpoint(beforeWorldState: WorldState, turnResult: TurnResultV2): TurnCheckpoint | null {
+  const userMessage = turnResult.messages.find((message) => message.role === "user");
+  if (!userMessage) {
+    return null;
+  }
+
+  return {
+    turnNumber: turnResult.worldState.turnNumber,
+    beforeWorldState,
+    afterWorldState: turnResult.worldState,
+    userMessageId: userMessage.id,
+    generatedMessageIds: turnResult.messages
+      .filter((message) => message.id !== userMessage.id)
+      .map((message) => message.id),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function appendTurnCheckpoint(
+  checkpoints: TurnCheckpoint[],
+  checkpoint: TurnCheckpoint | null,
+): TurnCheckpoint[] {
+  if (!checkpoint) {
+    return checkpoints;
+  }
+  return [...checkpoints, checkpoint].slice(-MAX_TURN_CHECKPOINTS);
+}
+
+function findCheckpointForUserMessage(
+  checkpoints: TurnCheckpoint[],
+  userMessageId: string,
+): { checkpoint: TurnCheckpoint; index: number } | null {
+  for (let index = checkpoints.length - 1; index >= 0; index -= 1) {
+    const checkpoint = checkpoints[index]!;
+    if (checkpoint.userMessageId === userMessageId) {
+      return { checkpoint, index };
+    }
+  }
+  return null;
 }

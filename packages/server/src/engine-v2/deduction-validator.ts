@@ -51,31 +51,35 @@ export function validateDeductionAttempt(input: {
   claims: Array<Claim | { id: string }>;
   contradictions: Array<ContradictionRecord | { id: string }>;
 }): DeductionValidationResult {
-  const availableRefs = new Set([
-    ...input.revealedFactIds,
+  const playerCitedRefs = new Set([
     ...input.attempt.factRefs,
     ...input.attempt.claimRefs,
     ...input.attempt.evidenceRefs,
     ...input.attempt.contradictionRefs,
+  ]);
+  const knownRefs = new Set([
+    ...input.revealedFactIds,
+    ...input.attempt.evidenceRefs,
     ...input.claims.map((claim) => claim.id),
     ...input.contradictions.map((contradiction) => contradiction.id),
   ]);
+  const scorableRefs = new Set([...playerCitedRefs].filter((ref) => knownRefs.has(ref)));
 
   const requiredElementCoverage: Record<string, boolean> = {};
   const missingRefs: string[] = [];
   let score = 0;
   for (const node of input.solutionGraph.requiredProofNodes) {
-    const covered = node.requiredRefs.every((ref) => availableRefs.has(ref));
+    const covered = node.requiredRefs.every((ref) => scorableRefs.has(ref));
     requiredElementCoverage[node.id] = covered;
     if (covered) {
       score += node.weight;
     } else {
-      missingRefs.push(...node.requiredRefs.filter((ref) => !availableRefs.has(ref)));
+      missingRefs.push(...node.requiredRefs.filter((ref) => !scorableRefs.has(ref)));
     }
   }
 
   const wrongElements = input.solutionGraph.disqualifyingErrors
-    .filter((error) => error.triggeredByWrongRefs.some((ref) => availableRefs.has(ref)))
+    .filter((error) => error.triggeredByWrongRefs.some((ref) => scorableRefs.has(ref)))
     .map((error) => error.id);
   const normalizedScore = Math.min(1, score);
   const verdict = pickVerdict(normalizedScore, input.solutionGraph, wrongElements, input.attempt);
@@ -87,7 +91,7 @@ export function validateDeductionAttempt(input: {
     missingClaims: missingRefs.filter((ref) => ref.startsWith("claim_")),
     missingLogicalLinks: missingRefs.filter((ref) => !ref.startsWith("claim_") && !ref.startsWith("evidence_")),
     wrongElements,
-    unsupportedAssumptions: findUnsupportedAssumptions(input.attempt, availableRefs),
+    unsupportedAssumptions: findUnsupportedAssumptions(input.attempt, knownRefs),
     verdict,
   };
 }
