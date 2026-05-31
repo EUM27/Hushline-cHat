@@ -54,6 +54,48 @@ describe("shared-house-romance pack", () => {
     expect(yujin?.systemPrompt.length ?? 0).toBeGreaterThan(0);
   });
 
+  test("kang-minjae and han-doyun display names are swapped", () => {
+    const pack = loadPack();
+    const minjaeSlot = pack.characters.find((c) => c.id === "kang-minjae");
+    const doyunSlot = pack.characters.find((c) => c.id === "han-doyun");
+
+    expect(minjaeSlot?.name).toBe("한도윤");
+    expect(minjaeSlot?.shortName).toBe("도윤");
+    expect(minjaeSlot?.systemPrompt).toContain("너는 한도윤이다.");
+    expect(doyunSlot?.name).toBe("강민재");
+    expect(doyunSlot?.shortName).toBe("민재");
+    expect(doyunSlot?.systemPrompt).toContain("너는 강민재다.");
+    expect(pack.scenarioCard.openingBeats.find((beat) => beat.id === "minjae-greet")?.speakerLabel).toBe("한도윤");
+    expect(pack.scenarioCard.openingBeats.find((beat) => beat.id === "doyun-greet")?.speakerLabel).toBe("강민재");
+  });
+
+  test("uses sharehouse-only time-of-day backgrounds without convenience store scenes", () => {
+    const pack = loadPack();
+    const romanceBackgroundIds = [
+      "sharehouse-living-room",
+      "sharehouse-living-room-morning",
+      "sharehouse-living-room-noon",
+      "sharehouse-living-room-sunset",
+      "sharehouse-living-room-night",
+      "sharehouse-kitchen",
+      "sharehouse-kitchen-morning",
+      "sharehouse-kitchen-day",
+      "sharehouse-kitchen-evening",
+      "sharehouse-kitchen-night",
+      "sharehouse-rooftop",
+      "sharehouse-rooftop-morning",
+      "sharehouse-rooftop-evening",
+      "sharehouse-rooftop-dawn",
+      "sharehouse-rooftop-night",
+    ];
+
+    expect(pack.scenarioCard.initialBackgroundId).toBe("sharehouse-living-room");
+    expect(pack.scenarioCard.backgroundIds).toEqual(expect.arrayContaining(romanceBackgroundIds));
+    expect(pack.scenarioCard.backgroundIds.some((id) => id.startsWith("convenience-store-"))).toBe(false);
+    expect(pack.directorPrompt).toContain("sharehouse-rooftop-night");
+    expect(pack.narratorPrompt).toContain("sharehouse-kitchen-evening");
+  });
+
   test("character relationship edges reference real characters", () => {
     const pack = loadPack();
     const ids = new Set(pack.characters.map((c) => c.id));

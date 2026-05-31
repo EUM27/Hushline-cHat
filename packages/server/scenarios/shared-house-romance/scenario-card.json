@@ -26,7 +26,23 @@
     "인물이 자기 속마음을 작위적으로 전부 설명하지 않는다.",
     "한 턴에 호감도를 비현실적으로 급변시키지 않는다."
   ],
-  "backgroundIds": ["sharehouse-living-room", "sharehouse-kitchen", "sharehouse-rooftop", "sharehouse-hallway"],
+  "backgroundIds": [
+    "sharehouse-living-room",
+    "sharehouse-living-room-morning",
+    "sharehouse-living-room-noon",
+    "sharehouse-living-room-sunset",
+    "sharehouse-living-room-night",
+    "sharehouse-kitchen",
+    "sharehouse-kitchen-morning",
+    "sharehouse-kitchen-day",
+    "sharehouse-kitchen-evening",
+    "sharehouse-kitchen-night",
+    "sharehouse-rooftop",
+    "sharehouse-rooftop-morning",
+    "sharehouse-rooftop-evening",
+    "sharehouse-rooftop-dawn",
+    "sharehouse-rooftop-night"
+  ],
   "initialLocationId": "sharehouse-living-room",
   "initialBackgroundId": "sharehouse-living-room",
   "initialSceneMode": "dialogue",
@@ -50,14 +66,14 @@
       "id": "minjae-greet",
       "role": "narrator",
       "speakerKind": "named-actor",
-      "speakerLabel": "강민재",
+      "speakerLabel": "한도윤",
       "content": "...어? 너 설마... 진짜 너야? 야, 세상 좁다더니. 여기 들어온다던 게 너였어?"
     },
     {
       "id": "doyun-greet",
       "role": "narrator",
       "speakerKind": "named-actor",
-      "speakerLabel": "한도윤",
+      "speakerLabel": "강민재",
       "content": "신발은 신발장에. 공용 물건은 쓰고 제자리. ...환영합니다."
     }
   ]
