@@ -513,6 +513,85 @@ describe("Hushline API v2", () => {
     expect(JSON.stringify(characterMessage)).not.toContain("character-key");
   });
 
+  test("keeps model connections when rerolling the last user turn", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+    const directorOutput = {
+      speakers: ["advisor-1"],
+      silence: false,
+      event: null,
+      narratorInstruction: null,
+      characterIntents: {
+        "advisor-1": "현재 상황에 짧게 반응한다.",
+      },
+      stateDelta: {},
+      subObjectiveUpdate: null,
+      relationshipUpdate: null,
+      directives: [],
+      delay: null,
+    };
+    const responses = [
+      JSON.stringify(directorOutput),
+      "첫 응답.",
+      JSON.stringify(directorOutput),
+      "리롤 응답.",
+    ];
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: responses.shift() ?? "" } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "school-life-anomaly",
+        persona: { name: "정해원" },
+      }),
+    });
+    const created = await createdResponse.json();
+    const connections = {
+      default: {
+        providerId: "openrouter",
+        apiKey: "test-key",
+        model: "test/model",
+      },
+    };
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${created.session.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content: "여기 누구 있어?",
+        inputMode: "chat",
+        connections,
+      }),
+    });
+    expect(advancedResponse.status).toBe(200);
+
+    const rerollResponse = await app.request(`/api/v2/sessions/${created.session.id}/reroll`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        inputMode: "chat",
+        connections,
+      }),
+    });
+
+    expect(rerollResponse.status).toBe(200);
+    const rerolled = await rerollResponse.json();
+    const characterMessage = rerolled.turn.messages.find((message: { role: string }) => message.role === "character");
+    expect(characterMessage.content).toContain("리롤 응답");
+    expect(characterMessage.generationSource).toBe("api");
+    expect(characterMessage.generationModel).toEqual({
+      providerId: "openrouter",
+      model: "test/model",
+    });
+  });
+
   test("does not let onboarding advisor drafts overwrite named fixed-cast characters", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
 

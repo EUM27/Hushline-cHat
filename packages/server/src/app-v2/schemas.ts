@@ -72,5 +72,10 @@ export const advanceBodySchema = z.object({
   connections: z.record(z.string(), modelConnectionSchema).optional(),
 });
 
+export const rerollBodySchema = z.object({
+  inputMode: z.enum(["chat", "action", "whisper"]).optional(),
+  connections: z.record(z.string(), modelConnectionSchema).optional(),
+}).optional().default({});
+
 export type AdvisorDraftInput = z.infer<typeof advisorDraftSchema>;
 export type ModelConnectionInput = z.infer<typeof modelConnectionSchema>;

@@ -4,7 +4,7 @@ import type { ModelConnection, ScenarioPack, SessionStateV2, TurnMessage } from 
 import { loadScenarioPack, createInitialWorldState, runTurnV2, rollbackTurn } from "../engine-v2/index.js";
 import type { SessionStoreV2 } from "../store/sqlite-store-v2.js";
 import { applyAdvisorDrafts, packWithSessionCharacters } from "./advisor-drafts.js";
-import { advanceBodySchema, createSessionBodySchema } from "./schemas.js";
+import { advanceBodySchema, createSessionBodySchema, rerollBodySchema } from "./schemas.js";
 import { toClientSession } from "./session-presenter.js";
 import { resolveUserLabel } from "./utils.js";
 
@@ -143,7 +143,7 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       return context.json({ error: "Session not found" }, 404);
     }
 
-    const parsed = advanceBodySchema.safeParse(await context.req.json().catch(() => ({})));
+    const parsed = rerollBodySchema.safeParse(await context.req.json().catch(() => ({})));
     const connections = parsed.success && parsed.data.connections
       ? (parsed.data.connections as Record<string, ModelConnection>)
       : undefined;
