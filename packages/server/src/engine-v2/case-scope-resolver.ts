@@ -11,6 +11,7 @@ import type {
   TestimonySeed,
 } from "@hushline/shared";
 import { getAllCaseFacts, getHiddenTruthIds } from "./case-knowledge.js";
+import { retrieveCaseLore } from "./case-lorebook.js";
 import { isRevealBudgetExceeded } from "./reveal-budget-manager.js";
 
 export interface ResolveCaseAnswerScopeInput {
@@ -37,49 +38,16 @@ export function resolveCaseAnswerScope(input: CaseInquiryFrame | ResolveCaseAnsw
     return emptyScope(inquiryFrame);
   }
 
-  const publicFactIds = matchFacts(knowledge.publicFacts, inquiryFrame, inquiryFrame.inquiryType === "case_summary_request")
-    .map((fact) => fact.id);
-  const observableFactIds = matchFacts(knowledge.observableFacts, inquiryFrame, false)
-    .map((fact) => fact.id);
-  const allowedWitnesses = buildAllowedWitnesses(knowledge.testimonySeeds, inquiryFrame);
-  const allowedFactIds = new Set([
-    ...publicFactIds,
-    ...observableFactIds,
-    ...allowedWitnesses.flatMap((witness) => witness.factIds),
-  ]);
-  const allFactIds = [...knowledge.publicFacts, ...knowledge.observableFacts].map((fact) => fact.id);
-  const blockedFactIds = allFactIds.filter((factId) => !allowedFactIds.has(factId));
-  const blockedTruthIds = knowledge.hiddenTruths.map((truth) => truth.id);
-  const recommendedSpeakerIds = getRecommendedSpeakers(inquiryFrame, allowedWitnesses.map((witness) => witness.characterId), pack);
-  const answerability = getAnswerability(inquiryFrame, publicFactIds, observableFactIds, allowedWitnesses.length);
-
-  return {
+  return resolveRuntimeCaseAnswerScope({
     inquiryFrame,
-    publicFactIds,
-    observableFactIds,
-    allowedWitnesses,
-    blockedFactIds,
-    blockedTruthIds,
-    recommendedSpeakerIds,
-    answerability,
-    publicFacts: publicFactIds,
-    observableFacts: observableFactIds,
-    testimonyCandidates: allowedWitnesses.flatMap((witness) => witness.testimonySeedIds.map((seedId) => ({
-      npcId: witness.characterId,
-      testimonySeedId: seedId,
-      factIds: witness.factIds,
-      revealLevel: witness.maxRevealLevel,
-      conditionSatisfied: true,
-      missingConditions: [],
-    }))),
-    blockedFacts: blockedFactIds.map((factId) => ({ factId, reason: "not_revealed_to_player" })),
-    recommendedSpeakers: recommendedSpeakerIds,
-    narratorCanAnswer: observableFactIds.length > 0 || publicFactIds.length > 0,
-    directorCanSummarizePublicInfo: publicFactIds.length > 0,
-  };
+    caseKnowledge: knowledge,
+    revealedFactIds: [],
+    claims: [],
+    currentTurn: 0,
+  }, pack);
 }
 
-function resolveRuntimeCaseAnswerScope(input: ResolveCaseAnswerScopeInput): CaseAnswerScope {
+function resolveRuntimeCaseAnswerScope(input: ResolveCaseAnswerScopeInput, pack?: ScenarioPack): CaseAnswerScope {
   const { inquiryFrame, caseKnowledge } = input;
   if (!inquiryFrame.isCaseInquiry) {
     return emptyScope(inquiryFrame);
@@ -87,7 +55,16 @@ function resolveRuntimeCaseAnswerScope(input: ResolveCaseAnswerScopeInput): Case
 
   const facts = getAllCaseFacts(caseKnowledge);
   const hiddenTruthIds = new Set(getHiddenTruthIds(caseKnowledge));
-  const matchingFacts = facts.filter((fact) => factMatchesInquiry(fact, inquiryFrame));
+  const narratorLore = retrieveCaseLore({
+    caseKnowledge,
+    inquiryFrame,
+    actor: "narrator",
+    revealedFactIds: input.revealedFactIds,
+    currentTurn: input.currentTurn,
+  });
+  const retrievedLoreEntryIds = new Set(narratorLore.entries.map((entry) => entry.id));
+  const loreFactIds = new Set(narratorLore.factIds);
+  const matchingFacts = facts.filter((fact) => loreFactIds.has(fact.id));
   const publicFactIds = matchingFacts
     .filter((fact) => isPublicFact(fact) && !hiddenTruthIds.has(fact.id))
     .map((fact) => fact.id);
@@ -97,13 +74,25 @@ function resolveRuntimeCaseAnswerScope(input: ResolveCaseAnswerScopeInput): Case
   const testimonyCandidates = (caseKnowledge.testimonySeeds ?? []).map((seed) => {
     const factIds = seedFactIds(seed);
     const missingConditions = getMissingSeedConditions(seed, input);
+    const characterLore = retrieveCaseLore({
+      caseKnowledge,
+      inquiryFrame,
+      actor: "character",
+      characterId: seed.characterId,
+      revealedFactIds: input.revealedFactIds,
+      currentTurn: input.currentTurn,
+    });
     const hasTopicMatch = seedMatchesInquiry(seed, inquiryFrame);
+    const loreAllowsSeed = characterLore.entries.some((entry) => entry.id === seed.id);
+    if (loreAllowsSeed) {
+      retrievedLoreEntryIds.add(seed.id);
+    }
     return {
       npcId: seed.npcId ?? seed.characterId,
       testimonySeedId: seed.id,
       factIds,
       revealLevel: seed.defaultRevealLevel,
-      conditionSatisfied: hasTopicMatch && missingConditions.length === 0,
+      conditionSatisfied: loreAllowsSeed && missingConditions.length === 0,
       missingConditions: hasTopicMatch ? missingConditions : ["topic"],
     };
   }).filter((candidate) => candidate.conditionSatisfied || inquiryFrame.targetNpcId === candidate.npcId || inquiryFrame.targetCharacterId === candidate.npcId);
@@ -141,11 +130,12 @@ function resolveRuntimeCaseAnswerScope(input: ResolveCaseAnswerScopeInput): Case
     ...allowedWitnesses.map((witness) => witness.characterId),
   ].filter((value, index, values) => value && values.indexOf(value) === index);
 
+  const speakerIds = pack
+    ? getRecommendedSpeakers(inquiryFrame, allowedWitnesses.map((witness) => witness.characterId), pack)
+    : recommendedSpeakerIds;
   const answerability = inquiryFrame.inquiryType === "truth_request"
     ? "none"
-    : allowedWitnesses.length > 0 || publicFactIds.length > 0 || observableFactIds.length > 0
-      ? "partial"
-      : "none";
+    : getAnswerability(inquiryFrame, publicFactIds, observableFactIds, allowedWitnesses.length);
 
   return {
     inquiryFrame,
@@ -154,13 +144,14 @@ function resolveRuntimeCaseAnswerScope(input: ResolveCaseAnswerScopeInput): Case
     allowedWitnesses,
     blockedFactIds: blockedFacts.map((fact) => fact.factId),
     blockedTruthIds: [...hiddenTruthIds],
-    recommendedSpeakerIds,
+    recommendedSpeakerIds: speakerIds,
     answerability,
+    retrievedLoreEntryIds: [...retrievedLoreEntryIds],
     publicFacts: publicFactIds,
     observableFacts: observableFactIds,
     testimonyCandidates,
     blockedFacts,
-    recommendedSpeakers: recommendedSpeakerIds,
+    recommendedSpeakers: speakerIds,
     narratorCanAnswer: observableFactIds.length > 0 || publicFactIds.length > 0,
     directorCanSummarizePublicInfo: publicFactIds.length > 0,
   };

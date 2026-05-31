@@ -152,6 +152,63 @@ export interface HiddenTruthVault {
   solutionGraph: SolutionGraph;
 }
 
+export type CaseLorebookActor =
+  | "director"
+  | "narrator"
+  | "character"
+  | "case_board"
+  | "deduction_validator";
+
+export type CaseLorebookSecretLevel =
+  | "public"
+  | "observable"
+  | "testimony"
+  | "private_npc"
+  | "major_secret"
+  | "solution";
+
+export type CaseLorebookEntrySource =
+  | "fact"
+  | "testimony"
+  | "hidden_truth"
+  | "solution_graph";
+
+export interface CaseLorebookEntry {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  sourceType: CaseLorebookEntrySource;
+  secretLevel: CaseLorebookSecretLevel;
+  linkedFactIds: FactId[];
+  category?: CaseFactCategory;
+  npcId?: NpcId;
+  locationId?: LocationId;
+  objectIds?: ObjectId[];
+  revealWhen?: TestimonySeed["revealWhen"];
+  condition?: TestimonySeed["condition"];
+  canSay?: string[];
+  mustNotSay?: string[];
+  visibility: {
+    readableBy: CaseLorebookActor[];
+    knownBy?: string[] | "all";
+    blockedFrom?: string[];
+  };
+}
+
+export interface CaseLorebookTreeNode {
+  id: string;
+  label: string;
+  summary: string;
+  entryIds: string[];
+  children: CaseLorebookTreeNode[];
+}
+
+export interface CaseLorebook {
+  entries: CaseLorebookEntry[];
+  tree: CaseLorebookTreeNode;
+}
+
 export interface CaseKnowledge {
   briefing?: PublicCaseBriefing;
   facts?: CaseFact[];
@@ -165,6 +222,7 @@ export interface CaseKnowledge {
   observableFacts: CaseFact[];
   testimonySeeds: TestimonySeed[];
   hiddenTruths: HiddenTruthRef[];
+  lorebook?: CaseLorebook;
 }
 
 export type CaseKnowledgeLayer = CaseKnowledge;
@@ -206,6 +264,7 @@ export interface CaseAnswerScope {
   blockedTruthIds: string[];
   recommendedSpeakerIds: string[];
   answerability: "none" | "partial" | "direct";
+  retrievedLoreEntryIds?: string[];
   publicFacts?: FactId[];
   observableFacts?: FactId[];
   testimonyCandidates?: Array<{

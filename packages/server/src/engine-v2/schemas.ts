@@ -99,6 +99,44 @@ export const objectiveDefinitionSchema = z.object({
   description: z.string().min(1).max(1000),
 });
 
+// ── Character Card (chara_card_v3 with hushline extension) ──
+
+/** Hushline engine data carried in chara_card_v3 `data.extensions.hushline`. */
+export const hushlineCardExtensionSchema = z.object({
+  id: z.string().min(1).max(80).optional(),
+  shortName: z.string().min(1).max(40).optional(),
+  role: z.string().max(400).optional(),
+  profileKind: z.enum(["advisor-slot", "named-actor"]).optional(),
+  anonymousLabel: z.string().max(40).optional(),
+  mbti: z.string().max(20).optional(),
+  ocean: oceanSchema.optional(),
+  autonomy: z.number().min(0).max(1).optional(),
+  relationshipTags: z.array(z.string().max(100)).optional(),
+  handout: characterHandoutSchema.partial().optional(),
+  relationships: z.array(characterRelationshipDefSchema).optional(),
+  spriteSetId: z.string().optional(),
+  avatarId: z.string().optional(),
+});
+
+export const characterCardSchema = z.object({
+  spec: z.string().optional(),
+  spec_version: z.string().optional(),
+  data: z.object({
+    name: z.string().min(1).max(80),
+    description: z.string().max(8000).default(""),
+    personality: z.string().max(4000).default(""),
+    scenario: z.string().max(4000).optional(),
+    first_mes: z.string().max(8000).optional(),
+    system_prompt: z.string().max(8000).optional(),
+    post_history_instructions: z.string().max(8000).optional(),
+    tags: z.array(z.string()).optional(),
+    alternate_greetings: z.array(z.string()).optional(),
+    extensions: z.object({
+      hushline: hushlineCardExtensionSchema.optional(),
+    }).passthrough().optional(),
+  }),
+});
+
 // ── Event Triggers ──
 
 export const eventTriggerSchema = z.object({
@@ -109,7 +147,6 @@ export const eventTriggerSchema = z.object({
 });
 
 // ── Scene Occurrence Device ──
-
 export const sceneOccurrenceDeviceSchema = z.object({
   id: z.string().min(1).max(120),
   type: z.enum([
@@ -214,6 +251,21 @@ export const caseFactSchema = z.object({
   }).optional(),
 });
 
+export const testimonySeedConditionSchema = z.object({
+  requiresQuestionSpecificity: z.number().int().min(0).max(3).optional(),
+  requiresTopicMention: z.array(z.string().min(1).max(80)).optional(),
+  requiresEvidence: z.array(z.string().min(1).max(120)).optional(),
+  requiresPriorFact: z.array(z.string().min(1).max(120)).optional(),
+  requiresTrust: z.number().min(0).max(100).optional(),
+});
+
+export const testimonySeedRevealWhenSchema = z.object({
+  inquiryTypes: z.array(caseInquiryTypeSchema).optional(),
+  topicTags: z.array(z.string().min(1).max(80)).optional(),
+  objectIds: z.array(z.string().min(1).max(120)).optional(),
+  locationIds: z.array(z.string().min(1).max(120)).optional(),
+});
+
 export const testimonySeedSchema = z.object({
   id: z.string().min(1).max(120),
   npcId: z.string().min(1).max(120).optional(),
@@ -225,12 +277,8 @@ export const testimonySeedSchema = z.object({
   certainty: z.enum(["certain", "uncertain", "denial"]).default("uncertain"),
   canSay: z.array(z.string().min(1).max(1000)).default([]),
   mustNotSay: z.array(z.string().min(1).max(1000)).default([]),
-  revealWhen: z.object({
-    inquiryTypes: z.array(caseInquiryTypeSchema).optional(),
-    topicTags: z.array(z.string().min(1).max(80)).optional(),
-    objectIds: z.array(z.string().min(1).max(120)).optional(),
-    locationIds: z.array(z.string().min(1).max(120)).optional(),
-  }).optional(),
+  condition: testimonySeedConditionSchema.optional(),
+  revealWhen: testimonySeedRevealWhenSchema.optional(),
 });
 
 export const hiddenTruthRefSchema = z.object({
@@ -240,11 +288,75 @@ export const hiddenTruthRefSchema = z.object({
   blockedKeywords: z.array(z.string().min(1).max(120)).default([]),
 });
 
+export const caseLorebookActorSchema = z.enum(["director", "narrator", "character", "case_board", "deduction_validator"]);
+export const caseLorebookSecretLevelSchema = z.enum(["public", "observable", "testimony", "private_npc", "major_secret", "solution"]);
+export const caseLorebookEntrySourceSchema = z.enum(["fact", "testimony", "hidden_truth", "solution_graph"]);
+
+export const caseLorebookEntrySchema = z.object({
+  id: z.string().min(1).max(120),
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(4000),
+  tags: z.array(z.string().min(1).max(80)).default([]),
+  sourceType: caseLorebookEntrySourceSchema,
+  secretLevel: caseLorebookSecretLevelSchema,
+  linkedFactIds: z.array(z.string().min(1).max(120)).default([]),
+  category: z.enum([
+    "briefing",
+    "public",
+    "observable",
+    "timeline",
+    "object",
+    "location",
+    "witness",
+    "clue",
+    "hidden_truth",
+    "solution",
+  ]).optional(),
+  npcId: z.string().min(1).max(120).optional(),
+  locationId: z.string().min(1).max(120).optional(),
+  objectIds: z.array(z.string().min(1).max(120)).optional(),
+  revealWhen: testimonySeedRevealWhenSchema.optional(),
+  condition: testimonySeedConditionSchema.optional(),
+  canSay: z.array(z.string().min(1).max(1000)).optional(),
+  mustNotSay: z.array(z.string().min(1).max(1000)).optional(),
+  visibility: z.object({
+    readableBy: z.array(caseLorebookActorSchema).default([]),
+    knownBy: z.union([z.literal("all"), z.array(z.string().min(1).max(120))]).optional(),
+    blockedFrom: z.array(z.string().min(1).max(120)).optional(),
+  }),
+});
+
+export const caseLorebookTreeNodeSchema: z.ZodType<{
+  id: string;
+  label: string;
+  summary: string;
+  entryIds: string[];
+  children: Array<{
+    id: string;
+    label: string;
+    summary: string;
+    entryIds: string[];
+    children: unknown[];
+  }>;
+}> = z.lazy(() => z.object({
+  id: z.string().min(1).max(120),
+  label: z.string().min(1).max(120),
+  summary: z.string().max(1000).default(""),
+  entryIds: z.array(z.string().min(1).max(120)).default([]),
+  children: z.array(caseLorebookTreeNodeSchema).default([]),
+}));
+
+export const caseLorebookSchema = z.object({
+  entries: z.array(caseLorebookEntrySchema).default([]),
+  tree: caseLorebookTreeNodeSchema,
+});
+
 export const caseKnowledgeSchema = z.object({
   publicFacts: z.array(caseFactSchema).default([]),
   observableFacts: z.array(caseFactSchema).default([]),
   testimonySeeds: z.array(testimonySeedSchema).default([]),
   hiddenTruths: z.array(hiddenTruthRefSchema).default([]),
+  lorebook: caseLorebookSchema.optional(),
   facts: z.array(caseFactSchema).optional(),
   timeline: z.array(z.object({
     id: z.string().min(1),
@@ -381,6 +493,7 @@ export const caseAnswerScopeSchema = z.object({
   blockedTruthIds: z.array(z.string()).default([]),
   recommendedSpeakerIds: z.array(z.string()).default([]),
   answerability: z.enum(["none", "partial", "direct"]).default("none"),
+  retrievedLoreEntryIds: z.array(z.string()).optional(),
 });
 
 export const caseRevealPermissionSchema = z.object({

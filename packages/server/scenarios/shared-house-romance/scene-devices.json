@@ -35,7 +35,7 @@
       "sceneBeat": "옥상에 올라서자 동네의 불빛이 펼쳐진다. 둘만 남은 공기 속에서 평소 못 하던 말이 떠오를 것 같다.",
       "stateDelta": { "tension": 1 },
       "npcReactions": [
-        { "npcId": "mer-ari", "reaction": "난간에 기대 먼 곳을 본다" }
+        { "npcId": "kang-minjae", "reaction": "난간에 기대 먼 곳을 본다" }
       ]
     },
     "oneShot": true,
@@ -49,10 +49,10 @@
       "sceneBeat": "누군가의 다정한 한마디에, 곁에 있던 다른 사람의 표정이 아주 잠깐 흔들린다.",
       "stateDelta": { "tension": 1 },
       "npcReactions": [
-        { "npcId": "mer-ari", "reaction": "시선을 슬쩍 돌린다" }
+        { "npcId": "kang-minjae", "reaction": "시선을 슬쩍 돌린다" }
       ],
       "relationshipChanges": [
-        { "sourceId": "mer-ari", "targetId": "seo-yujin", "descriptor": "envy", "intensityDelta": 1 }
+        { "sourceId": "kang-minjae", "targetId": "seo-yujin", "descriptor": "envy", "intensityDelta": 1 }
       ]
     },
     "oneShot": false,

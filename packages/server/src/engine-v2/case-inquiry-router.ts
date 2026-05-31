@@ -9,7 +9,7 @@ const TOPIC_MARKERS: Array<{ tag: string; markers: string[]; objectId?: string; 
   { tag: "lounge", markers: ["라운지", "거실", "응접실"], locationId: "lodge-foyer" },
   { tag: "study", markers: ["서재"], locationId: "lodge-study-crime-scene" },
   { tag: "locked_room", markers: ["밀실", "잠긴", "문"] },
-  { tag: "victim", markers: ["피해자", "윤태식", "시신", "죽"] },
+  { tag: "victim", markers: ["피해자", "윤태식", "시신", "죽은 사람", "죽은사람", "사망자"] },
   { tag: "killer", markers: ["범인", "살인범", "공범"] },
   { tag: "truth", markers: ["진상", "정답", "트릭"] },
 ];
@@ -118,11 +118,16 @@ function detectTopicTags(input: string, caseKnowledge?: CaseKnowledge): string[]
       location.tags.forEach((tag) => tags.add(tag));
     }
   }
+
+  // Only literal tags in the player input count here. Do not expand through
+  // fact tag intersections, or broad tags such as "case_basic" can fan out into
+  // unrelated clues that were never discussed.
   for (const fact of [...(caseKnowledge?.facts ?? []), ...(caseKnowledge?.publicFacts ?? []), ...(caseKnowledge?.observableFacts ?? [])]) {
-    const factMatches = fact.tags.some((tag) => tags.has(tag))
-      || fact.text.split(/\s+/).some((word) => word.length >= 2 && normalized.includes(normalize(word)));
-    if (factMatches) {
-      fact.tags.forEach((tag) => tags.add(tag));
+    for (const tag of fact.tags) {
+      const normalizedTag = normalize(tag);
+      if (normalizedTag.length >= 2 && normalized.includes(normalizedTag)) {
+        tags.add(tag);
+      }
     }
   }
   return [...tags];

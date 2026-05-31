@@ -28,6 +28,75 @@ export interface CharaCardV3 {
   };
 }
 
+/** Hushline engine data embedded in `data.extensions.hushline`. */
+export interface HushlineCardExtension {
+  id?: string;
+  shortName?: string;
+  role?: string;
+  profileKind?: "advisor-slot" | "named-actor";
+  anonymousLabel?: string;
+  mbti?: string;
+  ocean?: CharacterDefinition["ocean"];
+  autonomy?: number;
+  relationshipTags?: string[];
+  handout?: Partial<CharacterHandoutDefinition>;
+  relationships?: CharacterDefinition["relationships"];
+  spriteSetId?: string;
+  avatarId?: string;
+}
+
+/**
+ * Convert a parsed chara_card_v3 into a full CharacterDefinition.
+ * Standard card fields drive name/prompt; engine-specific data (handout,
+ * relationships, OCEAN, autonomy) is read from `data.extensions.hushline`.
+ * The card stays a valid chara_card_v3 — the extension is ignored by other apps.
+ */
+export function cardToCharacterDefinition(
+  card: CharaCardV3,
+  fallbackId: string,
+): CharacterDefinition {
+  const data = card.data;
+  const ext = (data.extensions?.hushline ?? {}) as HushlineCardExtension;
+  const name = data.name.trim();
+  const shortName = ext.shortName ?? (name.length > 10 ? name.slice(0, 10) : name);
+
+  const promptParts = [
+    data.system_prompt,
+    data.personality ? `[성격] ${data.personality}` : null,
+    data.post_history_instructions,
+  ].filter(Boolean);
+  const systemPrompt = promptParts.join("\n\n") || `너는 ${name}이다. ${data.description?.slice(0, 200) ?? ""}`;
+
+  const extHandout = ext.handout ?? {};
+  const handout: CharacterHandoutDefinition = {
+    secret: extHandout.secret ?? "",
+    desire: extHandout.desire ?? "",
+    objective: extHandout.objective ?? "",
+    initialRelationshipToUser: extHandout.initialRelationshipToUser ?? 0,
+    ...(extHandout.surfacePersonality?.length ? { surfacePersonality: extHandout.surfacePersonality } : {}),
+    ...(extHandout.fear ? { fear: extHandout.fear } : {}),
+    ...(extHandout.behaviorRules?.length ? { behaviorRules: extHandout.behaviorRules } : {}),
+  };
+
+  return {
+    id: ext.id ?? fallbackId,
+    name,
+    shortName,
+    role: ext.role ?? data.description?.slice(0, 100) ?? "",
+    profileKind: ext.profileKind ?? "named-actor",
+    ...(ext.anonymousLabel ? { anonymousLabel: ext.anonymousLabel } : {}),
+    mbti: ext.mbti ?? "unspecified",
+    ocean: ext.ocean ?? inferOcean(data.personality ?? ""),
+    autonomy: ext.autonomy ?? 0.6,
+    systemPrompt,
+    ...(ext.relationshipTags?.length ? { relationshipTags: ext.relationshipTags } : {}),
+    handout,
+    relationships: ext.relationships ?? [],
+    ...(ext.spriteSetId ? { spriteSetId: ext.spriteSetId } : {}),
+    ...(ext.avatarId ? { avatarId: ext.avatarId } : {}),
+  };
+}
+
 export type CardImportResult =
   | { success: true; character: CharacterDefinition }
   | { success: false; error: string };

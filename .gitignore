@@ -4,6 +4,7 @@ dist/
 .logs/
 .playwright-mcp/
 .superpowers/
+.codex-remote-attachments/
 
 *.log
 *.local

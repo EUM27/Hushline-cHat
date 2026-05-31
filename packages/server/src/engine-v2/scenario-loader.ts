@@ -18,11 +18,13 @@ import {
   scenarioManifestSchema,
   scenarioCardSchema,
   characterDefinitionSchema,
+  characterCardSchema,
   objectiveDefinitionSchema,
   eventTriggerSchema,
   caseKnowledgeSchema,
   sceneOccurrenceDeviceSchema,
 } from "./schemas.js";
+import { cardToCharacterDefinition, type CharaCardV3 } from "./card-importer.js";
 
 export interface ScenarioLoadError {
   file: string;
@@ -97,10 +99,31 @@ export function loadScenarioPack(packDir: string): ScenarioLoadResult {
   if (existsSync(charactersDir)) {
     const files = readdirSync(charactersDir).filter((f) => f.endsWith(".json"));
     for (const file of files) {
-      const char = loadJsonFile<CharacterDefinition>(
-        charactersDir, file, characterDefinitionSchema, errors,
-      );
-      if (char) characters.push(char);
+      const fallbackId = file.replace(/\.json$/i, "");
+      const raw = readJson(charactersDir, file, errors);
+      if (raw === undefined) continue;
+
+      if (looksLikeCharacterCard(raw)) {
+        // chara_card_v3 (with optional hushline extension)
+        const parsed = characterCardSchema.safeParse(raw);
+        if (!parsed.success) {
+          for (const issue of parsed.error.issues.slice(0, 5)) {
+            errors.push({ file, message: `캐릭터 카드 검증 실패 [${issue.path.join(".")}]: ${issue.message}` });
+          }
+          continue;
+        }
+        characters.push(cardToCharacterDefinition(parsed.data as CharaCardV3, fallbackId));
+      } else {
+        // legacy inline CharacterDefinition
+        const result = characterDefinitionSchema.safeParse(raw);
+        if (!result.success) {
+          for (const issue of result.error.issues.slice(0, 5)) {
+            errors.push({ file, message: `검증 실패 [${issue.path.join(".")}]: ${issue.message}` });
+          }
+          continue;
+        }
+        characters.push(result.data as CharacterDefinition);
+      }
     }
   }
   if (characters.length === 0) {
@@ -226,6 +249,30 @@ export function listScenarioPacks(scenariosDir: string): string[] {
 }
 
 // ── Helpers ──
+
+/** Read + JSON.parse a file, pushing a load error on failure. Returns undefined on error. */
+function readJson(dir: string, filename: string, errors: ScenarioLoadError[]): unknown {
+  const filePath = join(dir, filename);
+  if (!existsSync(filePath)) {
+    errors.push({ file: filename, message: `파일을 찾을 수 없습니다: ${filePath}` });
+    return undefined;
+  }
+  try {
+    return JSON.parse(readFileSync(filePath, "utf-8"));
+  } catch (e) {
+    errors.push({ file: filename, message: `JSON 파싱 실패: ${e instanceof Error ? e.message : "unknown"}` });
+    return undefined;
+  }
+}
+
+/** A chara_card has a nested `data.name`; an inline CharacterDefinition has a top-level `id`/`name`. */
+function looksLikeCharacterCard(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const record = raw as Record<string, unknown>;
+  if (typeof record.spec === "string" && record.spec.startsWith("chara_card")) return true;
+  const data = record.data;
+  return Boolean(data && typeof data === "object" && typeof (data as Record<string, unknown>).name === "string");
+}
 
 function loadJsonFile<T>(
   dir: string,
