@@ -13,6 +13,7 @@ describe("styles entrypoint", () => {
       '@import "./styles/setup.css";',
       '@import "./styles/invitation.css";',
       '@import "./styles/dev-panel.css";',
+      '@import "./styles/case-board.css";',
       '@import "./styles/visual-novel.css";',
       '@import "./styles/responsive.css";',
     ].join("\n"));

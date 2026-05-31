@@ -8,26 +8,26 @@
 
 ## Tasks
 
-- [ ] 1. 재사용 하니스 헬퍼
+- [x] 1. 재사용 하니스 헬퍼
   - `__tests__/leak-harness.ts` — `collectLeakSignals(pack)`, `loadCasePacks(dir)`,
     `makeHarnessSession(pack)`, `assertNoHiddenTruthLeak(args)`
   - 표면 수집: messages content + caseRuntime.devTrace.allowedFacts + caseBoard 직렬화
   - 단언: hidden id substring / redaction token / 솔루션 원문(있으면) 없음, 위치 식별 메시지
   - _Requirements: 2.1, 2.4, 3.1, 3.2, 3.4, 3.5, 3.6, 4.5_
 
-- [ ] 2. 유도성 입력 코퍼스
+- [x] 2. 유도성 입력 코퍼스
   - `__tests__/adversarial-inputs.ts` — `AdversarialInput` + `ADVERSARIAL_INPUTS`
   - 카테고리: direct_truth / indirect / deduction / contradiction / accusation / meta
   - high-risk inquiry 타입 각 최소 1개 보장
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 3. 드라이버 테스트
+- [x] 3. 드라이버 테스트
   - `__tests__/hidden-truth-leak.test.ts`
   - single-turn: 각 입력 → runTurnV2(dry-run) → buildCaseBoard → assertNoHiddenTruthLeak
   - cumulative: 입력 순차 적용 세션 → 매 턴 단언
   - _Requirements: 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 4. 자기검증 + 전체 검증
+- [x] 4. 자기검증 + 전체 검증
   - sanity 테스트: 인위적 hidden id 주입 result를 단언에 통과시키면 throw 확인
   - `corepack pnpm -r run check` + 전체 서버 테스트 통과
   - _Requirements: 3.6, 4.1, 4.2, 4.3, 4.4_

@@ -153,6 +153,11 @@
   flex: 0 0 auto;
 }
 
+.phone-model-settings-tool,
+.phone-model-drawer {
+  display: none;
+}
+
 .phone-room-title .phone-static-icon,
 .phone-room-tools button,
 .phone-room-tools .phone-static-icon,
@@ -442,6 +447,74 @@
 .phone-theme-list button.selected .theme-select-dot {
   border-color: var(--vn-accent);
   background: var(--vn-accent);
+}
+
+@media (max-width: 980px) {
+  .phone-model-settings-tool {
+    display: grid;
+  }
+
+  .phone-model-drawer {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    background: color-mix(in srgb, var(--vn-phone-surface) 96%, #000);
+    color: var(--vn-phone-text);
+  }
+
+  .phone-model-drawer header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-block-end: var(--vn-thin-line) solid var(--vn-phone-border);
+    background: var(--vn-phone-header);
+    color: var(--vn-phone-text);
+    font: var(--font-mono-sm);
+  }
+
+  .phone-model-drawer header span,
+  .phone-model-drawer header button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .phone-model-drawer header button {
+    justify-content: center;
+    inline-size: var(--control-block-sm);
+    aspect-ratio: 1;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: inherit;
+  }
+
+  .phone-model-drawer-body {
+    display: grid;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+
+  .phone-model-drawer .connection-panel {
+    grid-template-columns: minmax(0, 1fr);
+    inline-size: 100%;
+    block-size: 100%;
+    max-block-size: none;
+    align-self: stretch;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .phone-model-drawer .connection-actions {
+    flex-wrap: wrap;
+  }
 }
 
 .vn-stage-panel {

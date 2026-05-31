@@ -1,5 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Battery, ChevronLeft, Menu, Palette, Plus, Search, Send, Wifi, X } from "lucide-react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Battery, ChevronLeft, Menu, Palette, Plus, Search, Send, Settings, Wifi, X } from "lucide-react";
 import type { ChatMessage, ClientSessionState } from "@hushline/shared";
 import { buildPhoneMessages, type PhoneMessage } from "../phone-feed";
 import type { VisualThemePreset, VisualThemeId } from "../types/ui";
@@ -22,9 +22,13 @@ export function PhoneSubScreen({
   isSending,
   themeOptions,
   isThemeOpen,
+  isModelSettingsOpen,
+  modelSettingsPanel,
   chatInput,
   onToggleTheme,
   onSelectTheme,
+  onToggleModelSettings,
+  onCloseModelSettings,
   onChatInputChange,
   onChatSubmit,
 }: {
@@ -34,9 +38,13 @@ export function PhoneSubScreen({
   isSending: boolean;
   themeOptions: VisualThemePreset[];
   isThemeOpen: boolean;
+  isModelSettingsOpen: boolean;
+  modelSettingsPanel: ReactNode;
   chatInput: string;
   onToggleTheme: () => void;
   onSelectTheme: (themeId: VisualThemeId) => void;
+  onToggleModelSettings: () => void;
+  onCloseModelSettings: () => void;
   onChatInputChange: (value: string) => void;
   onChatSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -122,6 +130,10 @@ export function PhoneSubScreen({
   }, [filteredPhoneMessages.length, isMessengerApp]);
 
   function handlePhoneBack() {
+    if (isModelSettingsOpen) {
+      onCloseModelSettings();
+      return;
+    }
     if (isThemeOpen) {
       onToggleTheme();
       return;
@@ -136,6 +148,18 @@ export function PhoneSubScreen({
       return;
     }
     phoneFeedRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleToggleModelSettings() {
+    if (!isModelSettingsOpen) {
+      if (isThemeOpen) {
+        onToggleTheme();
+      }
+      setIsPhoneMenuOpen(false);
+      setIsFiltering(false);
+      setPhoneFilter("");
+    }
+    onToggleModelSettings();
   }
 
   function handlePhoneSearch() {
@@ -197,6 +221,15 @@ export function PhoneSubScreen({
             </div>
           </div>
           <div className="phone-room-tools" aria-label="보조 화면 도구">
+            <button
+              type="button"
+              className="phone-model-settings-tool"
+              onClick={handleToggleModelSettings}
+              aria-label={isModelSettingsOpen ? "모델 설정 닫기" : "모델 설정 열기"}
+              aria-expanded={isModelSettingsOpen}
+            >
+              <Settings size={15} aria-hidden="true" />
+            </button>
             <button type="button" onClick={onToggleTheme} aria-label={isThemeOpen ? "테마 닫기" : "테마 열기"}>
               <Palette size={15} aria-hidden="true" />
             </button>
@@ -216,6 +249,21 @@ export function PhoneSubScreen({
             ) : null}
           </div>
         </header>
+
+        {isModelSettingsOpen ? (
+          <div className="phone-model-drawer" role="dialog" aria-modal="true" aria-label="모델 설정">
+            <header>
+              <span>
+                <Settings size={14} aria-hidden="true" />
+                모델 설정
+              </span>
+              <button type="button" onClick={onCloseModelSettings} aria-label="모델 설정 닫기">
+                <X size={14} aria-hidden="true" />
+              </button>
+            </header>
+            <div className="phone-model-drawer-body">{modelSettingsPanel}</div>
+          </div>
+        ) : null}
 
         {isMessengerApp ? (
           <div className="phone-message-feed" aria-live="polite" ref={phoneFeedRef}>

@@ -40,6 +40,7 @@ export function App() {
   const [actionInput, setActionInput] = useState("");
   const [enterToSend, setEnterToSend] = useState(() => loadEnterToSend());
   const [isConnectionPanelOpen, setIsConnectionPanelOpen] = useState(false);
+  const [isPhoneConnectionPanelOpen, setIsPhoneConnectionPanelOpen] = useState(false);
   const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
   const [rightToolMode, setRightToolMode] = useState<"connections" | "law">("connections");
   const [visualThemeId, setVisualThemeId] = useState<VisualThemeId>("moonlight");
@@ -217,6 +218,9 @@ export function App() {
     newGame();
     setChatInput("");
     setActionInput("");
+    setIsPhoneConnectionPanelOpen(false);
+    setIsConnectionPanelOpen(false);
+    setIsDevPanelOpen(false);
     resetScenarioSelection();
   }
 
@@ -266,12 +270,20 @@ export function App() {
               isSending={isSending}
               themeOptions={visualThemeOrder.map((themeId) => visualThemePresets[themeId])}
               isThemeOpen={isVisualThemeOpen}
+              isModelSettingsOpen={isPhoneConnectionPanelOpen}
+              modelSettingsPanel={connectionPanel}
               chatInput={chatInput}
               onToggleTheme={() => setIsVisualThemeOpen((current) => !current)}
               onSelectTheme={(nextThemeId) => {
                 setVisualThemeId(nextThemeId);
                 setIsVisualThemeOpen(false);
               }}
+              onToggleModelSettings={() => {
+                setIsPhoneConnectionPanelOpen((current) => !current);
+                setIsConnectionPanelOpen(false);
+                setIsDevPanelOpen(false);
+              }}
+              onCloseModelSettings={() => setIsPhoneConnectionPanelOpen(false)}
               onChatInputChange={setChatInput}
               onChatSubmit={handleChatSubmit}
             />
@@ -289,10 +301,12 @@ export function App() {
                   onToggleConnectionPanel={() => {
                     setRightToolMode("connections");
                     setIsConnectionPanelOpen((current) => !current);
+                    setIsPhoneConnectionPanelOpen(false);
                     setIsDevPanelOpen(false);
                   }}
                   onToggleDevPanel={() => {
                     setIsDevPanelOpen((current) => !current);
+                    setIsPhoneConnectionPanelOpen(false);
                     setIsConnectionPanelOpen(false);
                   }}
                 />
