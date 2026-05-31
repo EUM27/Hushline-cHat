@@ -43,6 +43,7 @@ export interface SessionActionsState {
 export function useSessionActions(
   connections: Record<string, ModelConnection>,
   defaultInputMode: InputMode = "chat",
+  connectionAuth: { chatGptOAuthConnected?: boolean } = {},
 ): SessionActionsState {
   const [session, setSession] = useState<ClientSessionState | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -89,7 +90,7 @@ export function useSessionActions(
         scenarioId,
         personaName || undefined,
         advisorDrafts,
-        activeConnections(connections),
+        activeConnections(connections, connectionAuth),
       );
       setSession(nextSession);
       setLastBoundaryReport(null);
@@ -119,7 +120,7 @@ export function useSessionActions(
     setRevealedMessageCount(nextVisibleCount);
 
     try {
-      const payload = await advanceV2(baseSession.id, content, mode, activeConnections(connections));
+      const payload = await advanceV2(baseSession.id, content, mode, activeConnections(connections, connectionAuth));
       setSession(payload.session);
       setLastBoundaryReport(payload.turn.boundaryReport);
       setLastStateLaw(payload.turn.stateLaw);
@@ -141,7 +142,7 @@ export function useSessionActions(
     setIsSending(true);
     setError(null);
     try {
-      const payload = await rerollV2(session.id, activeConnections(connections), defaultInputMode);
+      const payload = await rerollV2(session.id, activeConnections(connections, connectionAuth), defaultInputMode);
       setSession(payload.session);
       setLastBoundaryReport(payload.turn.boundaryReport);
       setLastStateLaw(payload.turn.stateLaw);
@@ -180,7 +181,7 @@ export function useSessionActions(
         session.scenario.id,
         session.persona.name || undefined,
         restartAdvisors.length > 0 ? restartAdvisors : undefined,
-        activeConnections(connections),
+        activeConnections(connections, connectionAuth),
       );
       setSession(nextSession);
       setLastBoundaryReport(null);

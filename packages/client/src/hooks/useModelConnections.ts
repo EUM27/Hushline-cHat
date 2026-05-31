@@ -13,6 +13,8 @@ export interface ModelConnectionsState {
   modelOptions: Record<string, ModelOption[]>;
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
   connectionTestState: Record<string, ConnectionTestState>;
+  oauthAccount: OpenAiOAuthAccount | null;
+  oauthChecked: boolean;
   oauthStatus: string | null;
   saveStatus: string;
   setConnections: Dispatch<SetStateAction<Record<string, ModelConnection>>>;
@@ -38,6 +40,8 @@ export function useModelConnections(): ModelConnectionsState {
     Record<string, { loading: boolean; error: string | null }>
   >({});
   const [connectionTestState, setConnectionTestState] = useState<Record<string, ConnectionTestState>>({});
+  const [oauthAccount, setOauthAccount] = useState<OpenAiOAuthAccount | null>(null);
+  const [oauthChecked, setOauthChecked] = useState(false);
   const [oauthStatus, setOauthStatus] = useState<string | null>(null);
   const [manualSaveAt, setManualSaveAt] = useState<string | null>(null);
   const [connectionSaveError, setConnectionSaveError] = useState<string | null>(null);
@@ -52,10 +56,30 @@ export function useModelConnections(): ModelConnectionsState {
     });
   }, [connections]);
 
+  useEffect(() => {
+    void refreshChatGptAccount({ silent: true });
+  }, []);
+
   const setConnections: Dispatch<SetStateAction<Record<string, ModelConnection>>> = (nextConnections) => {
     setManualSaveAt(null);
     setConnectionsState(nextConnections);
   };
+
+  async function refreshChatGptAccount(options: { silent?: boolean } = {}) {
+    try {
+      const account = await fetchChatGptAccount();
+      setOauthAccount(account);
+      setOauthChecked(true);
+      return account;
+    } catch (reason: unknown) {
+      setOauthAccount(null);
+      setOauthChecked(true);
+      if (!options.silent) {
+        throw reason;
+      }
+      return null;
+    }
+  }
 
   async function loadModels(providerId: ModelProviderId, apiKey?: string) {
     setModelLoadState((current) => ({
@@ -141,27 +165,41 @@ export function useModelConnections(): ModelConnectionsState {
     try {
       const response = await fetch("/api/openai-oauth/login/start", { method: "POST" });
       const payload = await parseOpenAiOAuthJson<OpenAiOAuthLoginResult>(response);
+      if (payload.account) {
+        setOauthAccount(payload.account);
+        setOauthChecked(true);
+      }
+      if (payload.account?.connected) {
+        setOauthStatus(formatChatGptAccountStatus(payload.account));
+        return;
+      }
       if (!payload.authorizeUrl) {
         setOauthStatus("ChatGPT 로그인 URL을 받지 못했습니다.");
+        return;
+      }
+      if (!canUseOpenAiOAuthRedirectInCurrentBrowser(payload.authorizeUrl, window.location.hostname)) {
+        setOauthStatus(
+          "ChatGPT 로그인 콜백은 PC 로컬 브라우저에서만 받을 수 있습니다. 모바일/Tailscale에서는 PC에서 로그인한 뒤 연결 확인을 누르세요.",
+        );
         return;
       }
       window.open(payload.authorizeUrl, "_blank", "noopener,noreferrer");
       setOauthStatus("브라우저에서 ChatGPT 로그인 진행");
     } catch (reason: unknown) {
+      setOauthAccount(null);
+      setOauthChecked(true);
       setOauthStatus(reason instanceof Error ? reason.message : "ChatGPT 연결을 시작하지 못했습니다.");
     }
   }
 
   async function checkChatGptAccount() {
     try {
-      const response = await fetch("/api/openai-oauth/account", { method: "GET" });
-      const payload = await parseOpenAiOAuthJson<{ ok: boolean; account: OpenAiOAuthAccount }>(response);
-      if (!payload.account?.connected) {
+      const account = await refreshChatGptAccount();
+      if (!account?.connected) {
         setOauthStatus("ChatGPT 로그인이 필요합니다.");
         return;
       }
-      const plan = payload.account.planType ? ` · ${payload.account.planType}` : "";
-      setOauthStatus(`${payload.account.email ?? "ChatGPT"} 연결됨${plan}`);
+      setOauthStatus(formatChatGptAccountStatus(account));
     } catch (reason: unknown) {
       setOauthStatus(reason instanceof Error ? reason.message : "ChatGPT 연결을 확인하지 못했습니다.");
     }
@@ -172,6 +210,8 @@ export function useModelConnections(): ModelConnectionsState {
     modelOptions,
     modelLoadState,
     connectionTestState,
+    oauthAccount,
+    oauthChecked,
     oauthStatus,
     saveStatus: connectionSaveError ?? (manualSaveAt ? `저장됨 ${manualSaveAt}` : "브라우저에 자동 저장됨"),
     setConnections,
@@ -181,6 +221,53 @@ export function useModelConnections(): ModelConnectionsState {
     checkChatGptAccount,
     saveConnections,
   };
+}
+
+async function fetchChatGptAccount(): Promise<OpenAiOAuthAccount | null> {
+  const response = await fetch("/api/openai-oauth/account", { method: "GET" });
+  const payload = await parseOpenAiOAuthJson<{ ok: boolean; account: OpenAiOAuthAccount }>(response);
+  return payload.account ?? null;
+}
+
+function formatChatGptAccountStatus(account: OpenAiOAuthAccount): string {
+  const plan = account.planType ? ` · ${account.planType}` : "";
+  return `${account.email ?? "ChatGPT"} 연결됨${plan}`;
+}
+
+export function canUseOpenAiOAuthRedirectInCurrentBrowser(
+  authorizeUrl: string,
+  browserHostname: string,
+): boolean {
+  const redirectUri = getAuthorizeRedirectUri(authorizeUrl);
+  if (!redirectUri) {
+    return true;
+  }
+  const redirectHost = getUrlHostname(redirectUri);
+  if (!redirectHost) {
+    return true;
+  }
+  return !isLoopbackHost(redirectHost) || isLoopbackHost(browserHostname);
+}
+
+function getAuthorizeRedirectUri(authorizeUrl: string): string | null {
+  try {
+    return new URL(authorizeUrl).searchParams.get("redirect_uri");
+  } catch {
+    return null;
+  }
+}
+
+function getUrlHostname(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 async function parseOpenAiOAuthJson<T extends { ok?: boolean; error?: string }>(response: Response): Promise<T> {

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@hushline/shared";
 import {
+  activeConnections,
+  getConnectionStatus,
   getStageCharacterId,
   getStageSpeakerLabel,
   isPhoneChannelMessage,
@@ -194,5 +196,42 @@ describe("message markdown formatting", () => {
       { kind: "italic", text: "낮게" },
       { kind: "text", text: " 깔렸다." },
     ]);
+  });
+});
+
+describe("model connection readiness", () => {
+  const profiles = [
+    {
+      id: "chatgpt" as const,
+      label: "ChatGPT",
+      baseUrl: "https://chatgpt.com/backend-api/codex",
+      endpointPath: "/chat/completions",
+      docsUrl: "https://help.openai.com/",
+    },
+  ];
+
+  test("does not mark ChatGPT as API-ready before OAuth is confirmed", () => {
+    const status = getConnectionStatus(
+      { providerId: "chatgpt", apiKey: "", model: "gpt-5.4" },
+      profiles,
+      "",
+      { chatGptOAuthChecked: true, chatGptOAuthConnected: false },
+    );
+
+    expect(status.label).toBe("로그인 필요");
+  });
+
+  test("does not send ChatGPT connections to the engine before OAuth is confirmed", () => {
+    expect(activeConnections({
+      default: { providerId: "chatgpt", apiKey: "", model: "gpt-5.4" },
+    }, { chatGptOAuthConnected: false })).toEqual({});
+  });
+
+  test("allows ChatGPT connections after OAuth is confirmed", () => {
+    expect(activeConnections({
+      default: { providerId: "chatgpt", apiKey: "", model: "gpt-5.4" },
+    }, { chatGptOAuthConnected: true })).toEqual({
+      default: { providerId: "chatgpt", apiKey: "", model: "gpt-5.4" },
+    });
   });
 });

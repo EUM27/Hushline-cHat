@@ -51,11 +51,23 @@ describe("getConnectionTestBlockedReason", () => {
     })).toBe("모델을 먼저 선택하거나 직접 입력해야 테스트할 수 있습니다.");
   });
 
-  test("allows OAuth-backed providers without a pasted API key", () => {
+  test("requires a checked ChatGPT OAuth account before testing", () => {
     expect(getConnectionTestBlockedReason({
       model: "gpt-4o",
       usesChatGptOAuth: true,
       effectiveApiKey: "",
+      chatGptOAuthChecked: true,
+      chatGptOAuthConnected: false,
+    })).toBe("ChatGPT 로그인을 먼저 완료해야 테스트할 수 있습니다.");
+  });
+
+  test("allows OAuth-backed providers only after account confirmation", () => {
+    expect(getConnectionTestBlockedReason({
+      model: "gpt-4o",
+      usesChatGptOAuth: true,
+      effectiveApiKey: "",
+      chatGptOAuthChecked: true,
+      chatGptOAuthConnected: true,
     })).toBeNull();
   });
 });
@@ -88,6 +100,8 @@ function renderConnectionPanel({
       },
       modelOptions: {},
       modelLoadState: {},
+      oauthAccount: null,
+      oauthChecked: true,
       oauthStatus: null,
       saveStatus: "브라우저에 자동 저장됨",
       onChange: () => undefined,

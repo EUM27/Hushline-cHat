@@ -35,6 +35,7 @@ export function getConnectionStatus(
   connection: ModelConnection | undefined,
   profiles: ProviderProfile[],
   inheritedApiKey = "",
+  authState: { chatGptOAuthChecked?: boolean; chatGptOAuthConnected?: boolean } = {},
 ): ConnectionStatus {
   if (!connection) {
     return {
@@ -53,6 +54,20 @@ export function getConnectionStatus(
         tone: "warning",
         label: "모델 선택 필요",
         detail: "ChatGPT 연결 후 모델을 불러와 선택하세요.",
+      };
+    }
+    if (!authState.chatGptOAuthChecked) {
+      return {
+        tone: "warning",
+        label: "로그인 확인 중",
+        detail: "ChatGPT 로그인 상태를 확인한 뒤 API 적용 여부가 결정됩니다.",
+      };
+    }
+    if (!authState.chatGptOAuthConnected) {
+      return {
+        tone: "warning",
+        label: "로그인 필요",
+        detail: "ChatGPT 로그인을 먼저 완료해야 이 모델이 대화에 적용됩니다.",
       };
     }
     return {
@@ -179,6 +194,7 @@ export function persistConnections(
 
 export function activeConnections(
   connections: Record<string, ModelConnection>,
+  authState: { chatGptOAuthConnected?: boolean } = {},
 ): Record<string, ModelConnection> {
   const active = Object.fromEntries(
     Object.entries(connections)
@@ -197,7 +213,11 @@ export function activeConnections(
         ([, connection]) =>
           connection.providerId
           && connection.model.trim()
-          && (connection.providerId === "chatgpt" || connection.apiKey.trim()),
+          && (
+            connection.providerId === "chatgpt"
+              ? authState.chatGptOAuthConnected === true
+              : connection.apiKey.trim()
+          ),
       ),
   );
   const primaryConnection = active.default ?? Object.values(active)[0];

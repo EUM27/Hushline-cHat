@@ -22,6 +22,8 @@ export function ConnectionPanel({
   modelOptions,
   modelLoadState,
   connectionTestState,
+  oauthAccount,
+  oauthChecked,
   oauthStatus,
   saveStatus,
   onChange,
@@ -36,6 +38,8 @@ export function ConnectionPanel({
   connections: Record<string, ModelConnection>;
   modelOptions: Record<string, ModelOption[]>;
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
+  oauthAccount: { connected?: boolean; email?: string; planType?: string } | null;
+  oauthChecked: boolean;
   oauthStatus: string | null;
   saveStatus: string;
   connectionTestState?: Record<string, ConnectionTestDisplayState>;
@@ -73,12 +77,17 @@ export function ConnectionPanel({
   const usesChatGptOAuth = currentConnection.providerId === "chatgpt";
   const inheritedApiKey = getSharedProviderApiKey(connections, currentConnection.providerId, slotKey);
   const effectiveApiKey = currentConnection.apiKey.trim() || inheritedApiKey;
-  const slotStatus = getConnectionStatus(connections[slotKey], profiles, inheritedApiKey);
+  const slotStatus = getConnectionStatus(connections[slotKey], profiles, inheritedApiKey, {
+    chatGptOAuthChecked: oauthChecked,
+    chatGptOAuthConnected: oauthAccount?.connected === true,
+  });
   const testState = connectionTestState?.[slotKey] ?? null;
   const connectionTestBlockedReason = getConnectionTestBlockedReason({
     model: currentConnection.model,
     usesChatGptOAuth,
     effectiveApiKey,
+    chatGptOAuthChecked: oauthChecked,
+    chatGptOAuthConnected: oauthAccount?.connected === true,
   });
   const canTestConnection = !connectionTestBlockedReason;
   const visibleTestState =
@@ -289,16 +298,26 @@ export function getConnectionTestBlockedReason({
   model,
   usesChatGptOAuth,
   effectiveApiKey,
+  chatGptOAuthChecked = false,
+  chatGptOAuthConnected = false,
 }: {
   model: string;
   usesChatGptOAuth: boolean;
   effectiveApiKey: string;
+  chatGptOAuthChecked?: boolean;
+  chatGptOAuthConnected?: boolean;
 }): string | null {
   if (!model.trim()) {
     return "모델을 먼저 선택하거나 직접 입력해야 테스트할 수 있습니다.";
   }
   if (!usesChatGptOAuth && !effectiveApiKey.trim()) {
     return "API key를 먼저 입력해야 테스트할 수 있습니다.";
+  }
+  if (usesChatGptOAuth && !chatGptOAuthChecked) {
+    return "ChatGPT 로그인 상태를 확인하는 중입니다.";
+  }
+  if (usesChatGptOAuth && !chatGptOAuthConnected) {
+    return "ChatGPT 로그인을 먼저 완료해야 테스트할 수 있습니다.";
   }
   return null;
 }

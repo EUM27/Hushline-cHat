@@ -52,6 +52,8 @@ export function App() {
     modelOptions,
     modelLoadState,
     connectionTestState,
+    oauthAccount,
+    oauthChecked,
     oauthStatus,
     saveStatus,
     setConnections,
@@ -79,7 +81,9 @@ export function App() {
     restart,
     newGame,
     advanceDialogue,
-  } = useSessionActions(connections, defaultInputMode);
+  } = useSessionActions(connections, defaultInputMode, {
+    chatGptOAuthConnected: oauthAccount?.connected === true,
+  });
   const {
     setupStep,
     scenarioList,
@@ -130,7 +134,10 @@ export function App() {
   const activeCharacter = session?.characters.find(
     (character) => character.id === session.scene.activeSpeakerId,
   );
-  const defaultConnectionStatus = getConnectionStatus(connections.default, providerProfiles);
+  const defaultConnectionStatus = getConnectionStatus(connections.default, providerProfiles, "", {
+    chatGptOAuthChecked: oauthChecked,
+    chatGptOAuthConnected: oauthAccount?.connected === true,
+  });
   const latestSpeakerLabel = [...visibleMessages]
     .reverse()
     .find((message) => message.role === "character" && message.speakerLabel)?.speakerLabel;
@@ -234,6 +241,8 @@ export function App() {
       modelOptions={modelOptions}
       modelLoadState={modelLoadState}
       connectionTestState={connectionTestState}
+      oauthAccount={oauthAccount}
+      oauthChecked={oauthChecked}
       oauthStatus={oauthStatus}
       saveStatus={saveStatus}
       onChange={setConnections}
