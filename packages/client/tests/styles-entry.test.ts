@@ -4,7 +4,9 @@ import { describe, expect, test } from "bun:test";
 
 describe("styles entrypoint", () => {
   test("loads surface styles in the documented order", () => {
-    const css = readFileSync(join(import.meta.dir, "../src/styles.css"), "utf8").trim();
+    const css = readFileSync(join(import.meta.dir, "../src/styles.css"), "utf8")
+      .replace(/\r\n/g, "\n")
+      .trim();
     expect(css).toBe([
       '@import "./styles/base.css";',
       '@import "./styles/app-shell.css";',
