@@ -9,6 +9,12 @@ import type { ConnectionSlot } from "../types/ui";
 import { ModelSearchPicker } from "./ModelSearchPicker";
 import { getConnectionStatus, getSharedProviderApiKey } from "../utils/ui-helpers";
 
+type ConnectionTestDisplayState = {
+  loading: boolean;
+  tone: "success" | "error";
+  message: string;
+};
+
 export function ConnectionPanel({
   profiles,
   slots,
@@ -32,15 +38,16 @@ export function ConnectionPanel({
   modelLoadState: Record<string, { loading: boolean; error: string | null }>;
   oauthStatus: string | null;
   saveStatus: string;
-  connectionTestState?: Record<string, { loading: boolean; tone: "success" | "error"; message: string }>;
+  connectionTestState?: Record<string, ConnectionTestDisplayState>;
   onChange: (connections: Record<string, ModelConnection>) => void;
   onLoadModels: (providerId: ModelProviderId, apiKey?: string) => void;
-  onTestConnection?: (slotKey: string, connection: ModelConnection) => void;
+  onTestConnection: (slotKey: string, connection: ModelConnection) => void;
   onOpenChatGptLogin: () => void;
   onCheckChatGptAccount: () => void;
   onSave: () => void;
 }) {
   const [activeSlotKey, setActiveSlotKey] = useState("default");
+  const [localTestState, setLocalTestState] = useState<ConnectionTestDisplayState | null>(null);
   const fallbackProviderId = profiles[0]?.id ?? ("nanogpt" as ModelProviderId);
   const slotKey = resolveConnectionSlotKey(slots, activeSlotKey);
   const slot = slots.find((candidate) => candidate.key === slotKey);
@@ -68,13 +75,37 @@ export function ConnectionPanel({
   const effectiveApiKey = currentConnection.apiKey.trim() || inheritedApiKey;
   const slotStatus = getConnectionStatus(connections[slotKey], profiles, inheritedApiKey);
   const testState = connectionTestState?.[slotKey] ?? null;
-  const canTestConnection = Boolean(
-    currentConnection.model.trim() && (usesChatGptOAuth || effectiveApiKey),
-  );
+  const connectionTestBlockedReason = getConnectionTestBlockedReason({
+    model: currentConnection.model,
+    usesChatGptOAuth,
+    effectiveApiKey,
+  });
+  const canTestConnection = !connectionTestBlockedReason;
+  const visibleTestState =
+    testState?.loading
+      ? testState
+      : localTestState ??
+        (connectionTestBlockedReason
+          ? {
+              loading: false,
+              tone: "error" as const,
+              message: connectionTestBlockedReason,
+            }
+          : testState);
 
   useEffect(() => {
     setActiveSlotKey((current) => resolveConnectionSlotKey(slots, current));
   }, [slots]);
+
+  useEffect(() => {
+    setLocalTestState(null);
+  }, [
+    slotKey,
+    currentConnection.providerId,
+    currentConnection.model,
+    currentConnection.apiKey,
+    effectiveApiKey,
+  ]);
 
   function updateSlotConnection(next: Partial<ModelConnection>) {
     const providerId = next.providerId ?? currentConnection.providerId;
@@ -87,6 +118,25 @@ export function ConnectionPanel({
         providerId,
         model: nextModel,
       },
+    });
+  }
+
+  function handleTestConnection() {
+    if (testState?.loading) {
+      return;
+    }
+    if (connectionTestBlockedReason) {
+      setLocalTestState({
+        loading: false,
+        tone: "error",
+        message: connectionTestBlockedReason,
+      });
+      return;
+    }
+    setLocalTestState(null);
+    onTestConnection(slotKey, {
+      ...currentConnection,
+      apiKey: effectiveApiKey,
     });
   }
 
@@ -184,13 +234,10 @@ export function ConnectionPanel({
         ) : null}
         <button
           type="button"
-          disabled={!canTestConnection || testState?.loading}
-          onClick={() =>
-            onTestConnection?.(slotKey, {
-              ...currentConnection,
-              apiKey: effectiveApiKey,
-            })
-          }
+          aria-disabled={!canTestConnection ? true : undefined}
+          disabled={testState?.loading}
+          title={connectionTestBlockedReason ?? undefined}
+          onClick={handleTestConnection}
         >
           {testState?.loading ? "테스트 중" : "연결 테스트"}
         </button>
@@ -199,8 +246,10 @@ export function ConnectionPanel({
         </button>
         <span>{saveStatus}</span>
       </div>
-      {testState ? (
-        <p className={`connection-test-result ${testState.tone}`}>{testState.message}</p>
+      {visibleTestState ? (
+        <p className={`connection-test-result ${visibleTestState.tone}`}>
+          {visibleTestState.message}
+        </p>
       ) : null}
       <div className={`connection-status ${slotStatus.tone}`}>
         <strong>{slotStatus.label}</strong>
@@ -234,4 +283,22 @@ function ensureSelectedModel(models: ModelOption[], selectedModelId: string): Mo
     label: selectedModelId,
   };
   return [customOption, ...models];
+}
+
+export function getConnectionTestBlockedReason({
+  model,
+  usesChatGptOAuth,
+  effectiveApiKey,
+}: {
+  model: string;
+  usesChatGptOAuth: boolean;
+  effectiveApiKey: string;
+}): string | null {
+  if (!model.trim()) {
+    return "모델을 먼저 선택하거나 직접 입력해야 테스트할 수 있습니다.";
+  }
+  if (!usesChatGptOAuth && !effectiveApiKey.trim()) {
+    return "API key를 먼저 입력해야 테스트할 수 있습니다.";
+  }
+  return null;
 }
