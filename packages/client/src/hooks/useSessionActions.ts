@@ -4,6 +4,7 @@ import type {
   BoundaryReport,
   CaseRuntimeTrace,
   ClientSessionState,
+  DirectorOutput,
   InputMode,
   ModelConnection,
   StateLawSnapshot,
@@ -28,6 +29,7 @@ export interface SessionActionsState {
   lastBoundaryReport: BoundaryReport | null;
   lastStateLaw: StateLawSnapshot | null;
   lastCaseRuntime: CaseRuntimeTrace | null;
+  lastDirectorOutput: DirectorOutput | null;
   setError: (message: string | null) => void;
   restoreSession: (nextSession: ClientSessionState) => void;
   startSession: (
@@ -56,6 +58,7 @@ export function useSessionActions(
   const [lastBoundaryReport, setLastBoundaryReport] = useState<BoundaryReport | null>(null);
   const [lastStateLaw, setLastStateLaw] = useState<StateLawSnapshot | null>(null);
   const [lastCaseRuntime, setLastCaseRuntime] = useState<CaseRuntimeTrace | null>(null);
+  const [lastDirectorOutput, setLastDirectorOutput] = useState<DirectorOutput | null>(null);
 
   useEffect(() => {
     if (session) {
@@ -77,6 +80,7 @@ export function useSessionActions(
     setLastBoundaryReport(null);
     setLastStateLaw(null);
     setLastCaseRuntime(null);
+    setLastDirectorOutput(null);
     setRevealedMessageCount(nextSession.messages.length);
   }
 
@@ -99,6 +103,7 @@ export function useSessionActions(
       setLastBoundaryReport(null);
       setLastStateLaw(null);
       setLastCaseRuntime(null);
+      setLastDirectorOutput(null);
       setRevealedMessageCount(0);
       return true;
     } catch (reason: unknown) {
@@ -128,6 +133,7 @@ export function useSessionActions(
       setLastBoundaryReport(payload.turn.boundaryReport);
       setLastStateLaw(payload.turn.stateLaw);
       setLastCaseRuntime(payload.turn.caseRuntime ?? null);
+      setLastDirectorOutput(payload.turn.directorOutput);
       setRevealedMessageCount(Math.min(nextVisibleCount, payload.session.messages.length));
       return true;
     } catch (reason: unknown) {
@@ -151,6 +157,7 @@ export function useSessionActions(
       setLastBoundaryReport(payload.turn.boundaryReport);
       setLastStateLaw(payload.turn.stateLaw);
       setLastCaseRuntime(payload.turn.caseRuntime ?? null);
+      setLastDirectorOutput(payload.turn.directorOutput);
       setRevealedMessageCount(payload.session.messages.length);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "리롤 실패");
@@ -166,7 +173,10 @@ export function useSessionActions(
     try {
       const nextSession = await undoV2(session.id);
       setSession(nextSession);
+      setLastBoundaryReport(null);
+      setLastStateLaw(null);
       setLastCaseRuntime(null);
+      setLastDirectorOutput(null);
       setRevealedMessageCount(nextSession.messages.length);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "삭제 실패");
@@ -191,6 +201,7 @@ export function useSessionActions(
       setLastBoundaryReport(null);
       setLastStateLaw(null);
       setLastCaseRuntime(null);
+      setLastDirectorOutput(null);
       setRevealedMessageCount(0);
       localStorage.setItem(sessionStorageKey, nextSession.id);
     } catch (reason: unknown) {
@@ -207,6 +218,7 @@ export function useSessionActions(
     setLastBoundaryReport(null);
     setLastStateLaw(null);
     setLastCaseRuntime(null);
+    setLastDirectorOutput(null);
     localStorage.removeItem(sessionStorageKey);
   }
 
@@ -224,6 +236,7 @@ export function useSessionActions(
     lastBoundaryReport,
     lastStateLaw,
     lastCaseRuntime,
+    lastDirectorOutput,
     setError,
     restoreSession,
     startSession,

@@ -45,8 +45,12 @@
   gap: var(--space-1) var(--space-3);
   font: var(--font-body-sm);
 }
+.dev-grid > * { min-width: 0; }
 .dev-grid span { color: var(--vn-stage-muted); }
-.dev-grid strong { color: var(--vn-stage-text); }
+.dev-grid strong {
+  color: var(--vn-stage-text);
+  overflow-wrap: anywhere;
+}
 
 .dev-objective {
   margin: 0;

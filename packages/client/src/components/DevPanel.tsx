@@ -1,4 +1,10 @@
-import type { BoundaryReport, CaseRuntimeTrace, ClientSessionState, StateLawSnapshot } from "@hushline/shared";
+import type {
+  BoundaryReport,
+  CaseRuntimeTrace,
+  ClientSessionState,
+  DirectorOutput,
+  StateLawSnapshot,
+} from "@hushline/shared";
 import type { VisualThemePreset } from "../types/ui";
 import { createVisualThemeStyle, summarizeCaseRuntimeForDevPanel, summarizeStateLawForDevPanel } from "../utils/ui-helpers";
 
@@ -9,6 +15,7 @@ export function DevPanel({
   boundaryReport,
   stateLaw,
   caseRuntime,
+  directorOutput,
 }: {
   session: ClientSessionState;
   open: boolean;
@@ -16,6 +23,7 @@ export function DevPanel({
   boundaryReport?: BoundaryReport | null;
   stateLaw?: StateLawSnapshot | null;
   caseRuntime?: CaseRuntimeTrace | null;
+  directorOutput?: DirectorOutput | null;
 }) {
   const { worldState, handouts } = session;
   const scene = session.scene;
@@ -56,6 +64,38 @@ export function DevPanel({
               {summarizeCaseRuntimeForDevPanel(caseRuntime).map((row) => (
                 <p key={row} className="dev-event">{row}</p>
               ))}
+            </section>
+          ) : null}
+
+          {caseRuntime || directorOutput || boundaryReport ? (
+            <section className="dev-section">
+              <h4>Turn Trace</h4>
+              <div className="dev-grid">
+                <span>Inquiry</span>
+                <strong>{caseRuntime?.inquiry.inquiryType ?? directorOutput?.devTrace?.inquiryType ?? "none"}</strong>
+                <span>Risk</span>
+                <strong>{caseRuntime?.inquiry.truthLeakRisk ?? "?"}</strong>
+                <span>Topics</span>
+                <strong>{formatList(caseRuntime?.inquiry.topicTags)}</strong>
+                <span>Scope</span>
+                <strong>
+                  {caseRuntime
+                    ? `${caseRuntime.answerScope.answerability} · facts ${caseRuntime.answerScope.publicFactIds.length + caseRuntime.answerScope.observableFactIds.length}`
+                    : "none"}
+                </strong>
+                <span>Allowed</span>
+                <strong>{formatList(caseRuntime?.devTrace?.allowedFacts)}</strong>
+                <span>Blocked</span>
+                <strong>{formatList(caseRuntime?.devTrace?.blockedFacts ?? directorOutput?.devTrace?.blockedTruthIds)}</strong>
+                <span>Director</span>
+                <strong>{formatList(directorOutput?.speakers)}</strong>
+                <span>Reason</span>
+                <strong>{directorOutput?.devTrace?.selectedSpeakerReason ?? "none"}</strong>
+                <span>Gate</span>
+                <strong>{formatGate(caseRuntime, boundaryReport)}</strong>
+                <span>State Delta</span>
+                <strong>{formatStateDelta(directorOutput?.stateDelta)}</strong>
+              </div>
             </section>
           ) : null}
 
@@ -147,4 +187,30 @@ export function DevPanel({
       )}
     </aside>
   );
+}
+
+function formatList(values: string[] | undefined): string {
+  return values?.length ? values.join(", ") : "none";
+}
+
+function formatGate(
+  caseRuntime: CaseRuntimeTrace | null | undefined,
+  boundaryReport: BoundaryReport | null | undefined,
+): string {
+  const characterGate = caseRuntime?.devTrace?.characterGate
+    ? `character ${JSON.stringify(caseRuntime.devTrace.characterGate)}`
+    : "character none";
+  const narratorGate = caseRuntime?.devTrace?.narratorGate
+    ? `narrator ${JSON.stringify(caseRuntime.devTrace.narratorGate)}`
+    : "narrator none";
+  const boundary = boundaryReport?.violations.length ? `boundary ${boundaryReport.violations.length}` : "boundary clean";
+  return `${characterGate} · ${narratorGate} · ${boundary}`;
+}
+
+function formatStateDelta(delta: DirectorOutput["stateDelta"] | undefined): string {
+  if (!delta) return "none";
+  const entries = Object.entries(delta)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => `${key}:${String(value)}`);
+  return entries.length ? entries.join(", ") : "none";
 }

@@ -72,6 +72,7 @@ export function App() {
     lastBoundaryReport,
     lastStateLaw,
     lastCaseRuntime,
+    lastDirectorOutput,
     setError,
     restoreSession,
     startSession,
@@ -364,6 +365,7 @@ export function App() {
                         boundaryReport={lastBoundaryReport}
                         stateLaw={lastStateLaw}
                         caseRuntime={lastCaseRuntime}
+                        directorOutput={lastDirectorOutput}
                       />
                     ) : null}
                   </>
