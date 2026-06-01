@@ -63,6 +63,7 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     }
 
     const personaName = persona?.name ?? "{{유저}}";
+    const personaShortName = persona?.shortName ?? personaName;
     const openingMessages: TurnMessage[] = pack.scenarioCard.openingBeats.map((beat) => ({
       id: crypto.randomUUID(),
       sessionId,
@@ -70,6 +71,7 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       content: beat.content,
       speakerKind: beat.speakerKind,
       speakerLabel: resolveUserLabel(beat.speakerLabel, personaName),
+      ...(beat.characterId ? { characterId: beat.characterId } : {}),
       isOpeningBeat: true,
       createdAt: new Date().toISOString(),
     }));
@@ -81,7 +83,11 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       persona: {
         id: "user",
         name: personaName,
-        shortName: personaName,
+        shortName: personaShortName,
+        ...(persona?.role ? { role: persona.role } : {}),
+        ...(persona?.description ? { description: persona.description } : {}),
+        ...(persona?.appearance ? { appearance: persona.appearance } : {}),
+        ...(persona?.relationshipTags?.length ? { relationshipTags: persona.relationshipTags } : {}),
       },
       worldState,
       characters: pack.characters,

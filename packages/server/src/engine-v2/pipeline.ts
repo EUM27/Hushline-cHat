@@ -16,7 +16,15 @@ import type {
 } from "@hushline/shared";
 
 import { classifyInput } from "./input-classifier.js";
-import { buildPublicContext, buildPrivateHandout, buildOmniscientContext } from "./context-builder.js";
+import {
+  buildCharacterPersonaBrief,
+  buildDirectorPersonaBrief,
+  buildNarratorPersonaBrief,
+  buildOmniscientContext,
+  buildPersonaGuardContext,
+  buildPrivateHandout,
+  buildPublicContext,
+} from "./context-builder.js";
 import { invokeDirector } from "./director.js";
 import { invokeNarrator } from "./narrator.js";
 import { invokeCharacter } from "./character.js";
@@ -100,7 +108,11 @@ export async function runTurnV2(
     session.persona.name,
     userNameIntroduced,
   );
-  const omniscientContext = buildOmniscientContext(session.worldState, session.characters, pack);
+  const directorPersonaBrief = buildDirectorPersonaBrief(session.persona);
+  const characterPersonaBrief = buildCharacterPersonaBrief(session.persona, userNameIntroduced);
+  const narratorPersonaBrief = buildNarratorPersonaBrief(session.persona, userNameIntroduced);
+  const personaGuardContext = buildPersonaGuardContext(session.persona);
+  const omniscientContext = buildOmniscientContext(session.worldState, session.characters, pack, directorPersonaBrief);
   const caseInquiry = routeCaseInquiry(userContent, pack);
   const caseFacts = getAllCaseFacts(pack.caseKnowledge);
   const hiddenTruthIds = getHiddenTruthIds(pack.caseKnowledge);
@@ -212,6 +224,7 @@ export async function runTurnV2(
     userContent,
     pack,
     narratorConnection,
+    narratorPersonaBrief,
   );
   const narratorBoundary = enforceNarratorBoundary(narratorResult.content);
   const narratorGate = narratorBoundary.content
@@ -246,7 +259,8 @@ export async function runTurnV2(
       draft: characterBoundary.content || result.content,
       npcId: result.characterId,
       userInput: userContent,
-      userPersonaName: session.persona.name,
+      userPersonaName: personaGuardContext.names[0] ?? session.persona.name,
+      userPersonaNames: personaGuardContext.names,
       userNameIntroduced,
       allowedFactIds: [
         ...caseAnswerScope.publicFactIds,
@@ -314,6 +328,7 @@ export async function runTurnV2(
           pack,
           charConnection,
           caseAnswerScope,
+          characterPersonaBrief,
         ).then((result) => ({ result, connection: charConnection }));
       }),
     );
@@ -352,6 +367,7 @@ export async function runTurnV2(
         pack,
         charConnection,
         caseAnswerScope,
+        characterPersonaBrief,
       );
       processCharacterResult(result, charConnection);
     }

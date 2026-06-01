@@ -32,6 +32,11 @@ export interface ConnectionSlot {
 
 export interface PersonaDraft {
   name: string;
+  shortName: string;
+  role: string;
+  description: string;
+  appearance: string;
+  relationshipTags: string[];
 }
 
 export type SetupStep = "scenario" | "persona" | "advisors";

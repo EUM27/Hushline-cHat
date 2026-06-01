@@ -94,6 +94,15 @@ export interface ProviderConnectionTestResponse {
   error?: string;
 }
 
+export interface SessionPersonaInput {
+  name?: string;
+  shortName?: string;
+  role?: string;
+  description?: string;
+  appearance?: string;
+  relationshipTags?: string[];
+}
+
 // ── Scenario Listing ──
 
 export async function listScenarios(): Promise<string[]> {
@@ -121,17 +130,18 @@ export async function getScenarioDetail(packId: string): Promise<V2ScenarioDetai
 
 export async function createSessionV2(
   scenarioPackId: string,
-  personaName?: string,
+  personaInput?: string | SessionPersonaInput,
   advisors?: AdvisorDraft[],
   connections?: Record<string, ModelConnection>,
 ): Promise<ClientSessionState> {
+  const persona = normalizePersonaInput(personaInput);
   try {
     const response = await fetch("/api/v2/sessions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         scenarioPackId,
-        persona: personaName ? { name: personaName } : undefined,
+        persona,
         advisors,
         connections,
       }),
@@ -140,8 +150,41 @@ export async function createSessionV2(
     const payload = (await response.json()) as V2SessionResponse;
     return payload.session;
   } catch {
-    return createOfflineSession(scenarioPackId, personaName, advisors);
+    return createOfflineSession(scenarioPackId, personaInput, advisors);
   }
+}
+
+function normalizePersonaInput(input?: string | SessionPersonaInput): SessionPersonaInput | undefined {
+  if (typeof input === "string") {
+    const name = input.trim();
+    return name ? { name } : undefined;
+  }
+  if (!input) return undefined;
+
+  const name = cleanText(input.name);
+  const shortName = cleanText(input.shortName);
+  const role = cleanText(input.role);
+  const description = cleanText(input.description);
+  const appearance = cleanText(input.appearance);
+  const relationshipTags = (input.relationshipTags ?? [])
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+
+  const persona: SessionPersonaInput = {};
+  if (name) persona.name = name;
+  if (shortName) persona.shortName = shortName;
+  if (role) persona.role = role;
+  if (description) persona.description = description;
+  if (appearance) persona.appearance = appearance;
+  if (relationshipTags.length) persona.relationshipTags = relationshipTags;
+
+  return Object.keys(persona).length > 0 ? persona : undefined;
+}
+
+function cleanText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 // ── Draft Makers ──

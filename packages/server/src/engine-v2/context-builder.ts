@@ -23,9 +23,14 @@ import type {
   DeductionValidationResult,
   FactId,
   HiddenTruthVault,
+  CharacterPersonaBrief,
+  DirectorPersonaBrief,
+  NarratorPersonaBrief,
+  PersonaGuardContext,
+  SessionStateV2,
 } from "@hushline/shared";
 import { getAgentKnowledge } from "./visibility-graph.js";
-import { maskUnintroducedUserName } from "./user-identity.js";
+import { isPlaceholderPersonaName, maskUnintroducedUserName } from "./user-identity.js";
 
 const PUBLIC_CHAT_LOG_SIZE = 20;
 const CHARACTER_CONTEXT_SIZE = 12;
@@ -137,6 +142,7 @@ export function buildOmniscientContext(
   worldState: WorldState,
   characters: CharacterDefinition[],
   pack: ScenarioPack,
+  persona?: DirectorPersonaBrief,
 ): OmniscientContext {
   const allSecrets: Record<string, string> = {};
   const allDesires: Record<string, string> = {};
@@ -160,7 +166,76 @@ export function buildOmniscientContext(
     eventTriggers: pack.eventTriggers,
     genreGoals: getGenreGoals(pack.manifest.genre),
     recentEvents: worldState.recentEvents.slice(-10),
+    ...(persona ? { persona } : {}),
   };
+}
+
+export function buildDirectorPersonaBrief(persona: SessionStateV2["persona"]): DirectorPersonaBrief {
+  return {
+    name: persona.name,
+    shortName: persona.shortName,
+    ...(persona.role ? { role: persona.role } : {}),
+    ...(persona.description ? { description: persona.description } : {}),
+    ...(persona.appearance ? { appearance: persona.appearance } : {}),
+    ...(persona.relationshipTags?.length ? { relationshipTags: persona.relationshipTags } : {}),
+  };
+}
+
+export function buildCharacterPersonaBrief(
+  persona: SessionStateV2["persona"],
+  userNameIntroduced: boolean,
+): CharacterPersonaBrief {
+  const nameKnown = isPersonaNameKnown(persona, userNameIntroduced);
+  return {
+    displayName: nameKnown ? knownPersonaDisplayName(persona) : "상대 인물",
+    nameKnown,
+    ...(persona.role ? { role: persona.role } : {}),
+    ...(persona.description ? { description: persona.description } : {}),
+    ...(persona.appearance ? { appearance: persona.appearance } : {}),
+    ...(persona.relationshipTags?.length ? { relationshipTags: persona.relationshipTags } : {}),
+  };
+}
+
+export function buildNarratorPersonaBrief(
+  persona: SessionStateV2["persona"],
+  userNameIntroduced: boolean,
+): NarratorPersonaBrief {
+  const nameKnown = isPersonaNameKnown(persona, userNameIntroduced);
+  return {
+    displayName: nameKnown ? knownPersonaDisplayName(persona) : "상대 인물",
+    nameKnown,
+    ...(persona.role ? { role: persona.role } : {}),
+    ...(persona.appearance ? { appearance: persona.appearance } : {}),
+  };
+}
+
+export function buildPersonaGuardContext(persona: SessionStateV2["persona"]): PersonaGuardContext {
+  return {
+    names: uniqueNonPlaceholder([persona.name, persona.shortName]),
+  };
+}
+
+function isPersonaNameKnown(persona: SessionStateV2["persona"], userNameIntroduced: boolean): boolean {
+  return userNameIntroduced && uniqueNonPlaceholder([persona.name, persona.shortName]).length > 0;
+}
+
+function knownPersonaDisplayName(persona: SessionStateV2["persona"]): string {
+  const [displayName] = uniqueNonPlaceholder([persona.shortName, persona.name]);
+  return displayName ?? "상대 인물";
+}
+
+function uniqueNonPlaceholder(values: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const value of values) {
+    const name = value?.trim();
+    if (!name || isPlaceholderPersonaName(name) || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
 }
 
 // ──────────────────────────────────────────────

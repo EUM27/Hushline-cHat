@@ -42,6 +42,39 @@ describe("app shell component modules", () => {
 
     expect(html).toContain('aria-label="모델 설정 열기"');
   });
+
+  test("renders persona maker and relationship tag controls in setup", () => {
+    const html = renderToStaticMarkup(
+      <PersonaSetupPanel
+        personaDraft={{
+          name: "정해윤",
+          shortName: "해윤",
+          role: "공유주택에 막 들어온 새 입주자",
+          description: "경계심이 있지만 사람을 밀어내지는 않는다.",
+          appearance: "비에 젖은 회색 후드와 낡은 운동화를 신고 있다.",
+          relationshipTags: ["new-tenant", "keeps-distance"],
+        }}
+        personaPrompt="비 오는 밤 공유주택에 도착한 새 입주자"
+        relationshipTagText="new-tenant, keeps-distance"
+        hasScenarioAdvisors
+        isStarting={false}
+        isGeneratingPersona={false}
+        error={null}
+        personaGenerationError={null}
+        onDraftChange={() => undefined}
+        onPersonaPromptChange={() => undefined}
+        onRelationshipTagTextChange={() => undefined}
+        onGeneratePersona={() => undefined}
+        onBack={() => undefined}
+        onSubmit={(event) => event.preventDefault()}
+      />,
+    );
+
+    expect(html).toContain("페르소나 생성 프롬프트");
+    expect(html).toContain("초안 생성");
+    expect(html).toContain("관계 태그");
+    expect(html).toContain("new-tenant, keeps-distance");
+  });
 });
 
 function createMobileSession(): ClientSessionState {

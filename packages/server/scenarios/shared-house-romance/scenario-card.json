@@ -60,6 +60,7 @@
       "role": "narrator",
       "speakerKind": "named-actor",
       "speakerLabel": "서유진",
+      "characterId": "seo-yujin",
       "content": "오, 새로 들어온다던 분? 방 끝쪽이에요. 짐 무겁죠, 들어드릴까요?"
     },
     {
@@ -67,6 +68,7 @@
       "role": "narrator",
       "speakerKind": "named-actor",
       "speakerLabel": "한도윤",
+      "characterId": "kang-minjae",
       "content": "...어? 너 설마... 진짜 너야? 야, 세상 좁다더니. 여기 들어온다던 게 너였어?"
     },
     {
@@ -74,6 +76,7 @@
       "role": "narrator",
       "speakerKind": "named-actor",
       "speakerLabel": "강민재",
+      "characterId": "han-doyun",
       "content": "신발은 신발장에. 공용 물건은 쓰고 제자리. ...환영합니다."
     }
   ]

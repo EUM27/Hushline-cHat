@@ -56,6 +56,17 @@
     overflow: visible;
   }
 
+  .scene-open .scenario-shell.vn-split-skin {
+    --vn-mobile-phone-track: 1fr;
+    --vn-mobile-stage-track: 2fr;
+    grid-template-rows:
+      minmax(0, var(--vn-mobile-phone-track))
+      minmax(0, var(--vn-mobile-stage-track));
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .phone-panel,
   .vn-stage-panel {
     grid-column: 1;
@@ -67,11 +78,19 @@
 }
 
 @media (max-width: 560px) {
+  .scene-open .scenario-shell.vn-split-skin {
+    --vn-mobile-phone-track: 0.75fr;
+    --vn-mobile-stage-track: 2fr;
+  }
+
   .vn-system-bar,
-  .vn-system-actions,
+  .vn-system-actions {
+    flex-wrap: wrap;
+  }
+
   .vn-input-bar,
   .vn-reply-shell {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .vn-command-dock {
@@ -80,6 +99,10 @@
 
   .vn-dialogue-main {
     padding: var(--space-5);
+  }
+
+  .vn-menu-row {
+    padding-inline: var(--space-3);
   }
 
   .vn-dialogue-text {

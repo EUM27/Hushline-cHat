@@ -5,22 +5,18 @@ export function isPhoneChannelMessage(message: ChatMessage): boolean {
     return false;
   }
 
-  // 1. User messages: standard chat (plain text) is phone
   if (message.role === "user") {
-    return message.inputMode === "chat" || !message.inputMode;
+    return false;
   }
 
-  // 2. Character messages: advisor-slot is phone
   if (message.role === "character") {
     return message.speakerKind === "advisor-slot";
   }
 
-  // 3. Narrator messages: only explicitly anonymous phone chat belongs in the phone log.
   if (message.role === "narrator") {
     return Boolean(message.speakerLabel && message.speakerLabel.includes("익명"));
   }
 
-  // 4. System messages: only digital notices belong in the phone log.
   if (message.role === "system") {
     const isDigitalNotice =
       message.speakerLabel === "[안내]" ||
@@ -45,7 +41,10 @@ export function getLatestStageMessage(messages: ChatMessage[]): ChatMessage | nu
 }
 
 export function getStageCharacterId(stageMessage: ChatMessage | null): string | undefined {
-  return stageMessage?.role === "character" ? stageMessage.characterId : undefined;
+  if (!stageMessage) return undefined;
+  return stageMessage.role === "character" || stageMessage.speakerKind === "named-actor"
+    ? stageMessage.characterId
+    : undefined;
 }
 
 export function getStageExpression(

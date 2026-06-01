@@ -66,7 +66,9 @@ describe("shared-house-romance pack", () => {
     expect(doyunSlot?.shortName).toBe("민재");
     expect(doyunSlot?.systemPrompt).toContain("너는 강민재다.");
     expect(pack.scenarioCard.openingBeats.find((beat) => beat.id === "minjae-greet")?.speakerLabel).toBe("한도윤");
+    expect(pack.scenarioCard.openingBeats.find((beat) => beat.id === "minjae-greet")?.characterId).toBe("kang-minjae");
     expect(pack.scenarioCard.openingBeats.find((beat) => beat.id === "doyun-greet")?.speakerLabel).toBe("강민재");
+    expect(pack.scenarioCard.openingBeats.find((beat) => beat.id === "doyun-greet")?.characterId).toBe("han-doyun");
   });
 
   test("uses sharehouse-only time-of-day backgrounds without convenience store scenes", () => {

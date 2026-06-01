@@ -70,6 +70,67 @@ describe("Hushline API v2", () => {
     expect(openingText.indexOf("1층 라운지로 내려왔다")).toBeLessThan(openingText.indexOf("전화도 안 됩니다"));
   });
 
+  test("creates romance sessions with first-screen scene metadata and opening speaker ids", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "shared-house-romance",
+        persona: { name: "이서연" },
+      }),
+    });
+
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.session.scenario.uiMode).toBe("scene-first");
+    expect(created.session.scene.hasEnteredScene).toBe(true);
+    expect(created.session.scene.backgroundId).toBe("sharehouse-living-room");
+
+    const messagesByLabel = new Map(
+      created.session.messages.map((message: { speakerLabel?: string; characterId?: string }) => [
+        message.speakerLabel,
+        message.characterId,
+      ]),
+    );
+    expect(messagesByLabel.get("서유진")).toBe("seo-yujin");
+    expect(messagesByLabel.get("한도윤")).toBe("kang-minjae");
+    expect(messagesByLabel.get("강민재")).toBe("han-doyun");
+  });
+
+  test("persists expanded persona fields on session creation", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "school-life-anomaly",
+        persona: {
+          name: "정해윤",
+          shortName: "해윤",
+          role: "전학 온 2학년",
+          description: "낯선 교실 규칙을 의심하는 학생.",
+          appearance: "젖은 교복 소매를 계속 만지작거린다.",
+          relationshipTags: ["transfer-student", "skeptical"],
+        },
+      }),
+    });
+
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.session.persona).toMatchObject({
+      id: "user",
+      name: "정해윤",
+      shortName: "해윤",
+      role: "전학 온 2학년",
+      description: "낯선 교실 규칙을 의심하는 학생.",
+      appearance: "젖은 교복 소매를 계속 만지작거린다.",
+      relationshipTags: ["transfer-student", "skeptical"],
+    });
+  });
+
   test("keeps v1-compatible session shape after create advance reroll and undo", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
 
@@ -791,6 +852,8 @@ describe("Hushline API v2", () => {
     const personaPayload = await personaResponse.json();
     expect(personaPayload.persona.name).toBe("전학생");
     expect(personaPayload.persona.role).toContain("규칙을 의심하지만");
+    expect(personaPayload.persona.description).toContain("사람을 쉽게 못 버리는");
+    expect(personaPayload.persona.appearance).toContain("관찰 가능한");
     expect(personaPayload.source).toBe("fallback");
 
     const advisorResponse = await app.request("/api/v2/advisor-maker/generate", {
@@ -809,5 +872,52 @@ describe("Hushline API v2", () => {
     expect(advisorPayload.advisors[0].role).toContain("소리를 무서워해서");
     expect(advisorPayload.advisors[0].handout.objective).toContain("소리를 무서워해서");
     expect(advisorPayload.source).toBe("fallback");
+  });
+
+  test("keeps generated persona description and appearance populated when provider omits optional fields", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  persona: {
+                    name: "이한결",
+                    shortName: "한결",
+                    role: "공유주택 규칙을 의심하는 전학생.",
+                    relationshipTags: ["user-persona", "scenario-participant"],
+                  },
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const response = await app.request("/api/v2/persona-maker/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        prompt: "규칙을 의심하지만 사람을 쉽게 못 버리는 전학생",
+        connection: {
+          providerId: "openrouter",
+          apiKey: "test-key",
+          model: "test/model",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.source).toBe("api");
+    expect(payload.persona.name).toBe("이한결");
+    expect(payload.persona.role).toBe("공유주택 규칙을 의심하는 전학생.");
+    expect(payload.persona.description).toContain("사람을 쉽게 못 버리는");
+    expect(payload.persona.appearance).toContain("관찰 가능한");
+    expect(payload.persona.relationshipTags).toEqual(["user-persona", "scenario-participant"]);
   });
 });

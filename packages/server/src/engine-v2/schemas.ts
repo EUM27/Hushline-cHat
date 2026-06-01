@@ -27,6 +27,7 @@ export const scenarioOpeningBeatSchema = z.object({
   role: z.enum(["narrator", "system"]),
   speakerKind: z.enum(["scenario-crowd", "room-master", "named-actor"]),
   speakerLabel: z.string().min(1).max(60),
+  characterId: z.string().min(1).max(80).optional(),
   content: z.string().min(1).max(2000),
   delay: z.number().int().min(0).max(10000).optional(),
 });

@@ -4,7 +4,7 @@ import type {
   InputMode,
 } from "@hushline/shared";
 import { resolveCharacterExpressionPose } from "./character-expression";
-import type { ConnectionSlot, VisualThemeId } from "./types/ui";
+import type { ConnectionSlot, PersonaDraft, VisualThemeId } from "./types/ui";
 import {
   visualThemeOrder,
   visualThemePresets,
@@ -13,9 +13,12 @@ import {
   buildConnectionSlots,
   createAdvisorDrafts,
   findBackgroundUrl,
+  getSessionShellMode,
   getConnectionStatus,
   loadEnterToSend,
+  activeConnections,
 } from "./utils/ui-helpers";
+import { generatePersonaDraftV2 } from "./api-v2";
 import { PhoneSubScreen } from "./components/PhoneSubScreen";
 import { VisualNovelMainScreen } from "./components/VisualNovelMainScreen";
 import { ConnectionPanel } from "./components/ConnectionPanel";
@@ -33,8 +36,23 @@ import { useSessionActions } from "./hooks/useSessionActions";
 
 const defaultInputMode: InputMode = "chat";
 
+function createEmptyPersonaDraft(): PersonaDraft {
+  return {
+    name: "",
+    shortName: "",
+    role: "",
+    description: "",
+    appearance: "",
+    relationshipTags: [],
+  };
+}
+
 export function App() {
-  const [personaDraft, setPersonaDraft] = useState({ name: "" });
+  const [personaDraft, setPersonaDraft] = useState<PersonaDraft>(() => createEmptyPersonaDraft());
+  const [personaPrompt, setPersonaPrompt] = useState("");
+  const [relationshipTagText, setRelationshipTagText] = useState("");
+  const [isGeneratingPersona, setIsGeneratingPersona] = useState(false);
+  const [personaGenerationError, setPersonaGenerationError] = useState<string | null>(null);
   const [advisorDrafts, setAdvisorDrafts] = useState<AdvisorDraft[]>(() => createAdvisorDrafts());
   const [chatInput, setChatInput] = useState("");
   const [actionInput, setActionInput] = useState("");
@@ -127,11 +145,9 @@ export function App() {
     [session, selectedScenarioDetail],
   );
 
-  const isSceneOpen = Boolean(session?.scene.hasEnteredScene);
   const backgroundUrl = findBackgroundUrl(assets, session?.scene.backgroundId);
   const visibleMessages = session?.messages.slice(0, revealedMessageCount) ?? [];
   const messageRevealInProgress = Boolean(session && revealedMessageCount < session.messages.length);
-  const isOpeningSequence = Boolean(session && session.scene.turnNumber === 0);
   const activeCharacter = session?.characters.find(
     (character) => character.id === session.scene.activeSpeakerId,
   );
@@ -146,11 +162,7 @@ export function App() {
     activeCharacter?.anonymousLabel ?? activeCharacter?.name ?? latestSpeakerLabel ?? "단톡방";
   const visualTheme = visualThemePresets[visualThemeId];
   const shellMode = session
-    ? isOpeningSequence
-      ? "invitation-open"
-      : isSceneOpen
-        ? "scene-open"
-        : "messenger-open"
+    ? getSessionShellMode(session)
     : `setup-open ${setupStep}-step`;
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, _mode: "chat" | "action") {
@@ -176,7 +188,52 @@ export function App() {
       return;
     }
 
-    void startSession(selectedScenario, personaDraft.name || undefined);
+    void startSession(selectedScenario, personaDraft);
+  }
+
+  function handlePersonaDraftChange(patch: Partial<PersonaDraft>) {
+    setPersonaDraft((current) => ({ ...current, ...patch }));
+    if (patch.relationshipTags) {
+      setRelationshipTagText(patch.relationshipTags.join(", "));
+    }
+  }
+
+  function handleRelationshipTagTextChange(value: string) {
+    setRelationshipTagText(value);
+    setPersonaDraft((current) => ({
+      ...current,
+      relationshipTags: parseRelationshipTagText(value),
+    }));
+  }
+
+  async function handleGeneratePersona() {
+    const prompt = personaPrompt.trim();
+    if (!prompt || isGeneratingPersona) {
+      return;
+    }
+
+    setIsGeneratingPersona(true);
+    setPersonaGenerationError(null);
+    try {
+      const active = activeConnections(connections, {
+        chatGptOAuthConnected: oauthAccount?.connected === true,
+      });
+      const result = await generatePersonaDraftV2(prompt, active.default);
+      const generatedDraft: PersonaDraft = {
+        name: result.persona.name,
+        shortName: result.persona.shortName ?? result.persona.name,
+        role: result.persona.role,
+        description: result.persona.description ?? "",
+        appearance: result.persona.appearance ?? "",
+        relationshipTags: result.persona.relationshipTags,
+      };
+      setPersonaDraft(generatedDraft);
+      setRelationshipTagText(generatedDraft.relationshipTags.join(", "));
+    } catch (reason: unknown) {
+      setPersonaGenerationError(reason instanceof Error ? reason.message : "페르소나 초안 생성 실패");
+    } finally {
+      setIsGeneratingPersona(false);
+    }
   }
 
   async function handleStart(event: FormEvent<HTMLFormElement>) {
@@ -187,7 +244,7 @@ export function App() {
 
     await startSession(
       selectedScenario || "school-life-anomaly",
-      personaDraft.name || undefined,
+      personaDraft,
       advisorDrafts,
     );
   }
@@ -406,11 +463,18 @@ export function App() {
           />
         ) : setupStep === "persona" ? (
           <PersonaSetupPanel
-            personaName={personaDraft.name}
+            personaDraft={personaDraft}
+            personaPrompt={personaPrompt}
+            relationshipTagText={relationshipTagText}
             hasScenarioAdvisors={(selectedScenarioDetail?.characters.length ?? 0) > 0}
             isStarting={isStarting}
+            isGeneratingPersona={isGeneratingPersona}
             error={error}
-            onNameChange={(name) => setPersonaDraft((current) => ({ ...current, name }))}
+            personaGenerationError={personaGenerationError}
+            onDraftChange={handlePersonaDraftChange}
+            onPersonaPromptChange={setPersonaPrompt}
+            onRelationshipTagTextChange={handleRelationshipTagTextChange}
+            onGeneratePersona={handleGeneratePersona}
             onBack={() => setSetupStep("scenario")}
             onSubmit={handlePersonaContinue}
           />
@@ -450,4 +514,12 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function parseRelationshipTagText(value: string): string[] {
+  return value
+    .split(/[,\n]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 20);
 }

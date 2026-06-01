@@ -8,6 +8,7 @@
 import type {
   InputMode,
   ModelConnection,
+  NarratorPersonaBrief,
   PublicContext,
   ScenarioPack,
 } from "@hushline/shared";
@@ -32,6 +33,7 @@ export async function invokeNarrator(
   userInput: string,
   pack: ScenarioPack,
   connection?: ModelConnection,
+  personaBrief?: NarratorPersonaBrief,
 ): Promise<NarratorInvocationResult> {
   // Skip conditions
   if (!narratorInstruction && inputMode !== "action") {
@@ -47,7 +49,7 @@ export async function invokeNarrator(
     };
   }
 
-  const systemPrompt = buildNarratorSystemPrompt(pack, publicContext, instruction, inputMode);
+  const systemPrompt = buildNarratorSystemPrompt(pack, publicContext, instruction, inputMode, personaBrief);
   const messages = buildNarratorMessages(publicContext, userInput, inputMode);
 
   let raw: string;
@@ -92,6 +94,7 @@ function buildNarratorSystemPrompt(
   publicContext: PublicContext,
   instruction: string,
   inputMode: InputMode,
+  personaBrief?: NarratorPersonaBrief,
 ): string {
   const sections = [
     pack.narratorPrompt,
@@ -101,6 +104,8 @@ function buildNarratorSystemPrompt(
     `위치: ${publicContext.currentLocation}`,
     `긴장도: ${publicContext.tension} / 위험도: ${publicContext.danger}`,
     `입력 유형: ${inputMode === "action" ? "행동 지문 — 결과를 묘사하라" : "채팅"}`,
+    "",
+    ...formatPersonaObservationForNarrator(personaBrief),
     "",
     "[Director 장면 지시]",
     instruction,
@@ -126,6 +131,22 @@ function buildNarratorSystemPrompt(
   ];
 
   return sections.join("\n");
+}
+
+function formatPersonaObservationForNarrator(persona?: NarratorPersonaBrief): string[] {
+  if (!persona || (!persona.role && !persona.appearance && !persona.nameKnown)) {
+    return [];
+  }
+  return [
+    "[상대 인물 관찰 정보]",
+    `표시: ${persona.displayName}`,
+    persona.nameKnown
+      ? "이름 공개 상태: 장면 안에서 호칭을 들은 상태다."
+      : "이름 공개 상태: 미소개. 이름을 추측하거나 서술하지 않는다.",
+    ...(persona.role ? [`공개 역할: ${persona.role}`] : []),
+    ...(persona.appearance ? [`관찰 가능한 외형: ${persona.appearance}`] : []),
+    "나레이터는 이 인물의 내면, 감정, 의도, 선택을 단정하지 않는다.",
+  ];
 }
 
 function buildNarratorMessages(

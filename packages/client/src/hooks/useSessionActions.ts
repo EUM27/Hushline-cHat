@@ -9,7 +9,7 @@ import type {
   ModelConnection,
   StateLawSnapshot,
 } from "@hushline/shared";
-import { advanceV2, createSessionV2, rerollV2, undoV2 } from "../api-v2";
+import { advanceV2, createSessionV2, rerollV2, undoV2, type SessionPersonaInput } from "../api-v2";
 import { sessionStorageKey } from "../constants/theme-presets";
 import {
   appendOptimisticUserMessage,
@@ -34,7 +34,7 @@ export interface SessionActionsState {
   restoreSession: (nextSession: ClientSessionState) => void;
   startSession: (
     scenarioId: string,
-    personaName?: string,
+    persona?: string | SessionPersonaInput,
     advisorDrafts?: AdvisorDraft[],
   ) => Promise<boolean>;
   submitEngineInput: (content: string, mode: InputMode) => Promise<boolean>;
@@ -86,7 +86,7 @@ export function useSessionActions(
 
   async function startSession(
     scenarioId: string,
-    personaName?: string,
+    persona?: string | SessionPersonaInput,
     advisorDrafts?: AdvisorDraft[],
   ): Promise<boolean> {
     setIsStarting(true);
@@ -95,7 +95,7 @@ export function useSessionActions(
     try {
       const nextSession = await createSessionV2(
         scenarioId,
-        personaName || undefined,
+        persona,
         advisorDrafts,
         activeConnections(connections, connectionAuth),
       );
@@ -193,7 +193,7 @@ export function useSessionActions(
       const restartAdvisors = advisorDraftsFromSession(session);
       const nextSession = await createSessionV2(
         session.scenario.id,
-        session.persona.name || undefined,
+        session.persona,
         restartAdvisors.length > 0 ? restartAdvisors : undefined,
         activeConnections(connections, connectionAuth),
       );

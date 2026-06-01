@@ -18,6 +18,7 @@ export {
 } from "./connections";
 export { createAdvisorDrafts, advisorDraftsFromSession } from "./advisors";
 export { formatKoreanTime, findBackgroundUrl, findSpriteUrl } from "./assets";
+export { getSessionShellMode, type SessionShellMode } from "./session-shell";
 export {
   isPhoneChannelMessage,
   isStageMessage,

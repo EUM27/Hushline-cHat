@@ -112,15 +112,13 @@ describe("buildPhoneMessages", () => {
 
     expect(phoneMessages.map((message) => message.id)).toEqual([
       "scene-sync-4",
-      "phone-user-1",
       "phone-advisor-1",
       "event-event-1",
     ]);
     expect(phoneMessages.find((message) => message.text.includes("도끼날"))).toBeUndefined();
-    expect(phoneMessages.find((message) => message.text.includes("문자 확인"))).toBeDefined();
+    expect(phoneMessages.find((message) => message.text.includes("문자 확인"))).toBeUndefined();
     expect(phoneMessages[0]?.text).toBe("현재 위치 3f-study. 긴장 3, 위험 2.");
-    expect(phoneMessages[1]).toMatchObject({ sender: "나", side: "outbound", text: "문자 확인했어?" });
-    expect(phoneMessages[2]).toMatchObject({ sender: "관찰자", side: "inbound", text: "복도 쪽은 지금 피해야 해." });
-    expect(phoneMessages[3]).toMatchObject({ sender: "단서", side: "system" });
+    expect(phoneMessages[1]).toMatchObject({ sender: "관찰자", side: "inbound", text: "복도 쪽은 지금 피해야 해." });
+    expect(phoneMessages[2]).toMatchObject({ sender: "단서", side: "system" });
   });
 });

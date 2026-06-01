@@ -15,10 +15,16 @@
 .persona-copy { display: flex; align-items: center; gap: var(--space-2); font: var(--font-title-md); color: var(--color-brand-emerald-500); }
 .persona-panel form, .advisor-panel form { display: grid; gap: var(--space-3); }
 .persona-panel label { display: grid; gap: var(--space-1); font: var(--font-label-xs); color: var(--color-text-secondary); }
-.persona-panel input { height: 44px; padding: 0 var(--space-3); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); outline: none; }
-.persona-panel input:focus { border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(45,95,79,0.12); }
+.persona-panel input,
+.persona-panel textarea { border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface); color: var(--color-text-primary); outline: none; }
+.persona-panel input { height: 44px; padding: 0 var(--space-3); }
+.persona-panel textarea { min-height: 76px; resize: vertical; padding: var(--space-2) var(--space-3); line-height: 1.5; }
+.persona-panel input:focus,
+.persona-panel textarea:focus { border-color: var(--color-border-focus); box-shadow: 0 0 0 3px rgba(45,95,79,0.12); }
 .persona-panel button, .advisor-panel button { height: 44px; border: none; border-radius: var(--radius-md); background: var(--color-brand-mustard-500); color: var(--color-text-on-mustard); font: var(--font-title-md); cursor: pointer; }
 .persona-panel button:disabled, .advisor-panel button:disabled { opacity: 0.5; cursor: wait; }
+.persona-maker-box { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface-alt); }
+.persona-secondary-button { background: var(--color-bg-surface) !important; color: var(--color-text-primary) !important; border: 1px solid var(--color-border-default) !important; font: var(--font-label-xs) !important; }
 
 .advisor-list { display: grid; gap: var(--space-3); }
 .advisor-card { display: grid; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-bg-surface-alt); }

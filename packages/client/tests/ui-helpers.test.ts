@@ -45,6 +45,18 @@ describe("phone/stage message routing", () => {
     expect(isStageMessage(message)).toBe(false);
   });
 
+  test("keeps user input out of the phone messenger", () => {
+    const message = {
+      ...baseMessage,
+      role: "user",
+      content: "경찰 부르면 되잖아.",
+      inputMode: "chat",
+    } satisfies ChatMessage;
+
+    expect(isPhoneChannelMessage(message)).toBe(false);
+    expect(isStageMessage(message)).toBe(true);
+  });
+
   test("keeps stage system prompts on the VN screen", () => {
     const message = {
       ...baseMessage,

@@ -43,6 +43,8 @@ export const personaDraftSchema = z.object({
   name: z.string().trim().min(1).max(80),
   shortName: z.string().trim().min(1).max(80).optional(),
   role: z.string().trim().min(1).max(800),
+  description: z.string().trim().max(2000).optional(),
+  appearance: z.string().trim().max(2000).optional(),
   relationshipTags: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
 });
 
@@ -50,6 +52,11 @@ export const createSessionBodySchema = z.object({
   scenarioPackId: z.string().trim().min(1).max(120),
   persona: z.object({
     name: z.string().trim().max(80).default("{{유저}}"),
+    shortName: z.string().trim().max(80).optional(),
+    role: z.string().trim().max(800).optional(),
+    description: z.string().trim().max(2000).optional(),
+    appearance: z.string().trim().max(2000).optional(),
+    relationshipTags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   }).optional(),
   advisors: z.array(advisorDraftSchema).min(1).max(4).optional(),
   connections: z.record(z.string(), modelConnectionSchema).optional(),

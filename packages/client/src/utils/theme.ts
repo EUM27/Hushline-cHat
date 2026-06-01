@@ -2,6 +2,7 @@ import type { ThemeStyle, VisualThemePreset } from "../types/ui";
 
 export function createVisualThemeStyle(theme: VisualThemePreset): ThemeStyle {
   return {
+    "--theme-canvas-wash": theme.colors.canvas,
     "--vn-accent": theme.colors.accent,
     "--vn-accent-soft": theme.colors.accentSoft,
     "--vn-stage-bg": theme.colors.stagePanel,

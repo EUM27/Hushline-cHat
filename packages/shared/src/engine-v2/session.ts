@@ -51,6 +51,13 @@ export interface SessionStateV2 {
     id: string;
     name: string;
     shortName: string;
+    /** The user's stance / narrative pressure (player-authored, 1-2 sentences). */
+    role?: string;
+    /** Free-form persona description (optional). */
+    description?: string;
+    /** Observable appearance, for narrator and visual continuity. */
+    appearance?: string;
+    relationshipTags?: string[];
   };
   worldState: WorldState;
   characters: CharacterDefinition[];
