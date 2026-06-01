@@ -20,14 +20,15 @@ Last updated: 2026-06-01
 - Workspace: `D:\Hushline cHat`
 - Branch: `codex/shared-house-romance-visuals`
 - Root `plan.md`: newly created on 2026-05-31
+- Latest shipped commit on branch: `b06ac38 feat: expand persona and scene-first flows`
 - Staged files at snapshot time: none
 - Merge conflicts at snapshot time: none
-- Existing dirty files are user-owned unless the current thread explicitly changes them.
+- Dirty files at snapshot time: none
 
-Current dirty work appears to cover two active areas:
+The branch currently contains one verified feature tranche:
 
-- Persona system expansion: layered Director/Character/Narrator/Guard persona visibility, expanded persona persistence, prompt injection, client setup inputs, and session payload wiring are implemented in the current dirty WIP.
-- Shared-house romance scene-first metadata: opening beats now carry character ids, loader validation checks those ids, and the client shell/stage helpers route scene-first openings to the visual stage.
+- Persona system expansion: layered Director/Character/Narrator/Guard persona visibility, expanded persona persistence, prompt injection, client setup inputs, and session payload wiring.
+- Shared-house romance scene-first metadata: opening beats carry character ids, loader validation checks those ids, and the client shell/stage helpers route scene-first openings to the visual stage.
 - Phone messenger routing hotfix: user input is no longer classified as a phone messenger message; only advisor-slot character messages, anonymous phone chatter, and digital notices enter the phone feed.
 
 ## Project Guardrails
@@ -49,7 +50,7 @@ Current dirty work appears to cover two active areas:
 
 ## Active Workstreams
 
-### 1. Persona System - Verified WIP
+### 1. Persona System - Verified and Pushed
 
 Goal: make the player persona first-class instead of name-only, while preserving hidden-truth safety and backwards compatibility.
 
@@ -74,19 +75,18 @@ Observed done or in progress:
 
 Remaining:
 
-- [ ] If committing, stage only the persona implementation/test/doc files and avoid unrelated scene-metadata/theme WIP.
-- [ ] If polishing the setup UX further, consider chip-style relationship tag editing or field-level helper copy after the current verified slice is committed.
+- [ ] If polishing the setup UX further, consider chip-style relationship tag editing or field-level helper copy as a separate follow-up slice.
 
 Verification:
 
 - `corepack pnpm --filter @hushline/server test` - pass, 193 tests.
-- `corepack pnpm --filter @hushline/client exec bun test src/__tests__ src/utils/__tests__ tests` - pass, 65 tests.
+- `corepack pnpm --filter @hushline/client exec bun test src/__tests__ src/utils/__tests__ tests` - pass, 66 tests.
 - `corepack pnpm -r run check` - pass.
 - `corepack pnpm --filter @hushline/client build` - pass.
 - `git diff --check` - pass.
 - Browser smoke on `http://localhost:4188/` with API `http://localhost:7872`: persona maker prompt generated editable name/short name/role/description/appearance/tags, setup submit entered `scene-open`, and the live `/api/v2/persona-maker/generate` endpoint returned populated description/appearance.
 
-### 2. Shared-House Romance Scene Metadata - Active WIP
+### 2. Shared-House Romance Scene Metadata - Verified and Pushed
 
 Goal: scene-first shared-house romance sessions should open directly into the scene with correct staged speaker identity for opening beats.
 
@@ -102,11 +102,16 @@ Observed done or in progress:
 
 Remaining:
 
-- [ ] Verify focused server tests for romance pack and API v2 session creation.
-- [ ] Verify focused client helper tests for stage/session shell behavior.
-- [ ] Browser-smoke the scene-first opening if UI behavior changed or if committing this workstream.
+- [ ] If this flow changes again, re-run focused server/client helper tests and browser-smoke the scene-first opening.
 
-### 2a. Phone Messenger User Input Routing - Verified
+Verification:
+
+- `corepack pnpm --filter @hushline/server test` - pass, 193 tests.
+- `corepack pnpm --filter @hushline/client exec bun test src/__tests__ src/utils/__tests__ tests` - pass, 66 tests.
+- `corepack pnpm -r run check` - pass.
+- `corepack pnpm --filter @hushline/client build` - pass.
+
+### 2a. Phone Messenger User Input Routing - Verified and Pushed
 
 Goal: keep user input visible in the main VN/stage surface without echoing it into the left phone messenger feed.
 
@@ -165,12 +170,11 @@ Remaining:
 
 ## Priority Queue
 
-1. Finish the active dirty WIP before starting unrelated features.
-2. First likely next task: split/stage the verified Persona System files only if the user wants a commit.
-3. Next likely task: reconcile the separate Shared-House Romance Scene Metadata WIP and verify its focused tests before any commit.
-4. Before committing: inspect the dirty file list and stage only the task-specific persona files or scene-metadata files, not the whole tree.
-5. If user asks "현상황의 잔여 과제와 다음 작업", answer from this `Priority Queue` plus fresh `git status --short`.
-6. Theme next task: pick the next bounded slice from `.kiro/specs/multi-agent-turn-engine/theme-concepts-plan.md` instead of expanding all 8 themes at once.
+1. Open or update a PR for `codex/shared-house-romance-visuals`.
+2. If review wants more runtime confidence, browser-smoke persona setup, scene-first opening, and the no-user-echo phone messenger case on the active local app.
+3. Next product slice: pick one bounded follow-up, preferably `ThemeProvider` / `data-theme`, Glass Messenger default, or persona setup tag-chip UX.
+4. If user asks "현상황의 잔여 과제와 다음 작업", answer from this `Priority Queue` plus fresh `git status --short`.
+5. Theme next task: pick the next bounded slice from `.kiro/specs/multi-agent-turn-engine/theme-concepts-plan.md` instead of expanding all 8 themes at once.
 
 ## Handoff Template
 
