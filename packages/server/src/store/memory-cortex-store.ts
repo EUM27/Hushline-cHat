@@ -220,14 +220,14 @@ export function createMemoryCortexStore(dbPath = defaultDbPath()): MemoryCortexS
     },
 
     searchChunks(input): MemoryChunk[] {
-      const query = input.query.trim().replace(/"/g, "");
+      const query = toFtsMatchQuery(input.query);
       if (!query) {
         return [];
       }
       return searchQuery
         .all({
           $sessionId: input.sessionId,
-          $query: query.split(/\s+/).join(" OR "),
+          $query: query,
           $limit: input.limit,
         })
         .map(rowToChunk);
@@ -263,6 +263,14 @@ export function createMemoryCortexStore(dbPath = defaultDbPath()): MemoryCortexS
       return row ? rowToTrace(row) : null;
     },
   };
+}
+
+function toFtsMatchQuery(input: string): string {
+  const tokens = input.match(/[\p{L}\p{N}_]+/gu) ?? [];
+  return tokens
+    .slice(0, 12)
+    .map((token) => `"${token}"`)
+    .join(" OR ");
 }
 
 type ChunkRow = {

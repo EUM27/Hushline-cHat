@@ -41,6 +41,8 @@ describe("memory cortex sqlite store", () => {
     expect(store.listEntities("session-1").map((entity) => entity.canonicalName)).toEqual(["한유진"]);
     const matches = store.searchChunks({ sessionId: "session-1", query: "열쇠", limit: 5 });
     expect(matches.map((chunk) => chunk.id)).toEqual(["chunk-1"]);
+    const sentenceMatches = store.searchChunks({ sessionId: "session-1", query: "유진에게 열쇠를 보여준다.", limit: 5 });
+    expect(sentenceMatches.map((chunk) => chunk.id)).toEqual(["chunk-1"]);
 
     store.saveRetrievalTrace({
       id: "trace-1",

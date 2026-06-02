@@ -10,6 +10,8 @@ import type {
   WorldState,
 } from "@hushline/shared";
 import { loadScenarioPack, createInitialWorldState, runTurnV2, rollbackTurn } from "../engine-v2/index.js";
+import { buildMemoryChunksFromTurn, scoreMemoryCandidate, seedMemoryEntities } from "../engine-v2/memory-cortex.js";
+import type { MemoryCortexStore } from "../store/memory-cortex-store.js";
 import type { SessionStoreV2 } from "../store/sqlite-store-v2.js";
 import { applyAdvisorDrafts, packWithSessionCharacters } from "./advisor-drafts.js";
 import { advanceBodySchema, createSessionBodySchema, rerollBodySchema } from "./schemas.js";
@@ -20,6 +22,7 @@ const MAX_TURN_CHECKPOINTS = 50;
 
 export interface RegisterSessionRoutesOptions {
   store: SessionStoreV2;
+  memoryStore?: MemoryCortexStore;
   scenariosDir: string;
 }
 
@@ -98,6 +101,21 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       updatedAt: new Date().toISOString(),
     };
 
+    options.memoryStore?.saveChunks(buildMemoryChunksFromTurn({
+      sessionId,
+      scenarioPackId,
+      turnNumber: 0,
+      messages: openingMessages,
+      createdAt: session.createdAt,
+    }));
+    options.memoryStore?.saveEntities(seedMemoryEntities({
+      sessionId,
+      scenarioPackId,
+      persona: session.persona,
+      characters: session.characters,
+      turnNumber: 0,
+    }));
+
     store.saveSession(session);
     return context.json({ session: toClientSession(session, pack) }, 201);
   });
@@ -127,10 +145,17 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     }
 
     const runtimePack = packWithSessionCharacters(packResult.pack, session);
+    const memoryCandidates = buildRouteMemoryCandidates(options.memoryStore, {
+      sessionId: session.id,
+      scenarioPackId: session.scenarioPackId,
+      input: parsed.data.content,
+      turnNumber: session.worldState.turnNumber + 1,
+    });
     const turnResult = await runTurnV2(session, parsed.data.content, {
       ...(parsed.data.connections ? { connections: parsed.data.connections as Record<string, ModelConnection> } : {}),
       ...(parsed.data.inputMode ? { inputMode: parsed.data.inputMode } : {}),
       scenarioPack: runtimePack,
+      ...(memoryCandidates.length ? { memoryCandidates } : {}),
     });
 
     const nextSession: SessionStateV2 = {
@@ -143,6 +168,20 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       ),
       updatedAt: new Date().toISOString(),
     };
+    options.memoryStore?.saveChunks(buildMemoryChunksFromTurn({
+      sessionId: nextSession.id,
+      scenarioPackId: nextSession.scenarioPackId,
+      turnNumber: turnResult.worldState.turnNumber,
+      messages: turnResult.messages,
+      createdAt: nextSession.updatedAt,
+    }));
+    saveRouteMemoryTrace(options.memoryStore, {
+      sessionId: session.id,
+      scenarioPackId: session.scenarioPackId,
+      input: parsed.data.content,
+      turnNumber: session.worldState.turnNumber + 1,
+      memoryCandidates,
+    });
     store.saveSession(nextSession);
 
     return context.json({
@@ -177,6 +216,7 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     const lastUserMessage = session.messages[lastUserIndex]!;
     const checkpointMatch = findCheckpointForUserMessage(session.turnCheckpoints ?? [], lastUserMessage.id);
     const rolledBackMessages = session.messages.slice(0, lastUserIndex);
+    const discardedMessageIds = session.messages.slice(lastUserIndex).map((message) => message.id);
     const rolledBackSession: SessionStateV2 = {
       ...session,
       messages: rolledBackMessages,
@@ -192,10 +232,17 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     }
 
     const runtimePack = packWithSessionCharacters(packResult.pack, rolledBackSession);
+    const memoryCandidates = buildRouteMemoryCandidates(options.memoryStore, {
+      sessionId: rolledBackSession.id,
+      scenarioPackId: rolledBackSession.scenarioPackId,
+      input: lastUserMessage.content,
+      turnNumber: rolledBackSession.worldState.turnNumber + 1,
+    });
     const turnResult = await runTurnV2(rolledBackSession, lastUserMessage.content, {
       ...(connections ? { connections } : {}),
       inputMode: lastUserMessage.inputMode ?? inputMode ?? "chat",
       scenarioPack: runtimePack,
+      ...(memoryCandidates.length ? { memoryCandidates } : {}),
     });
 
     const nextSession: SessionStateV2 = {
@@ -208,6 +255,21 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       ),
       updatedAt: new Date().toISOString(),
     };
+    options.memoryStore?.deleteMessageIds(session.id, discardedMessageIds);
+    options.memoryStore?.saveChunks(buildMemoryChunksFromTurn({
+      sessionId: nextSession.id,
+      scenarioPackId: nextSession.scenarioPackId,
+      turnNumber: turnResult.worldState.turnNumber,
+      messages: turnResult.messages,
+      createdAt: nextSession.updatedAt,
+    }));
+    saveRouteMemoryTrace(options.memoryStore, {
+      sessionId: rolledBackSession.id,
+      scenarioPackId: rolledBackSession.scenarioPackId,
+      input: lastUserMessage.content,
+      turnNumber: rolledBackSession.worldState.turnNumber + 1,
+      memoryCandidates,
+    });
     store.saveSession(nextSession);
 
     return context.json({
@@ -244,9 +306,77 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
         : (session.turnCheckpoints ?? []).slice(0, -1),
       updatedAt: new Date().toISOString(),
     };
+    options.memoryStore?.deleteTurnsAfter(nextSession.id, nextSession.worldState.turnNumber);
     store.saveSession(nextSession);
 
     return context.json({ session: toClientSession(nextSession, loadClientScenarioPack(nextSession)) });
+  });
+}
+
+function buildRouteMemoryCandidates(
+  memoryStore: MemoryCortexStore | undefined,
+  input: {
+    sessionId: string;
+    scenarioPackId: string;
+    input: string;
+    turnNumber: number;
+  },
+) {
+  const chunks = memoryStore?.searchChunks({
+    sessionId: input.sessionId,
+    query: input.input,
+    limit: 12,
+  }) ?? [];
+
+  return chunks
+    .map((chunk) => scoreMemoryCandidate({
+      chunk,
+      query: {
+        sessionId: input.sessionId,
+        scenarioPackId: input.scenarioPackId,
+        input: input.input,
+        turnNumber: input.turnNumber,
+        entityAliases: [],
+        allowedVisibility: ["public", "director-only", "vault-readonly"],
+      },
+    }))
+    .filter((candidate) => candidate.visibilityAllowed)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 6);
+}
+
+function saveRouteMemoryTrace(
+  memoryStore: MemoryCortexStore | undefined,
+  input: {
+    sessionId: string;
+    scenarioPackId: string;
+    input: string;
+    turnNumber: number;
+    memoryCandidates: ReturnType<typeof buildRouteMemoryCandidates>;
+  },
+): void {
+  if (!memoryStore || input.memoryCandidates.length === 0) {
+    return;
+  }
+
+  memoryStore.saveRetrievalTrace({
+    id: crypto.randomUUID(),
+    sessionId: input.sessionId,
+    turnNumber: input.turnNumber,
+    query: {
+      sessionId: input.sessionId,
+      scenarioPackId: input.scenarioPackId,
+      input: input.input,
+      turnNumber: input.turnNumber,
+      entityAliases: [],
+      allowedVisibility: ["public", "director-only", "vault-readonly"],
+    },
+    candidateIds: input.memoryCandidates.map((candidate) => candidate.chunkId),
+    selectedIds: input.memoryCandidates
+      .filter((candidate) => candidate.visibilityAllowed)
+      .map((candidate) => candidate.chunkId),
+    scores: Object.fromEntries(input.memoryCandidates.map((candidate) => [candidate.chunkId, candidate.components])),
+    createdAt: new Date().toISOString(),
   });
 }
 

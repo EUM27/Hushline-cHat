@@ -40,6 +40,7 @@ export async function invokeDirector(
   pack: ScenarioPack,
   connection?: ModelConnection,
   caseRuntime?: { inquiry: CaseInquiryFrame; answerScope: CaseAnswerScope },
+  memoryContext: string[] = [],
 ): Promise<DirectorInvocationResult> {
   const characterIds = pack.characters.map((c) => c.id);
 
@@ -52,7 +53,7 @@ export async function invokeDirector(
     };
   }
 
-  const systemPrompt = buildDirectorSystemPrompt(pack, omniscientContext);
+  const systemPrompt = buildDirectorSystemPrompt(pack, omniscientContext, memoryContext);
   const messages = buildDirectorMessages(publicContext, userInput, inputMode, worldState, caseRuntime);
 
   let raw: string;
@@ -100,6 +101,7 @@ export async function invokeDirector(
 export function buildDirectorSystemPrompt(
   pack: ScenarioPack,
   omniscient: OmniscientContext,
+  memoryContext: string[] = [],
 ): string {
   const sections = [
     pack.directorPrompt,
@@ -151,6 +153,8 @@ export function buildDirectorSystemPrompt(
     omniscient.recentEvents.length > 0
       ? omniscient.recentEvents.slice(-5).map((e) => `- Turn ${e.turnNumber}: ${e.description}`).join("\n")
       : "(없음)",
+    "",
+    ...memoryContext,
     "",
     "[Genre Goals]",
     omniscient.genreGoals,

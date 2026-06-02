@@ -70,6 +70,7 @@ import {
 import { reconstructPack } from "./session-helpers.js";
 import { buildSystemMessageContent, composeSceneMessages } from "./turn-messages.js";
 import { hasUserIntroducedName } from "./user-identity.js";
+import { formatDirectorMemoryContext } from "./memory-cortex.js";
 
 /**
  * Run a complete turn through the v2 pipeline.
@@ -167,6 +168,7 @@ export async function runTurnV2(
 
   // ── Step 3: Director Invocation ──
   const directorConnection = getConnection(connections, "director");
+  const directorMemoryContext = formatDirectorMemoryContext(options.memoryCandidates ?? []);
   const directorResult = await invokeDirector(
     session.worldState,
     omniscientContext,
@@ -176,6 +178,7 @@ export async function runTurnV2(
     pack,
     directorConnection,
     caseRuntimeInput,
+    directorMemoryContext,
   );
   const directorBoundary = enforceDirectorLaw(directorResult.output, session.worldState, pack);
   let directorOutput = attachCaseRuntimeToDirectorOutput(

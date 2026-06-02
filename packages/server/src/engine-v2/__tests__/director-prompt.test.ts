@@ -12,6 +12,16 @@ describe("director prompt", () => {
     expect(prompt).toContain("bridge 없이 새 설정을 꽂아 목표를 밀어붙이지 않는다.");
   });
 
+  test("includes visible memory cortex context when supplied", () => {
+    const prompt = buildDirectorSystemPrompt(minimalPack(), minimalOmniscientContext(), [
+      "[Memory Cortex]",
+      "- T4 한유진: 유진의 열쇠 증언 (score 0.82, public)",
+    ]);
+
+    expect(prompt).toContain("[Memory Cortex]");
+    expect(prompt).toContain("유진의 열쇠 증언");
+  });
+
   test("adds a per-turn current scene priority checklist", () => {
     const [message] = buildDirectorMessages(
       minimalPublicContext(),

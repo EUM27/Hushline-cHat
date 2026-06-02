@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { createAppV2 } from "../app-v2";
+import { createMemoryCortexStore } from "../store/memory-cortex-store";
 import { createSqliteStoreV2 } from "../store/sqlite-store-v2";
 
 const scenariosDir = resolve(import.meta.dir, "../../scenarios");
@@ -188,6 +189,39 @@ describe("Hushline API v2", () => {
     const undone = await undoResponse.json();
     expect(undone.session.scene.sessionId).toBe(created.session.id);
     expect(undone.session.messages.some((message: { role: string }) => message.role === "user")).toBe(false);
+  });
+
+  test("ingests opening and accepted turn messages when memory store is configured", async () => {
+    const memoryStore = createMemoryCortexStore(":memory:");
+    const app = createAppV2({
+      store: createSqliteStoreV2(":memory:"),
+      memoryStore,
+      scenariosDir,
+    });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "윤서", shortName: "서" },
+      }),
+    });
+
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    const sessionId = created.session.id;
+    expect(memoryStore.listChunks(sessionId).some((chunk) => chunk.role === "narrator")).toBe(true);
+    expect(memoryStore.listEntities(sessionId).map((entity) => entity.canonicalName)).toContain("윤서");
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${sessionId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "유진에게 열쇠를 보여준다.", inputMode: "action" }),
+    });
+
+    expect(advancedResponse.status).toBe(200);
+    expect(memoryStore.listChunks(sessionId).some((chunk) => chunk.content.includes("열쇠"))).toBe(true);
   });
 
   test("restores the full world state checkpoint when rerolling and undoing a turn", async () => {
