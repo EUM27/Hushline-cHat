@@ -1,29 +1,33 @@
 import { useRef, useState } from "react";
 import { Upload, UserPlus } from "lucide-react";
-import { importCharacterCard, type ImportedCharacterCard } from "../../api-v2";
+import { importCharacterCard, type ImportedCharacterCardResult } from "../../api-v2";
 
 export interface CharacterCardImportProps {
-  /** Called when a card is successfully imported (preview confirmed). */
-  onImported?: (character: ImportedCharacterCard) => void;
+  targetLabel?: string;
+  preview?: ImportedCharacterCardResult | null;
+  /** Called when a card is successfully imported and previewed. */
+  onImported?: (result: ImportedCharacterCardResult) => void;
+  onApply?: (result: ImportedCharacterCardResult) => void;
 }
 
-export function CharacterCardImport({ onImported }: CharacterCardImportProps) {
+export function CharacterCardImport({ targetLabel, preview, onImported, onApply }: CharacterCardImportProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<ImportedCharacterCard | null>(null);
+  const [localPreview, setLocalPreview] = useState<ImportedCharacterCardResult | null>(null);
+  const activePreview = preview ?? localPreview;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setIsLoading(true);
     setError(null);
     try {
-      const character = await importCharacterCard(file);
-      setPreview(character);
-      onImported?.(character);
+      const result = await importCharacterCard(file);
+      setLocalPreview(result);
+      onImported?.(result);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "카드를 불러오지 못했습니다.");
-      setPreview(null);
+      setLocalPreview(null);
     } finally {
       setIsLoading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -56,32 +60,74 @@ export function CharacterCardImport({ onImported }: CharacterCardImportProps) {
 
       {error ? <p className="error-line card-import-error">{error}</p> : null}
 
-      {preview ? (
+      {activePreview ? (
         <article className="card-import-preview">
           <div className="card-import-preview-head">
-            <strong>{preview.name}</strong>
-            <span>{preview.mbti}</span>
+            <strong>{activePreview.character.name}</strong>
+            <span>{formatSourceFormat(activePreview.metadata.sourceFormat)}</span>
           </div>
-          {preview.role ? <p className="card-import-role">{preview.role}</p> : null}
-          {preview.handout.surfacePersonality?.length ? (
+          {activePreview.character.role ? <p className="card-import-role">{activePreview.character.role}</p> : null}
+          <dl className="card-import-source-grid">
+            <div>
+              <dt>파일</dt>
+              <dd>{activePreview.metadata.sourceFileName ?? "직접 입력"}</dd>
+            </div>
+            <div>
+              <dt>스펙</dt>
+              <dd>{activePreview.metadata.cardSpec ?? "알 수 없음"}</dd>
+            </div>
+            <div>
+              <dt>Creator</dt>
+              <dd>{activePreview.metadata.creator ?? "미기재"}</dd>
+            </div>
+            <div>
+              <dt>첫 메시지</dt>
+              <dd>{activePreview.metadata.hasFirstMessage ? "있음" : "없음"}</dd>
+            </div>
+          </dl>
+          {activePreview.metadata.extensionKeys.length ? (
             <div className="card-import-tags">
-              {preview.handout.surfacePersonality.map((tag) => (
-                <span key={tag}>{tag}</span>
+              {activePreview.metadata.extensionKeys.map((key) => (
+                <span key={key}>{formatExtensionKey(key)}</span>
               ))}
             </div>
           ) : null}
           <div className="card-import-meta">
             <span>자율성</span>
-            <strong>{preview.autonomy.toFixed(2)}</strong>
+            <strong>{activePreview.character.autonomy.toFixed(2)}</strong>
             <span>호감도</span>
-            <strong>{preview.handout.initialRelationshipToUser}</strong>
+            <strong>{activePreview.character.handout.initialRelationshipToUser}</strong>
             <span>관계</span>
-            <strong>{preview.relationships.length}</strong>
+            <strong>{activePreview.character.relationships.length}</strong>
             <span>비밀</span>
-            <strong>{preview.handout.secret ? "있음" : "없음"}</strong>
+            <strong>{activePreview.character.handout.secret ? "있음" : "없음"}</strong>
           </div>
+          {onApply ? (
+            <button type="button" className="card-import-apply" onClick={() => onApply(activePreview)}>
+              {targetLabel ? `${targetLabel} 슬롯에 적용` : "현재 슬롯에 적용"}
+            </button>
+          ) : null}
         </article>
       ) : null}
     </section>
   );
+}
+
+function formatSourceFormat(format: ImportedCharacterCardResult["metadata"]["sourceFormat"]): string {
+  switch (format) {
+    case "png-chara-v2":
+      return "Tavern PNG v2";
+    case "png-ccv3":
+      return "Tavern PNG v3";
+    case "json-v2":
+      return "JSON v2";
+    case "json-v3":
+      return "JSON v3";
+    default:
+      return "JSON";
+  }
+}
+
+function formatExtensionKey(key: string): string {
+  return key === "janitor" ? "Janitor" : key;
 }

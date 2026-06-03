@@ -9,7 +9,7 @@
 import { inflateSync } from "node:zlib";
 
 export type PngCardResult =
-  | { ok: true; json: string }
+  | { ok: true; json: string; keyword: "ccv3" | "chara" }
   | { ok: false; error: string };
 
 const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -28,17 +28,23 @@ export function extractCardFromPng(bytes: Uint8Array): PngCardResult {
     return { ok: false, error: "PNG 청크를 읽을 수 없습니다 (손상된 파일)." };
   }
 
-  const card = chunks.get("ccv3") ?? chunks.get("chara");
-  if (card === undefined) {
+  const ccv3 = chunks.get("ccv3");
+  const chara = chunks.get("chara");
+  const selected = ccv3 !== undefined
+    ? { keyword: "ccv3" as const, text: ccv3 }
+    : chara !== undefined
+      ? { keyword: "chara" as const, text: chara }
+      : null;
+  if (selected === null) {
     return { ok: false, error: "PNG에 캐릭터 카드 데이터(ccv3/chara)가 없습니다." };
   }
 
-  const json = decodeCardText(card);
+  const json = decodeCardText(selected.text);
   if (json === null) {
     return { ok: false, error: "카드 데이터 base64 디코드에 실패했습니다." };
   }
 
-  return { ok: true, json };
+  return { ok: true, json, keyword: selected.keyword };
 }
 
 // ── Internals ──

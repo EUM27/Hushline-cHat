@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { createAppV2 } from "../app-v2";
 import { createMemoryCortexStore } from "../store/memory-cortex-store";
+import { createMemoryProfileLibraryStore } from "../store/profile-library-store";
 import { createSqliteStoreV2 } from "../store/sqlite-store-v2";
 
 const scenariosDir = resolve(import.meta.dir, "../../scenarios");
@@ -130,6 +131,71 @@ describe("Hushline API v2", () => {
       appearance: "젖은 교복 소매를 계속 만지작거린다.",
       relationshipTags: ["transfer-student", "skeptical"],
     });
+  });
+
+  test("saves and loads reusable persona profiles through the v2 API", async () => {
+    const app = createAppV2({
+      store: createSqliteStoreV2(":memory:"),
+      profileLibraryStore: createMemoryProfileLibraryStore(),
+      scenariosDir,
+    });
+
+    const saveResponse = await app.request("/api/v2/personas", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        label: "비 오는 밤 새 입주자",
+        persona: {
+          name: "정해윤",
+          shortName: "해윤",
+          role: "공유주택에 막 들어온 새 입주자",
+          description: "경계심이 있지만 사람을 밀어내지는 않는다.",
+          appearance: "비에 젖은 회색 후드와 낡은 운동화를 신고 있다.",
+          portraitUrl: "https://example.test/haeyoon.png",
+          relationshipTags: ["new-tenant", "keeps-distance"],
+        },
+      }),
+    });
+    expect(saveResponse.status).toBe(201);
+    const saved = await saveResponse.json() as { persona: { id: string } };
+
+    const listResponse = await app.request("/api/v2/personas");
+    expect(listResponse.status).toBe(200);
+    const listed = await listResponse.json() as {
+      personas: Array<{
+        id: string;
+        label: string;
+        createdAt: string;
+        updatedAt: string;
+        persona: {
+          name: string;
+          shortName?: string;
+          role?: string;
+          description?: string;
+          appearance?: string;
+          portraitUrl?: string;
+          relationshipTags: string[];
+        };
+      }>;
+    };
+
+    expect(listed.personas).toEqual([
+      {
+        id: saved.persona.id,
+        label: "비 오는 밤 새 입주자",
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        persona: {
+          name: "정해윤",
+          shortName: "해윤",
+          role: "공유주택에 막 들어온 새 입주자",
+          description: "경계심이 있지만 사람을 밀어내지는 않는다.",
+          appearance: "비에 젖은 회색 후드와 낡은 운동화를 신고 있다.",
+          portraitUrl: "https://example.test/haeyoon.png",
+          relationshipTags: ["new-tenant", "keeps-distance"],
+        },
+      },
+    ]);
   });
 
   test("keeps v1-compatible session shape after create advance reroll and undo", async () => {
@@ -812,6 +878,66 @@ describe("Hushline API v2", () => {
     ]);
     expect(payload.session.characters.every((character: { profileKind: string }) => character.profileKind === "named-actor")).toBe(true);
     expect(payload.session.characters.some((character: { name: string }) => character.name === "[익명 22]")).toBe(false);
+  });
+
+  test("lets scenario selection character overrides replace fixed-cast characters", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const response = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+        characterOverrides: [
+          {
+            targetId: "kang-mujin",
+            character: {
+              id: "imported-card",
+              name: "백이현",
+              shortName: "이현",
+              role: "폭설 속 산장에 늦게 도착한 법의학자",
+              mbti: "INTJ",
+              ocean: {
+                openness: 61,
+                conscientiousness: 83,
+                extraversion: 28,
+                agreeableness: 39,
+                neuroticism: 55,
+              },
+              autonomy: 0.72,
+              systemPrompt: "너는 백이현이다. 감정보다 증거를 먼저 본다.",
+              handout: {
+                secret: "피해자를 오래전부터 알고 있었다.",
+                desire: "사건 현장의 훼손을 막고 싶다.",
+                objective: "시신 주변의 단서를 보존한다.",
+                initialRelationshipToUser: -1,
+              },
+              relationships: [],
+            },
+          },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const payload = await response.json();
+    const character = payload.session.characters.find((candidate: { id: string }) => candidate.id === "kang-mujin");
+    expect(character).toMatchObject({
+      id: "kang-mujin",
+      name: "백이현",
+      shortName: "이현",
+      role: "폭설 속 산장에 늦게 도착한 법의학자",
+      profileKind: "named-actor",
+      systemPrompt: "너는 백이현이다. 감정보다 증거를 먼저 본다.",
+      relationshipTags: [],
+    });
+    expect(payload.session.handouts["kang-mujin"]).toMatchObject({
+      secret: "피해자를 오래전부터 알고 있었다.",
+      objective: "시신 주변의 단서를 보존한다.",
+      relationshipToUser: -1,
+      autonomy: 0.72,
+    });
   });
 
   test("turns onboarding advisor drafts into canonical v2 session characters", async () => {

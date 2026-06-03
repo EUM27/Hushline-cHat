@@ -1,4 +1,5 @@
 import type { AdvisorDraft, ClientSessionState } from "@hushline/shared";
+import type { CharacterOverrideInput, ImportedCharacterCard } from "../api-v2";
 import { secondAdvisorPool } from "../constants/theme-presets";
 
 export function createAdvisorDrafts(): AdvisorDraft[] {
@@ -58,5 +59,42 @@ export function advisorDraftsFromSession(session: ClientSessionState): AdvisorDr
       }
 
       return draft;
+    });
+}
+
+export function characterOverridesFromSession(session: ClientSessionState): CharacterOverrideInput[] {
+  return session.characters
+    .filter((character) => character.profileKind === "named-actor")
+    .map((character): CharacterOverrideInput => {
+      const handout = session.handouts[character.id];
+      const importedCharacter: ImportedCharacterCard = {
+        id: character.id,
+        name: character.name,
+        shortName: character.shortName,
+        role: character.role,
+        mbti: character.mbti,
+        ocean: { ...character.ocean },
+        autonomy: handout?.autonomy ?? 0.6,
+        systemPrompt: character.systemPrompt,
+        ...(character.relationshipTags.length ? { relationshipTags: [...character.relationshipTags] } : {}),
+        handout: {
+          secret: handout?.secret ?? "",
+          desire: handout?.desire ?? "",
+          objective: handout?.objective ?? "",
+          initialRelationshipToUser: handout?.relationshipToUser ?? 0,
+        },
+        relationships: (handout?.myRelationships ?? []).map((relationship) => ({
+          targetId: relationship.targetId,
+          descriptor: relationship.descriptor,
+          intensity: relationship.intensity,
+        })),
+        ...(character.spriteSetId ? { spriteSetId: character.spriteSetId } : {}),
+        ...(character.avatarId ? { avatarId: character.avatarId } : {}),
+      };
+
+      return {
+        targetId: character.id,
+        character: importedCharacter,
+      };
     });
 }

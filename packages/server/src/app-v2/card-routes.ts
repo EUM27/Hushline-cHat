@@ -1,8 +1,15 @@
 import type { Hono } from "hono";
 import { importCardJson, importCardPng } from "../engine-v2/index.js";
+import type { ProfileLibraryStore } from "../store/profile-library-store.js";
 import { cardImportBodySchema, MAX_CARD_DATA_LENGTH } from "./schemas.js";
 
-export function registerCardRoutes(app: Hono) {
+const MAX_DERIVED_SLOT_ID_LENGTH = 120;
+
+export interface RegisterCardRoutesOptions {
+  profileLibraryStore?: ProfileLibraryStore;
+}
+
+export function registerCardRoutes(app: Hono, options: RegisterCardRoutesOptions = {}) {
   app.post("/api/v2/character-card/import", async (context) => {
     const parsed = cardImportBodySchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
@@ -15,15 +22,27 @@ export function registerCardRoutes(app: Hono) {
     }
 
     const fallbackId = deriveSlotId(fileName);
-    const result = kind === "png"
-      ? importCardPng(base64ToBytes(data), fallbackId)
-      : importCardJson(data, fallbackId);
+    const pngBytes = kind === "png" ? base64ToBytes(data) : null;
+    const result = pngBytes
+      ? importCardPng(pngBytes, fallbackId, fileName)
+      : importCardJson(data, fallbackId, fileName);
 
     if (!result.ok) {
       return context.json({ error: result.error }, 400);
     }
 
-    return context.json({ character: result.character });
+    const characterCard = options.profileLibraryStore?.saveCharacterCard({
+      name: result.character.name,
+      ...(fileName ? { sourceFileName: fileName } : {}),
+      sourceMetadata: result.metadata,
+      character: result.character,
+    });
+
+    return context.json({
+      character: result.character,
+      metadata: result.metadata,
+      ...(characterCard ? { characterCard } : {}),
+    });
   });
 }
 
@@ -42,5 +61,6 @@ function deriveSlotId(fileName?: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9가-힣]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return slug || "imported-character";
+  const clamped = slug.slice(0, MAX_DERIVED_SLOT_ID_LENGTH).replace(/-+$/g, "");
+  return clamped || "imported-character";
 }

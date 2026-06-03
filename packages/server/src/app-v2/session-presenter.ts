@@ -66,6 +66,8 @@ export function toClientSession(session: SessionStateV2, scenarioPack?: Scenario
       ocean: character.ocean,
       systemPrompt: character.systemPrompt,
       relationshipTags: character.relationshipTags ?? character.handout.surfacePersonality ?? [],
+      ...(character.spriteSetId ? { spriteSetId: character.spriteSetId } : {}),
+      ...(character.avatarId ? { avatarId: character.avatarId } : {}),
     })),
   };
 }

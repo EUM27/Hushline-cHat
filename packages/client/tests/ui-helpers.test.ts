@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ChatMessage } from "@hushline/shared";
 import {
   activeConnections,
+  characterOverridesFromSession,
   getConnectionStatus,
   getStageCharacterId,
   getStageSpeakerLabel,
@@ -245,5 +246,97 @@ describe("model connection readiness", () => {
     }, { chatGptOAuthConnected: true })).toEqual({
       default: { providerId: "chatgpt", apiKey: "", model: "gpt-5.4" },
     });
+  });
+});
+
+describe("session restart character overrides", () => {
+  test("rebuilds fixed-cast character overrides from the current session snapshot", () => {
+    const overrides = characterOverridesFromSession({
+      characters: [
+        {
+          id: "kang-mujin",
+          name: "백이현",
+          shortName: "이현",
+          role: "폭설 속 산장에 늦게 도착한 법의학자",
+          profileKind: "named-actor",
+          revealed: true,
+          provider: "dry-run",
+          model: "dry-run/kang-mujin",
+          mbti: "INTJ",
+          ocean: {
+            openness: 61,
+            conscientiousness: 83,
+            extraversion: 28,
+            agreeableness: 39,
+            neuroticism: 55,
+          },
+          systemPrompt: "너는 백이현이다. 감정보다 증거를 먼저 본다.",
+          relationshipTags: ["evidence-first"],
+        },
+        {
+          id: "advisor-1",
+          name: "[익명 1]",
+          shortName: "익명 1",
+          role: "위험 규칙을 먼저 말하는 생존 조언자",
+          profileKind: "advisor-slot",
+          anonymousLabel: "[익명 1]",
+          revealed: true,
+          provider: "dry-run",
+          model: "dry-run/advisor-1",
+          mbti: "ISTP",
+          ocean: {
+            openness: 50,
+            conscientiousness: 50,
+            extraversion: 50,
+            agreeableness: 50,
+            neuroticism: 50,
+          },
+          systemPrompt: "너는 [익명 1]이다.",
+          relationshipTags: ["advisor-slot"],
+        },
+      ],
+      handouts: {
+        "kang-mujin": {
+          characterId: "kang-mujin",
+          secret: "피해자를 오래전부터 알고 있었다.",
+          desire: "사건 현장의 훼손을 막고 싶다.",
+          objective: "시신 주변의 단서를 보존한다.",
+          relationshipToUser: -1,
+          knownFacts: [],
+          myRelationships: [{ sourceId: "kang-mujin", targetId: "yoon-haeon", descriptor: "distrust", intensity: 4 }],
+          autonomy: 0.72,
+        },
+      },
+    } as never);
+
+    expect(overrides).toEqual([
+      {
+        targetId: "kang-mujin",
+        character: {
+          id: "kang-mujin",
+          name: "백이현",
+          shortName: "이현",
+          role: "폭설 속 산장에 늦게 도착한 법의학자",
+          mbti: "INTJ",
+          ocean: {
+            openness: 61,
+            conscientiousness: 83,
+            extraversion: 28,
+            agreeableness: 39,
+            neuroticism: 55,
+          },
+          autonomy: 0.72,
+          systemPrompt: "너는 백이현이다. 감정보다 증거를 먼저 본다.",
+          relationshipTags: ["evidence-first"],
+          handout: {
+            secret: "피해자를 오래전부터 알고 있었다.",
+            desire: "사건 현장의 훼손을 막고 싶다.",
+            objective: "시신 주변의 단서를 보존한다.",
+            initialRelationshipToUser: -1,
+          },
+          relationships: [{ targetId: "yoon-haeon", descriptor: "distrust", intensity: 4 }],
+        },
+      },
+    ]);
   });
 });

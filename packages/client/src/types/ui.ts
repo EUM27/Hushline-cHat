@@ -36,10 +36,11 @@ export interface PersonaDraft {
   role: string;
   description: string;
   appearance: string;
+  portraitUrl?: string;
   relationshipTags: string[];
 }
 
-export type SetupStep = "scenario" | "persona" | "advisors";
+export type SetupStep = "scenario" | "persona";
 export type VisualThemeId = "moonlight" | "dunkshoot" | "cherryNight";
 
 export interface VisualThemePreset {

@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { characterCardSourceMetadataSchema } from "../engine-v2/schemas.js";
+
+const MAX_IMPORTED_CHARACTER_PROMPT_LENGTH = 100_000;
 
 export const modelProviderIdSchema = z.enum(["nanogpt", "openrouter", "chatgpt"]);
 
@@ -39,6 +42,63 @@ export const advisorDraftSchema = z.object({
   handout: advisorHandoutSchema.optional(),
 });
 
+export const characterOverrideSchema = z.object({
+  targetId: z.string().trim().min(1).max(120),
+  character: z.object({
+    id: z.string().trim().min(1).max(120),
+    name: z.string().trim().min(1).max(120),
+    shortName: z.string().trim().min(1).max(80),
+    role: z.string().trim().min(1).max(1000),
+    profileKind: z.enum(["advisor-slot", "named-actor"]).optional(),
+    anonymousLabel: z.string().trim().min(1).max(80).optional(),
+    mbti: z.string().trim().min(1).max(20),
+    ocean: oceanSchema,
+    autonomy: z.number().min(0).max(1),
+    systemPrompt: z.string().trim().min(1).max(MAX_IMPORTED_CHARACTER_PROMPT_LENGTH),
+    relationshipTags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    handout: z.object({
+      secret: z.string().trim().max(2000),
+      desire: z.string().trim().max(1000),
+      objective: z.string().trim().max(1000),
+      initialRelationshipToUser: z.number().min(-10).max(10),
+      surfacePersonality: z.array(z.string().trim().min(1).max(100)).max(12).optional(),
+      fear: z.string().trim().max(500).optional(),
+      behaviorRules: z.array(z.string().trim().min(1).max(300)).max(12).optional(),
+    }),
+    relationships: z.array(z.object({
+      targetId: z.string().trim().min(1).max(120),
+      descriptor: z.string().trim().min(1).max(300),
+      intensity: z.number().min(-10).max(10),
+    })).max(50),
+    spriteSetId: z.string().trim().min(1).max(120).optional(),
+    avatarId: z.string().trim().min(1).max(120).optional(),
+  }),
+});
+
+export const reusablePersonaProfileSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  shortName: z.string().trim().min(1).max(80).optional(),
+  role: z.string().trim().max(800).optional(),
+  description: z.string().trim().max(2000).optional(),
+  appearance: z.string().trim().max(2000).optional(),
+  portraitUrl: z.string().trim().max(2048).optional(),
+  relationshipTags: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
+});
+
+export const savePersonaProfileBodySchema = z.object({
+  id: z.string().trim().min(1).max(120).optional(),
+  label: z.string().trim().min(1).max(120).optional(),
+  persona: reusablePersonaProfileSchema,
+});
+
+export const saveCharacterCardBodySchema = z.object({
+  id: z.string().trim().min(1).max(120).optional(),
+  name: z.string().trim().min(1).max(120).optional(),
+  sourceFileName: z.string().trim().max(200).optional(),
+  sourceMetadata: characterCardSourceMetadataSchema.optional(),
+  character: characterOverrideSchema.shape.character,
+});
+
 export const personaDraftSchema = z.object({
   name: z.string().trim().min(1).max(80),
   shortName: z.string().trim().min(1).max(80).optional(),
@@ -59,6 +119,7 @@ export const createSessionBodySchema = z.object({
     relationshipTags: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   }).optional(),
   advisors: z.array(advisorDraftSchema).min(1).max(4).optional(),
+  characterOverrides: z.array(characterOverrideSchema).max(8).optional(),
   connections: z.record(z.string(), modelConnectionSchema).optional(),
 });
 
@@ -94,4 +155,8 @@ export const cardImportBodySchema = z.object({
 });
 
 export type AdvisorDraftInput = z.infer<typeof advisorDraftSchema>;
+export type CharacterOverrideInput = z.infer<typeof characterOverrideSchema>;
 export type ModelConnectionInput = z.infer<typeof modelConnectionSchema>;
+export type ReusablePersonaProfileInput = z.infer<typeof reusablePersonaProfileSchema>;
+export type SaveCharacterCardInput = z.infer<typeof saveCharacterCardBodySchema>;
+export type SavePersonaProfileInput = z.infer<typeof savePersonaProfileBodySchema>;

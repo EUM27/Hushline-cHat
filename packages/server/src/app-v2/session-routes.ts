@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { resolve } from "node:path";
 import type {
+  CharacterDefinition,
   ModelConnection,
   ScenarioPack,
   SessionStateV2,
@@ -9,12 +10,12 @@ import type {
   TurnResultV2,
   WorldState,
 } from "@hushline/shared";
-import { loadScenarioPack, createInitialWorldState, runTurnV2, rollbackTurn } from "../engine-v2/index.js";
+import { loadScenarioPack, createInitialWorldState, replaceCharacterSlot, runTurnV2, rollbackTurn } from "../engine-v2/index.js";
 import { buildMemoryChunksFromTurn, scoreMemoryCandidate, seedMemoryEntities } from "../engine-v2/memory-cortex.js";
 import type { MemoryCortexStore } from "../store/memory-cortex-store.js";
 import type { SessionStoreV2 } from "../store/sqlite-store-v2.js";
 import { applyAdvisorDrafts, packWithSessionCharacters } from "./advisor-drafts.js";
-import { advanceBodySchema, createSessionBodySchema, rerollBodySchema } from "./schemas.js";
+import { advanceBodySchema, createSessionBodySchema, rerollBodySchema, type CharacterOverrideInput } from "./schemas.js";
 import { toClientSession } from "./session-presenter.js";
 import { resolveUserLabel } from "./utils.js";
 
@@ -40,14 +41,14 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       return context.json({ error: "Invalid session request", details: parsed.error.issues }, 400);
     }
 
-    const { scenarioPackId, persona, advisors } = parsed.data;
+    const { scenarioPackId, persona, advisors, characterOverrides } = parsed.data;
     const packResult = loadScenarioPack(resolve(scenariosDir, scenarioPackId));
 
     if (!packResult.success) {
       return context.json({ error: "Scenario pack failed to load", details: packResult.errors }, 400);
     }
 
-    const pack = applyAdvisorDrafts(packResult.pack, advisors);
+    const pack = applyCharacterOverrides(applyAdvisorDrafts(packResult.pack, advisors), characterOverrides);
     const sessionId = crypto.randomUUID();
     const worldState = createInitialWorldState(sessionId, pack);
     const handouts: SessionStateV2["handouts"] = {};
@@ -311,6 +312,62 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
 
     return context.json({ session: toClientSession(nextSession, loadClientScenarioPack(nextSession)) });
   });
+}
+
+function applyCharacterOverrides(pack: ScenarioPack, overrides?: CharacterOverrideInput[]): ScenarioPack {
+  if (!overrides?.length) {
+    return pack;
+  }
+
+  let characters = pack.characters;
+  for (const override of overrides) {
+    const original = characters.find((character) => character.id === override.targetId);
+    if (!original) {
+      continue;
+    }
+
+    characters = replaceCharacterSlot(
+      characters,
+      override.targetId,
+      characterOverrideToDefinition(override.character, original),
+      { preserveOriginalCharacterization: false },
+    );
+  }
+
+  return { ...pack, characters };
+}
+
+function characterOverrideToDefinition(
+  character: CharacterOverrideInput["character"],
+  original: CharacterDefinition,
+): CharacterDefinition {
+  return {
+    id: original.id,
+    name: character.name,
+    shortName: character.shortName,
+    role: character.role,
+    profileKind: original.profileKind,
+    ...(character.anonymousLabel ? { anonymousLabel: character.anonymousLabel } : {}),
+    mbti: character.mbti,
+    ocean: { ...character.ocean },
+    autonomy: character.autonomy,
+    systemPrompt: character.systemPrompt,
+    ...(character.relationshipTags?.length ? { relationshipTags: [...character.relationshipTags] } : {}),
+    handout: {
+      secret: character.handout.secret,
+      desire: character.handout.desire,
+      objective: character.handout.objective,
+      initialRelationshipToUser: character.handout.initialRelationshipToUser,
+      ...(character.handout.surfacePersonality?.length
+        ? { surfacePersonality: [...character.handout.surfacePersonality] }
+        : {}),
+      ...(character.handout.fear ? { fear: character.handout.fear } : {}),
+      ...(character.handout.behaviorRules?.length ? { behaviorRules: [...character.handout.behaviorRules] } : {}),
+    },
+    relationships: [],
+    ...(character.spriteSetId ? { spriteSetId: character.spriteSetId } : {}),
+    ...(character.avatarId ? { avatarId: character.avatarId } : {}),
+  };
 }
 
 function buildRouteMemoryCandidates(
