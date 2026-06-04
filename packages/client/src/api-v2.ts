@@ -94,6 +94,69 @@ export interface ProviderConnectionTestResponse {
   error?: string;
 }
 
+export interface SessionPersonaInput {
+  name?: string;
+  shortName?: string;
+  role?: string;
+  description?: string;
+  appearance?: string;
+  relationshipTags?: string[];
+}
+
+export interface CharacterOverrideInput {
+  targetId: string;
+  character: ImportedCharacterCard;
+}
+
+export interface ReusablePersonaProfile {
+  name: string;
+  shortName?: string;
+  role?: string;
+  description?: string;
+  appearance?: string;
+  portraitUrl?: string;
+  relationshipTags: string[];
+}
+
+export interface PersonaLibraryEntry {
+  id: string;
+  label: string;
+  persona: ReusablePersonaProfile;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CharacterCardSourceFormat =
+  | "png-chara-v2"
+  | "png-ccv3"
+  | "json-v2"
+  | "json-v3"
+  | "json-unknown";
+
+export interface CharacterCardSourceMetadata {
+  sourceFileName?: string;
+  sourceFormat: CharacterCardSourceFormat;
+  cardSpec?: string;
+  cardSpecVersion?: string;
+  creator?: string;
+  sourceUrl?: string;
+  extensionKeys: string[];
+  hasFirstMessage: boolean;
+  alternateGreetingCount: number;
+  hasScenario: boolean;
+  hasCharacterBook: boolean;
+}
+
+export interface CharacterCardLibraryEntry {
+  id: string;
+  name: string;
+  sourceFileName?: string;
+  sourceMetadata?: CharacterCardSourceMetadata;
+  character: ImportedCharacterCard;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Scenario Listing ──
 
 export async function listScenarios(): Promise<string[]> {
@@ -121,27 +184,63 @@ export async function getScenarioDetail(packId: string): Promise<V2ScenarioDetai
 
 export async function createSessionV2(
   scenarioPackId: string,
-  personaName?: string,
+  personaInput?: string | SessionPersonaInput,
   advisors?: AdvisorDraft[],
   connections?: Record<string, ModelConnection>,
+  characterOverrides?: CharacterOverrideInput[],
 ): Promise<ClientSessionState> {
+  const persona = normalizePersonaInput(personaInput);
   try {
     const response = await fetch("/api/v2/sessions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         scenarioPackId,
-        persona: personaName ? { name: personaName } : undefined,
+        persona,
         advisors,
         connections,
+        characterOverrides,
       }),
     });
     if (!response.ok) throw new Error("세션을 생성할 수 없습니다.");
     const payload = (await response.json()) as V2SessionResponse;
     return payload.session;
   } catch {
-    return createOfflineSession(scenarioPackId, personaName, advisors);
+    return createOfflineSession(scenarioPackId, personaInput, advisors);
   }
+}
+
+function normalizePersonaInput(input?: string | SessionPersonaInput): SessionPersonaInput | undefined {
+  if (typeof input === "string") {
+    const name = input.trim();
+    return name ? { name } : undefined;
+  }
+  if (!input) return undefined;
+
+  const name = cleanText(input.name);
+  const shortName = cleanText(input.shortName);
+  const role = cleanText(input.role);
+  const description = cleanText(input.description);
+  const appearance = cleanText(input.appearance);
+  const relationshipTags = (input.relationshipTags ?? [])
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+
+  const persona: SessionPersonaInput = {};
+  if (name) persona.name = name;
+  if (shortName) persona.shortName = shortName;
+  if (role) persona.role = role;
+  if (description) persona.description = description;
+  if (appearance) persona.appearance = appearance;
+  if (relationshipTags.length) persona.relationshipTags = relationshipTags;
+
+  return Object.keys(persona).length > 0 ? persona : undefined;
+}
+
+function cleanText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 // ── Draft Makers ──
@@ -171,6 +270,81 @@ export async function generateAdvisorDraftsV2(
   });
   if (!response.ok) throw new Error("조언자 초안을 만들 수 없습니다.");
   return (await response.json()) as V2AdvisorMakerResponse;
+}
+
+// ── Reusable profile library ──
+
+export async function listPersonaProfiles(): Promise<PersonaLibraryEntry[]> {
+  try {
+    const response = await fetch("/api/v2/personas");
+    if (!response.ok) throw new Error("페르소나 목록을 불러올 수 없습니다.");
+    const payload = (await response.json()) as { personas: PersonaLibraryEntry[] };
+    return payload.personas;
+  } catch {
+    return [];
+  }
+}
+
+export async function savePersonaProfile(input: {
+  id?: string;
+  label?: string;
+  persona: ReusablePersonaProfile;
+}): Promise<PersonaLibraryEntry> {
+  const response = await fetch("/api/v2/personas", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { persona: PersonaLibraryEntry }
+    | { error: string }
+    | null;
+
+  if (!response.ok || !payload || !("persona" in payload)) {
+    const message = payload && "error" in payload ? payload.error : "페르소나를 저장할 수 없습니다.";
+    throw new Error(message);
+  }
+
+  return payload.persona;
+}
+
+export async function listCharacterCards(): Promise<CharacterCardLibraryEntry[]> {
+  try {
+    const response = await fetch("/api/v2/character-cards");
+    if (!response.ok) throw new Error("캐릭터 카드 목록을 불러올 수 없습니다.");
+    const payload = (await response.json()) as { characterCards: CharacterCardLibraryEntry[] };
+    return payload.characterCards;
+  } catch {
+    return [];
+  }
+}
+
+export async function saveCharacterCard(input: {
+  id?: string;
+  name?: string;
+  sourceFileName?: string;
+  sourceMetadata?: CharacterCardSourceMetadata;
+  character: ImportedCharacterCard;
+}): Promise<CharacterCardLibraryEntry> {
+  const response = await fetch("/api/v2/character-cards", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...input,
+      name: input.name ?? input.character.name,
+    }),
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | { characterCard: CharacterCardLibraryEntry }
+    | { error: string }
+    | null;
+
+  if (!response.ok || !payload || !("characterCard" in payload)) {
+    const message = payload && "error" in payload ? payload.error : "캐릭터 카드를 저장할 수 없습니다.";
+    throw new Error(message);
+  }
+
+  return payload.characterCard;
 }
 
 export async function testProviderConnection(
@@ -250,4 +424,90 @@ export async function undoV2(sessionId: string): Promise<ClientSessionState> {
   } catch {
     return undoOfflineSession(sessionId);
   }
+}
+
+// ──────────────────────────────────────────────
+// Character card import (PNG / JSON)
+// ──────────────────────────────────────────────
+
+export interface ImportedCharacterCard {
+  id: string;
+  name: string;
+  shortName: string;
+  role: string;
+  mbti: string;
+  autonomy: number;
+  ocean: {
+    openness: number;
+    conscientiousness: number;
+    extraversion: number;
+    agreeableness: number;
+    neuroticism: number;
+  };
+  systemPrompt: string;
+  relationshipTags?: string[];
+  handout: {
+    secret: string;
+    desire: string;
+    objective: string;
+    initialRelationshipToUser: number;
+    surfacePersonality?: string[];
+    fear?: string;
+    behaviorRules?: string[];
+  };
+  relationships: Array<{ targetId: string; descriptor: string; intensity: number }>;
+  spriteSetId?: string;
+  avatarId?: string;
+}
+
+export interface ImportedCharacterCardResult {
+  character: ImportedCharacterCard;
+  metadata: CharacterCardSourceMetadata;
+  characterCard?: CharacterCardLibraryEntry;
+}
+
+/** Read a File as base64 (without the data URL prefix). */
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("파일을 읽을 수 없습니다."));
+        return;
+      }
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("파일 읽기 실패"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Upload a character card file (PNG or JSON) and return the converted character preview.
+ */
+export async function importCharacterCard(file: File): Promise<ImportedCharacterCardResult> {
+  const isPng = file.type === "image/png" || /\.png$/i.test(file.name);
+  const body = isPng
+    ? { kind: "png" as const, data: await readFileAsBase64(file), fileName: file.name }
+    : { kind: "json" as const, data: await file.text(), fileName: file.name };
+
+  const response = await fetch("/api/v2/character-card/import", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const payload = (await response.json().catch(() => null)) as
+    | ImportedCharacterCardResult
+    | { error: string }
+    | null;
+
+  if (!response.ok || !payload || !("character" in payload) || !("metadata" in payload)) {
+    const message = payload && "error" in payload ? payload.error : "카드를 불러오지 못했습니다.";
+    throw new Error(message);
+  }
+
+  return payload;
 }

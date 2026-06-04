@@ -46,6 +46,39 @@ export interface CharacterSummary {
   relationshipToUser: number;
 }
 
+/** Director-only player persona identity. May use player-agency framing. */
+export interface DirectorPersonaBrief {
+  name: string;
+  shortName: string;
+  role?: string;
+  description?: string;
+  appearance?: string;
+  relationshipTags?: string[];
+}
+
+/** Character-visible persona identity, framed as a world-internal counterpart. */
+export interface CharacterPersonaBrief {
+  displayName: string;
+  nameKnown: boolean;
+  role?: string;
+  description?: string;
+  appearance?: string;
+  relationshipTags?: string[];
+}
+
+/** Narrator-visible persona identity. Limited to observable continuity. */
+export interface NarratorPersonaBrief {
+  displayName: string;
+  nameKnown: boolean;
+  role?: string;
+  appearance?: string;
+}
+
+/** Runtime guard aliases for user agency protection. */
+export interface PersonaGuardContext {
+  names: string[];
+}
+
 export interface OmniscientContext {
   allSecrets: Record<string, string>;
   allDesires: Record<string, string>;
@@ -57,4 +90,6 @@ export interface OmniscientContext {
   eventTriggers: EventTrigger[];
   genreGoals: string;
   recentEvents: NarrativeEvent[];
+  /** Director-only player persona identity. */
+  persona?: DirectorPersonaBrief;
 }

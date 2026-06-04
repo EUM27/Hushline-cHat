@@ -8,4 +8,5 @@ export * from "./engine-v2/case.js";
 export * from "./engine-v2/context.js";
 export * from "./engine-v2/scenario.js";
 export * from "./engine-v2/session.js";
+export * from "./engine-v2/memory-cortex.js";
 export * from "./engine-v2/case-board.js";

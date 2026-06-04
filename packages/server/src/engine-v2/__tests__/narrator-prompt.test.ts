@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { ModelConnection, PublicContext, ScenarioPack } from "@hushline/shared";
+import type { ModelConnection, PublicContext, ScenarioPack, SessionStateV2 } from "@hushline/shared";
+import { buildNarratorPersonaBrief } from "../context-builder";
 import { invokeNarrator } from "../narrator";
 
 describe("narrator prompt boundaries", () => {
@@ -45,6 +46,47 @@ describe("narrator prompt boundaries", () => {
     expect(capturedSystemPrompt).toContain("Advance the story through external events");
     expect(capturedUserPayload).toContain("{{user}}: 무진 씨, 지금 나가도 되나요?");
     expect(capturedUserPayload).not.toContain("유저: 무진 씨");
+  });
+
+  test("uses only observable persona fields for narration", async () => {
+    let capturedSystemPrompt = "";
+    globalThis.fetch = (async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        messages?: Array<{ role: string; content: string }>;
+      };
+      capturedSystemPrompt = body.messages?.find((message) => message.role === "system")?.content ?? "";
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "젖은 운동화가 현관 바닥에 작은 물자국을 남긴다." } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as typeof fetch;
+    const persona: SessionStateV2["persona"] = {
+      id: "user",
+      name: "정해윤",
+      shortName: "해윤",
+      role: "공유주택에 막 들어온 새 입주자",
+      description: "속으로는 의심을 거두지 못한다.",
+      appearance: "비에 젖은 회색 후드와 낡은 운동화를 신고 있다.",
+    };
+
+    await invokeNarrator(
+      "입주자가 현관에 들어선 직후의 공간 반응을 잡는다.",
+      "action",
+      publicContext(),
+      "현관에 멈춰 서서 주변을 훑어본다.",
+      pack(),
+      connection(),
+      buildNarratorPersonaBrief(persona, false),
+    );
+
+    expect(capturedSystemPrompt).toContain("[상대 인물 관찰 정보]");
+    expect(capturedSystemPrompt).toContain("표시: 상대 인물");
+    expect(capturedSystemPrompt).toContain("관찰 가능한 외형: 비에 젖은 회색 후드와 낡은 운동화를 신고 있다.");
+    expect(capturedSystemPrompt).toContain("공개 역할: 공유주택에 막 들어온 새 입주자");
+    expect(capturedSystemPrompt).not.toContain("정해윤");
+    expect(capturedSystemPrompt).not.toContain("속으로는 의심");
   });
 });
 

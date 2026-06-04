@@ -83,7 +83,7 @@ describe("default phone app", () => {
 });
 
 describe("phone app focus after outgoing chat", () => {
-  test("opens messenger when the latest visible message is the user's phone chat", () => {
+  test("does not open messenger just because the latest visible message is user input", () => {
     const availability = getPhoneAppAvailability(caseBoard({ isCaseScenario: true }), "scene-first", 1);
 
     expect(shouldOpenMessengerForLatestOutgoingMessage("casefile", availability, {
@@ -93,7 +93,7 @@ describe("phone app focus after outgoing chat", () => {
       content: "내 말 보여?",
       inputMode: "chat",
       createdAt: "2026-05-25T00:00:01.000Z",
-    })).toBe(true);
+    })).toBe(false);
   });
 
   test("does not steal focus for non-phone scene actions", () => {

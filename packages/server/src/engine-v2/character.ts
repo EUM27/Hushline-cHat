@@ -16,6 +16,7 @@ import type {
   ActorReply,
   ExpressionId,
   CaseAnswerScope,
+  CharacterPersonaBrief,
 } from "@hushline/shared";
 import { completeWithConnection, isConnectionReady } from "../providers/adapters/index.js";
 import { sanitizeCharacterOutput } from "./output-sanitizer.js";
@@ -54,6 +55,7 @@ export async function invokeCharacter(
   pack: ScenarioPack,
   connection?: ModelConnection,
   answerScope?: CaseAnswerScope,
+  personaBrief?: CharacterPersonaBrief,
 ): Promise<CharacterInvocationResult> {
   if (!isConnectionReady(connection)) {
     return {
@@ -65,7 +67,7 @@ export async function invokeCharacter(
 
   const userNameIntroduced = hasUserIntroducedName(messages, personaName, userInput);
   const systemPrompt = buildCharacterSystemPrompt(
-    character, handout, directorIntent, inputMode, publicContext, pack, personaName, userNameIntroduced, answerScope,
+    character, handout, directorIntent, inputMode, publicContext, pack, personaName, userNameIntroduced, answerScope, personaBrief,
   );
   const chatContext = buildCharacterChatContext(messages, character.id, personaName, userNameIntroduced);
   const contextMessages = [
@@ -122,6 +124,7 @@ function buildCharacterSystemPrompt(
   personaName: string,
   userNameIntroduced: boolean,
   answerScope?: CaseAnswerScope,
+  personaBrief?: CharacterPersonaBrief,
 ): string {
   const displayName = character.anonymousLabel ?? character.name;
   const actorBrief = buildActorBrief(directorIntent, character, handout, publicContext, pack);
@@ -138,11 +141,10 @@ function buildCharacterSystemPrompt(
     "[Character Identity]",
     character.systemPrompt,
     "",
-    "[사용자/플레이어]",
-    "{{user}}는 사용자/플레이어다.",
-    "사용자 표시명은 시스템/UI용 메타 정보다.",
-    ...formatUserNameVisibility(personaName, userNameIntroduced),
-    "사용자와 모든 캐릭터는 서로 다른 인물이다.",
+    ...formatSceneCounterpartForCharacter(
+      personaBrief ?? buildFallbackCharacterPersonaBrief(personaName, userNameIntroduced),
+    ),
+    "상대 인물과 모든 캐릭터는 서로 다른 인물이다.",
     "",
     "[그룹 인물 목록]",
     formatCharacterRoster(pack.characters, character.id),
@@ -237,28 +239,34 @@ function buildCharacterSystemPrompt(
   return sections.filter(Boolean).join("\n");
 }
 
-function formatUserNameVisibility(personaName: string, userNameIntroduced: boolean): string[] {
-  if (isPlaceholderPersonaName(personaName)) {
-    return [
-      "사용자 표시명(메타/UI): (없음)",
-      "장면 내 사용자 이름 공개 상태: 미소개",
-      "이름이 공개되기 전에는 이름 대신 '당신', '그쪽', 상황에 맞는 호칭을 쓴다.",
-    ];
-  }
-
-  const normalizedName = normalizePersonaName(personaName);
-  if (userNameIntroduced) {
-    return [
-      `사용자 표시명(메타/UI): ${normalizedName}`,
-      `장면 내 사용자 이름 공개 상태: 공개됨. 이 캐릭터는 ${normalizedName}이라는 이름을 들어 알고 있다.`,
-    ];
-  }
-
-  return [
-    `사용자 표시명(메타/UI): ${normalizedName}`,
-    `장면 내 사용자 이름 공개 상태: 미소개. 이 캐릭터는 ${normalizedName}이라는 이름을 아직 소개받지 않았다.`,
-    `미소개 상태에서는 ${normalizedName}을 발화에 쓰지 않는다. 이름 대신 '당신', '그쪽', 상황에 맞는 호칭을 쓴다.`,
+function formatSceneCounterpartForCharacter(persona: CharacterPersonaBrief): string[] {
+  const lines = [
+    "[상대 인물 정보]",
+    "상대는 같은 장면 안의 독립된 인물이다.",
+    `표시: ${persona.displayName}`,
+    persona.nameKnown
+      ? "이름 공개 상태: 장면 안에서 호칭을 들은 상태다."
+      : "이름 공개 상태: 미소개. 이름을 추측하거나 발화하지 않는다.",
+    ...(persona.role ? [`공개 역할: ${persona.role}`] : []),
+    ...(persona.description ? [`공개 설명: ${persona.description}`] : []),
+    ...(persona.appearance ? [`관찰 가능한 외형: ${persona.appearance}`] : []),
+    ...(persona.relationshipTags?.length ? [`관계 태그: ${persona.relationshipTags.join(", ")}`] : []),
+    "상대의 행동, 대사, 감정, 결정을 대신 서술하지 않는다.",
+    "",
   ];
+  return lines;
+}
+
+function buildFallbackCharacterPersonaBrief(
+  personaName: string,
+  userNameIntroduced: boolean,
+): CharacterPersonaBrief {
+  const normalizedName = normalizePersonaName(personaName);
+  const nameKnown = userNameIntroduced && !isPlaceholderPersonaName(normalizedName);
+  return {
+    displayName: nameKnown ? normalizedName : "상대 인물",
+    nameKnown,
+  };
 }
 
 function formatAnswerScopeForCharacter(characterId: string, answerScope: CaseAnswerScope | undefined): string[] {

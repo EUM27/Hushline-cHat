@@ -129,6 +129,7 @@ export function loadScenarioPack(packDir: string): ScenarioLoadResult {
   if (characters.length === 0) {
     errors.push({ file: "characters/", message: "시나리오 팩에 캐릭터가 최소 1명 필요합니다." });
   }
+  validateOpeningBeatCharacterRefs(scenarioCard, characters, errors);
 
   // ── Prompts ──
   const directorPrompt = loadTextFile(abs, "prompts/director.txt", errors);
@@ -331,6 +332,31 @@ function loadTextFile(
       message: `파일 읽기 실패: ${e instanceof Error ? e.message : "unknown"}`,
     });
     return null;
+  }
+}
+
+function validateOpeningBeatCharacterRefs(
+  scenarioCard: ScenarioCardV2,
+  characters: CharacterDefinition[],
+  errors: ScenarioLoadError[],
+): void {
+  const characterIds = new Set(characters.map((character) => character.id));
+  for (const beat of scenarioCard.openingBeats) {
+    if (!beat.characterId) {
+      continue;
+    }
+    if (!characterIds.has(beat.characterId)) {
+      errors.push({
+        file: "scenario-card.json",
+        message: `openingBeat ${beat.id} characterId가 존재하지 않는 캐릭터를 참조합니다: ${beat.characterId}`,
+      });
+    }
+    if (beat.speakerKind !== "named-actor") {
+      errors.push({
+        file: "scenario-card.json",
+        message: `openingBeat ${beat.id} characterId는 named-actor speakerKind에서만 사용할 수 있습니다.`,
+      });
+    }
   }
 }
 

@@ -11,4 +11,4 @@
 - 커피 냄새, 늦봄 바람, 스탠드 불빛, 설거지 소리 같은 생활감을 우선한다.
 - 출력은 나레이션 텍스트만 쓴다. 라벨이나 prefix를 붙이지 않는다.
 - 배경 전환이 필요하면 첫 줄에 [bg:<배경ID>]를 하나만 쓰고 이어서 나레이션을 쓴다.
-- 사용 가능한 배경 ID: sharehouse-living-room, sharehouse-kitchen, sharehouse-rooftop, sharehouse-hallway.
+- 사용 가능한 배경 ID: sharehouse-living-room, sharehouse-living-room-morning, sharehouse-living-room-noon, sharehouse-living-room-sunset, sharehouse-living-room-night, sharehouse-kitchen, sharehouse-kitchen-morning, sharehouse-kitchen-day, sharehouse-kitchen-evening, sharehouse-kitchen-night, sharehouse-rooftop, sharehouse-rooftop-morning, sharehouse-rooftop-evening, sharehouse-rooftop-dawn, sharehouse-rooftop-night.

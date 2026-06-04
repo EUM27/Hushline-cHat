@@ -10,7 +10,7 @@ import type {
   StateLawSnapshot,
   TurnMessage,
 } from "@hushline/shared";
-import type { V2AdvanceResponse, V2ScenarioDetailResponse } from "./api-v2";
+import type { SessionPersonaInput, V2AdvanceResponse, V2ScenarioDetailResponse } from "./api-v2";
 
 const offlineSessionStore = new Map<string, ClientSessionState>();
 
@@ -98,18 +98,21 @@ export const offlineScenarioDetail: V2ScenarioDetailResponse = {
 
 export function createOfflineSession(
   scenarioPackId: string,
-  personaName?: string,
+  personaInput?: string | SessionPersonaInput,
   advisorDrafts?: AdvisorDraft[],
 ): ClientSessionState {
   const id = `offline-${crypto.randomUUID()}`;
   const createdAt = new Date().toISOString();
+  const personaProfile = normalizeOfflinePersona(personaInput);
   const persona = {
     id: "user",
-    name: personaName?.trim() || "나",
-    shortName: personaName?.trim() || "나",
-    role: "단톡방에 초대된 사용자",
+    name: personaProfile.name || "나",
+    shortName: personaProfile.shortName || personaProfile.name || "나",
+    role: personaProfile.role || "단톡방에 초대된 인물",
     mbti: "UNKNOWN",
-    relationshipTags: [],
+    relationshipTags: personaProfile.relationshipTags ?? [],
+    ...(personaProfile.description ? { description: personaProfile.description } : {}),
+    ...(personaProfile.appearance ? { appearance: personaProfile.appearance } : {}),
   };
   const characters = buildCharacters(advisorDrafts);
   const firstCharacter = characters[0];
@@ -233,6 +236,22 @@ export function createOfflineSession(
 
   offlineSessionStore.set(id, session);
   return session;
+}
+
+function normalizeOfflinePersona(input?: string | SessionPersonaInput): SessionPersonaInput {
+  if (typeof input === "string") {
+    return { name: input.trim() };
+  }
+  return {
+    ...(input?.name?.trim() ? { name: input.name.trim() } : {}),
+    ...(input?.shortName?.trim() ? { shortName: input.shortName.trim() } : {}),
+    ...(input?.role?.trim() ? { role: input.role.trim() } : {}),
+    ...(input?.description?.trim() ? { description: input.description.trim() } : {}),
+    ...(input?.appearance?.trim() ? { appearance: input.appearance.trim() } : {}),
+    ...(input?.relationshipTags?.length
+      ? { relationshipTags: input.relationshipTags.map((tag) => tag.trim()).filter(Boolean) }
+      : {}),
+  };
 }
 
 export function getOfflineSession(sessionId: string): ClientSessionState | null {

@@ -128,6 +128,17 @@ describe("Hushline API", () => {
     expect(payload.backgrounds.some((asset: { id: string }) => asset.id === "lodge-foyer")).toBe(
       true,
     );
+    for (const id of ["convenience-store-dawn", "convenience-store-midnight", "convenience-store-morning"]) {
+      const background = payload.backgrounds.find((asset: { id: string }) => asset.id === id);
+      expect(background).toBeDefined();
+      expect(background.tags).toContain("global");
+      expect(background.tags).toContain("convenience-store");
+    }
+    for (const id of ["sharehouse-living-room-morning", "sharehouse-kitchen-night", "sharehouse-rooftop-evening"]) {
+      const background = payload.backgrounds.find((asset: { id: string }) => asset.id === id);
+      expect(background).toBeDefined();
+      expect(background.tags).toContain("scenario:shared-house-romance");
+    }
     expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "evan")).toBe(
       false,
     );
@@ -138,6 +149,15 @@ describe("Hushline API", () => {
       true,
     );
     expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "yoon-seha")).toBe(
+      true,
+    );
+    expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "seo-yujin")).toBe(
+      true,
+    );
+    expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "kang-minjae")).toBe(
+      true,
+    );
+    expect(payload.sprites.some((asset: { characterId: string }) => asset.characterId === "han-doyun")).toBe(
       true,
     );
   });

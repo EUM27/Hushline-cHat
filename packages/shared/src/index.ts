@@ -50,6 +50,8 @@ export interface PersonaDraft {
   name: string;
   shortName?: string;
   role: string;
+  description?: string;
+  appearance?: string;
   relationshipTags: string[];
 }
 
@@ -84,6 +86,10 @@ export interface PersonaProfile {
   role: string;
   mbti: string;
   relationshipTags: string[];
+  /** Free-form persona description (optional, player-authored). */
+  description?: string;
+  /** Observable appearance, for narrator/visual continuity. */
+  appearance?: string;
 }
 
 export interface ScenarioOpeningBeat {
@@ -91,6 +97,7 @@ export interface ScenarioOpeningBeat {
   role: "narrator" | "system";
   speakerKind: SpeakerKind;
   speakerLabel: string;
+  characterId?: string;
   content: string;
 }
 

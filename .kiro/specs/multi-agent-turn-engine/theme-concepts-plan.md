@@ -76,9 +76,7 @@ ScenarioShell                  ← 장르/시나리오별 셸 컨테이너
 | 액센트 | `#FFD700` (택시 옐로우) |
 | 폰트 | 본문 Pretendard, 라벨 JetBrains Mono |
 | 모션 | 빠른 fade, scanline 깜빡임, 약한 chromatic aberration |
-| 표면 | 빗방울 글래스, 네온 글로우, 약한 motion blur |
-| 어울림 | SF 스릴러, 사이버펑크, 추적극 |
-| 배경 그레이딩 | wet street + magenta highlight |
+| 표면 | 빗방울 글래스, 네온 글로우, 약dt |
 
 ---
 

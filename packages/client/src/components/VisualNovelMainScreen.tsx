@@ -4,7 +4,7 @@ import type { AssetManifest, ChatMessage, ClientSessionState, ProviderProfile } 
 import type { ConnectionStatus, VisualThemePreset } from "../types/ui";
 import { MessageContent } from "./ChatTimeline";
 import {
-  findSpriteUrl,
+  findCharacterSpriteUrl,
   formatKoreanTime,
   getStageCharacterId,
   getLatestStageMessage,
@@ -81,7 +81,7 @@ export function VisualNovelMainScreen({
   const stageCharacter = stageCharacterId
     ? session.characters.find((character) => character.id === stageCharacterId)
     : undefined;
-  const spriteUrl = findSpriteUrl(assets, stageCharacter?.id, stageExpression);
+  const spriteUrl = findCharacterSpriteUrl(assets, stageCharacter, stageExpression);
   const visibleLogMessages = visibleMessages.filter(isStageMessage);
 
   useEffect(() => {

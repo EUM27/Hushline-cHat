@@ -154,8 +154,9 @@ describe("scenario multi-turn playthrough integration", () => {
       if (pack.manifest.uiMode === "messenger-first") {
         expect(initialApps.messenger).toBe(true);
         expect(initialApps.defaultApp).toBe("messenger");
-      } else if (!initialApps.messenger) {
-        expect(appHistory.some((availability) => availability.messenger)).toBe(true);
+      } else {
+        const finalPhoneChannelCount = countPhoneChannelMessages(session.messages);
+        expect(appHistory.some((availability) => availability.messenger)).toBe(finalPhoneChannelCount > 0);
       }
 
       if ((pack.sceneDevices?.length ?? 0) > 0) {

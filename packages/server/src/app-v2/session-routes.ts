@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { resolve } from "node:path";
 import type {
+  CharacterDefinition,
   ModelConnection,
   ScenarioPack,
   SessionStateV2,
@@ -9,10 +10,12 @@ import type {
   TurnResultV2,
   WorldState,
 } from "@hushline/shared";
-import { loadScenarioPack, createInitialWorldState, runTurnV2, rollbackTurn } from "../engine-v2/index.js";
+import { loadScenarioPack, createInitialWorldState, replaceCharacterSlot, runTurnV2, rollbackTurn } from "../engine-v2/index.js";
+import { buildMemoryChunksFromTurn, scoreMemoryCandidate, seedMemoryEntities } from "../engine-v2/memory-cortex.js";
+import type { MemoryCortexStore } from "../store/memory-cortex-store.js";
 import type { SessionStoreV2 } from "../store/sqlite-store-v2.js";
 import { applyAdvisorDrafts, packWithSessionCharacters } from "./advisor-drafts.js";
-import { advanceBodySchema, createSessionBodySchema, rerollBodySchema } from "./schemas.js";
+import { advanceBodySchema, createSessionBodySchema, rerollBodySchema, type CharacterOverrideInput } from "./schemas.js";
 import { toClientSession } from "./session-presenter.js";
 import { resolveUserLabel } from "./utils.js";
 
@@ -20,6 +23,7 @@ const MAX_TURN_CHECKPOINTS = 50;
 
 export interface RegisterSessionRoutesOptions {
   store: SessionStoreV2;
+  memoryStore?: MemoryCortexStore;
   scenariosDir: string;
 }
 
@@ -37,14 +41,14 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       return context.json({ error: "Invalid session request", details: parsed.error.issues }, 400);
     }
 
-    const { scenarioPackId, persona, advisors } = parsed.data;
+    const { scenarioPackId, persona, advisors, characterOverrides } = parsed.data;
     const packResult = loadScenarioPack(resolve(scenariosDir, scenarioPackId));
 
     if (!packResult.success) {
       return context.json({ error: "Scenario pack failed to load", details: packResult.errors }, 400);
     }
 
-    const pack = applyAdvisorDrafts(packResult.pack, advisors);
+    const pack = applyCharacterOverrides(applyAdvisorDrafts(packResult.pack, advisors), characterOverrides);
     const sessionId = crypto.randomUUID();
     const worldState = createInitialWorldState(sessionId, pack);
     const handouts: SessionStateV2["handouts"] = {};
@@ -63,6 +67,7 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     }
 
     const personaName = persona?.name ?? "{{유저}}";
+    const personaShortName = persona?.shortName ?? personaName;
     const openingMessages: TurnMessage[] = pack.scenarioCard.openingBeats.map((beat) => ({
       id: crypto.randomUUID(),
       sessionId,
@@ -70,6 +75,7 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       content: beat.content,
       speakerKind: beat.speakerKind,
       speakerLabel: resolveUserLabel(beat.speakerLabel, personaName),
+      ...(beat.characterId ? { characterId: beat.characterId } : {}),
       isOpeningBeat: true,
       createdAt: new Date().toISOString(),
     }));
@@ -81,7 +87,11 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       persona: {
         id: "user",
         name: personaName,
-        shortName: personaName,
+        shortName: personaShortName,
+        ...(persona?.role ? { role: persona.role } : {}),
+        ...(persona?.description ? { description: persona.description } : {}),
+        ...(persona?.appearance ? { appearance: persona.appearance } : {}),
+        ...(persona?.relationshipTags?.length ? { relationshipTags: persona.relationshipTags } : {}),
       },
       worldState,
       characters: pack.characters,
@@ -91,6 +101,21 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
+    options.memoryStore?.saveChunks(buildMemoryChunksFromTurn({
+      sessionId,
+      scenarioPackId,
+      turnNumber: 0,
+      messages: openingMessages,
+      createdAt: session.createdAt,
+    }));
+    options.memoryStore?.saveEntities(seedMemoryEntities({
+      sessionId,
+      scenarioPackId,
+      persona: session.persona,
+      characters: session.characters,
+      turnNumber: 0,
+    }));
 
     store.saveSession(session);
     return context.json({ session: toClientSession(session, pack) }, 201);
@@ -121,10 +146,17 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     }
 
     const runtimePack = packWithSessionCharacters(packResult.pack, session);
+    const memoryCandidates = buildRouteMemoryCandidates(options.memoryStore, {
+      sessionId: session.id,
+      scenarioPackId: session.scenarioPackId,
+      input: parsed.data.content,
+      turnNumber: session.worldState.turnNumber + 1,
+    });
     const turnResult = await runTurnV2(session, parsed.data.content, {
       ...(parsed.data.connections ? { connections: parsed.data.connections as Record<string, ModelConnection> } : {}),
       ...(parsed.data.inputMode ? { inputMode: parsed.data.inputMode } : {}),
       scenarioPack: runtimePack,
+      ...(memoryCandidates.length ? { memoryCandidates } : {}),
     });
 
     const nextSession: SessionStateV2 = {
@@ -137,6 +169,20 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       ),
       updatedAt: new Date().toISOString(),
     };
+    options.memoryStore?.saveChunks(buildMemoryChunksFromTurn({
+      sessionId: nextSession.id,
+      scenarioPackId: nextSession.scenarioPackId,
+      turnNumber: turnResult.worldState.turnNumber,
+      messages: turnResult.messages,
+      createdAt: nextSession.updatedAt,
+    }));
+    saveRouteMemoryTrace(options.memoryStore, {
+      sessionId: session.id,
+      scenarioPackId: session.scenarioPackId,
+      input: parsed.data.content,
+      turnNumber: session.worldState.turnNumber + 1,
+      memoryCandidates,
+    });
     store.saveSession(nextSession);
 
     return context.json({
@@ -171,6 +217,7 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     const lastUserMessage = session.messages[lastUserIndex]!;
     const checkpointMatch = findCheckpointForUserMessage(session.turnCheckpoints ?? [], lastUserMessage.id);
     const rolledBackMessages = session.messages.slice(0, lastUserIndex);
+    const discardedMessageIds = session.messages.slice(lastUserIndex).map((message) => message.id);
     const rolledBackSession: SessionStateV2 = {
       ...session,
       messages: rolledBackMessages,
@@ -186,10 +233,17 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
     }
 
     const runtimePack = packWithSessionCharacters(packResult.pack, rolledBackSession);
+    const memoryCandidates = buildRouteMemoryCandidates(options.memoryStore, {
+      sessionId: rolledBackSession.id,
+      scenarioPackId: rolledBackSession.scenarioPackId,
+      input: lastUserMessage.content,
+      turnNumber: rolledBackSession.worldState.turnNumber + 1,
+    });
     const turnResult = await runTurnV2(rolledBackSession, lastUserMessage.content, {
       ...(connections ? { connections } : {}),
       inputMode: lastUserMessage.inputMode ?? inputMode ?? "chat",
       scenarioPack: runtimePack,
+      ...(memoryCandidates.length ? { memoryCandidates } : {}),
     });
 
     const nextSession: SessionStateV2 = {
@@ -202,6 +256,21 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
       ),
       updatedAt: new Date().toISOString(),
     };
+    options.memoryStore?.deleteMessageIds(session.id, discardedMessageIds);
+    options.memoryStore?.saveChunks(buildMemoryChunksFromTurn({
+      sessionId: nextSession.id,
+      scenarioPackId: nextSession.scenarioPackId,
+      turnNumber: turnResult.worldState.turnNumber,
+      messages: turnResult.messages,
+      createdAt: nextSession.updatedAt,
+    }));
+    saveRouteMemoryTrace(options.memoryStore, {
+      sessionId: rolledBackSession.id,
+      scenarioPackId: rolledBackSession.scenarioPackId,
+      input: lastUserMessage.content,
+      turnNumber: rolledBackSession.worldState.turnNumber + 1,
+      memoryCandidates,
+    });
     store.saveSession(nextSession);
 
     return context.json({
@@ -238,9 +307,133 @@ export function registerSessionRoutes(app: Hono, options: RegisterSessionRoutesO
         : (session.turnCheckpoints ?? []).slice(0, -1),
       updatedAt: new Date().toISOString(),
     };
+    options.memoryStore?.deleteTurnsAfter(nextSession.id, nextSession.worldState.turnNumber);
     store.saveSession(nextSession);
 
     return context.json({ session: toClientSession(nextSession, loadClientScenarioPack(nextSession)) });
+  });
+}
+
+function applyCharacterOverrides(pack: ScenarioPack, overrides?: CharacterOverrideInput[]): ScenarioPack {
+  if (!overrides?.length) {
+    return pack;
+  }
+
+  let characters = pack.characters;
+  for (const override of overrides) {
+    const original = characters.find((character) => character.id === override.targetId);
+    if (!original) {
+      continue;
+    }
+
+    characters = replaceCharacterSlot(
+      characters,
+      override.targetId,
+      characterOverrideToDefinition(override.character, original),
+      { preserveOriginalCharacterization: false },
+    );
+  }
+
+  return { ...pack, characters };
+}
+
+function characterOverrideToDefinition(
+  character: CharacterOverrideInput["character"],
+  original: CharacterDefinition,
+): CharacterDefinition {
+  return {
+    id: original.id,
+    name: character.name,
+    shortName: character.shortName,
+    role: character.role,
+    profileKind: original.profileKind,
+    ...(character.anonymousLabel ? { anonymousLabel: character.anonymousLabel } : {}),
+    mbti: character.mbti,
+    ocean: { ...character.ocean },
+    autonomy: character.autonomy,
+    systemPrompt: character.systemPrompt,
+    ...(character.relationshipTags?.length ? { relationshipTags: [...character.relationshipTags] } : {}),
+    handout: {
+      secret: character.handout.secret,
+      desire: character.handout.desire,
+      objective: character.handout.objective,
+      initialRelationshipToUser: character.handout.initialRelationshipToUser,
+      ...(character.handout.surfacePersonality?.length
+        ? { surfacePersonality: [...character.handout.surfacePersonality] }
+        : {}),
+      ...(character.handout.fear ? { fear: character.handout.fear } : {}),
+      ...(character.handout.behaviorRules?.length ? { behaviorRules: [...character.handout.behaviorRules] } : {}),
+    },
+    relationships: [],
+    ...(character.spriteSetId ? { spriteSetId: character.spriteSetId } : {}),
+    ...(character.avatarId ? { avatarId: character.avatarId } : {}),
+  };
+}
+
+function buildRouteMemoryCandidates(
+  memoryStore: MemoryCortexStore | undefined,
+  input: {
+    sessionId: string;
+    scenarioPackId: string;
+    input: string;
+    turnNumber: number;
+  },
+) {
+  const chunks = memoryStore?.searchChunks({
+    sessionId: input.sessionId,
+    query: input.input,
+    limit: 12,
+  }) ?? [];
+
+  return chunks
+    .map((chunk) => scoreMemoryCandidate({
+      chunk,
+      query: {
+        sessionId: input.sessionId,
+        scenarioPackId: input.scenarioPackId,
+        input: input.input,
+        turnNumber: input.turnNumber,
+        entityAliases: [],
+        allowedVisibility: ["public", "director-only", "vault-readonly"],
+      },
+    }))
+    .filter((candidate) => candidate.visibilityAllowed)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 6);
+}
+
+function saveRouteMemoryTrace(
+  memoryStore: MemoryCortexStore | undefined,
+  input: {
+    sessionId: string;
+    scenarioPackId: string;
+    input: string;
+    turnNumber: number;
+    memoryCandidates: ReturnType<typeof buildRouteMemoryCandidates>;
+  },
+): void {
+  if (!memoryStore || input.memoryCandidates.length === 0) {
+    return;
+  }
+
+  memoryStore.saveRetrievalTrace({
+    id: crypto.randomUUID(),
+    sessionId: input.sessionId,
+    turnNumber: input.turnNumber,
+    query: {
+      sessionId: input.sessionId,
+      scenarioPackId: input.scenarioPackId,
+      input: input.input,
+      turnNumber: input.turnNumber,
+      entityAliases: [],
+      allowedVisibility: ["public", "director-only", "vault-readonly"],
+    },
+    candidateIds: input.memoryCandidates.map((candidate) => candidate.chunkId),
+    selectedIds: input.memoryCandidates
+      .filter((candidate) => candidate.visibilityAllowed)
+      .map((candidate) => candidate.chunkId),
+    scores: Object.fromEntries(input.memoryCandidates.map((candidate) => [candidate.chunkId, candidate.components])),
+    createdAt: new Date().toISOString(),
   });
 }
 

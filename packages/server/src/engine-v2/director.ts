@@ -40,6 +40,7 @@ export async function invokeDirector(
   pack: ScenarioPack,
   connection?: ModelConnection,
   caseRuntime?: { inquiry: CaseInquiryFrame; answerScope: CaseAnswerScope },
+  memoryContext: string[] = [],
 ): Promise<DirectorInvocationResult> {
   const characterIds = pack.characters.map((c) => c.id);
 
@@ -52,7 +53,7 @@ export async function invokeDirector(
     };
   }
 
-  const systemPrompt = buildDirectorSystemPrompt(pack, omniscientContext);
+  const systemPrompt = buildDirectorSystemPrompt(pack, omniscientContext, memoryContext);
   const messages = buildDirectorMessages(publicContext, userInput, inputMode, worldState, caseRuntime);
 
   let raw: string;
@@ -100,6 +101,7 @@ export async function invokeDirector(
 export function buildDirectorSystemPrompt(
   pack: ScenarioPack,
   omniscient: OmniscientContext,
+  memoryContext: string[] = [],
 ): string {
   const sections = [
     pack.directorPrompt,
@@ -120,6 +122,7 @@ export function buildDirectorSystemPrompt(
     `장르: ${pack.manifest.genre}`,
     `긴장도: ${omniscient.mainObjective.status === "active" ? "진행 중" : omniscient.mainObjective.status}`,
     "",
+    ...formatUserPersonaForDirector(omniscient.persona),
     "[Character Summaries]",
     ...omniscient.characterSummaries.map((c) =>
       `- ${c.name} (autonomy: ${c.autonomy}) | 목표: ${c.currentObjective} | 비밀 힌트: ${c.secretHint} | 유저 관계: ${c.relationshipToUser}`,
@@ -150,6 +153,8 @@ export function buildDirectorSystemPrompt(
     omniscient.recentEvents.length > 0
       ? omniscient.recentEvents.slice(-5).map((e) => `- Turn ${e.turnNumber}: ${e.description}`).join("\n")
       : "(없음)",
+    "",
+    ...memoryContext,
     "",
     "[Genre Goals]",
     omniscient.genreGoals,
@@ -223,6 +228,21 @@ function formatCaseRuntimeForDirector(caseRuntime: { inquiry: CaseInquiryFrame; 
     `blockedTruthIds: ${answerScope.blockedTruthIds.join(", ") || "(없음)"}`,
     "Director는 hiddenTruth 전문을 쓰지 않는다. characterIntents에는 fact_id 허용 범위와 태도만 반영한다.",
   ];
+}
+
+function formatUserPersonaForDirector(persona: OmniscientContext["persona"]): string[] {
+  if (!persona) return [];
+  const lines = [
+    "[User Persona — 유저 자아]",
+    `이름: ${persona.name}`,
+    ...(persona.role ? [`역할/입장: ${persona.role}`] : []),
+    ...(persona.description ? [`설명: ${persona.description}`] : []),
+    ...(persona.appearance ? [`외형: ${persona.appearance}`] : []),
+    ...(persona.relationshipTags?.length ? [`태그: ${persona.relationshipTags.join(", ")}`] : []),
+    "주의: 페르소나는 유저가 연기하는 자아일 뿐, 사건 정답이나 hidden truth와 무관하다. 유저의 행동/대사/감정을 대신 결정하지 않는다.",
+    "",
+  ];
+  return lines;
 }
 
 const SCENE_CAUSALITY_PRIORITY_RULES = [

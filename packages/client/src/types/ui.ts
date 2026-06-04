@@ -32,9 +32,15 @@ export interface ConnectionSlot {
 
 export interface PersonaDraft {
   name: string;
+  shortName: string;
+  role: string;
+  description: string;
+  appearance: string;
+  portraitUrl?: string;
+  relationshipTags: string[];
 }
 
-export type SetupStep = "scenario" | "persona" | "advisors";
+export type SetupStep = "scenario" | "persona";
 export type VisualThemeId = "moonlight" | "dunkshoot" | "cherryNight";
 
 export interface VisualThemePreset {

@@ -1,7 +1,15 @@
-import type { GenerationModelSnapshot, ModelConnection, ScenarioPack, TurnOptionsV2, WorldState } from "@hushline/shared";
+import type {
+  GenerationModelSnapshot,
+  MemoryRetrievalCandidate,
+  ModelConnection,
+  ScenarioPack,
+  TurnOptionsV2,
+  WorldState,
+} from "@hushline/shared";
 
 export type TurnRuntimeOptionsV2 = TurnOptionsV2 & {
   scenarioPack?: ScenarioPack;
+  memoryCandidates?: MemoryRetrievalCandidate[];
 };
 
 export function getConnection(

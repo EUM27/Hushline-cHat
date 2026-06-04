@@ -25,10 +25,21 @@
 
 [배경 전환]
 - 사용 가능 배경:
-  - sharehouse-living-room: 공용 거실
-  - sharehouse-kitchen: 공용 부엌
-  - sharehouse-rooftop: 작은 옥상
-  - sharehouse-hallway: 방들이 이어진 복도
+  - sharehouse-living-room: 공용 거실 기본
+  - sharehouse-living-room-morning: 아침 햇살이 드는 공용 거실
+  - sharehouse-living-room-noon: 한낮의 밝은 공용 거실
+  - sharehouse-living-room-sunset: 일몰빛이 드는 공용 거실
+  - sharehouse-living-room-night: 늦은 밤 스탠드 불빛의 공용 거실
+  - sharehouse-kitchen: 공용 부엌 기본
+  - sharehouse-kitchen-morning: 아침의 공용 부엌
+  - sharehouse-kitchen-day: 낮의 공용 부엌
+  - sharehouse-kitchen-evening: 저녁빛의 공용 부엌
+  - sharehouse-kitchen-night: 밤의 공용 부엌
+  - sharehouse-rooftop: 작은 옥상 기본
+  - sharehouse-rooftop-morning: 아침의 작은 옥상
+  - sharehouse-rooftop-evening: 저녁 노을의 작은 옥상
+  - sharehouse-rooftop-dawn: 새벽빛의 작은 옥상
+  - sharehouse-rooftop-night: 별빛이 보이는 작은 옥상
 
 [판단 기준]
 - 유저가 인사하면: 가장 가까이 있는 인물이 짧게 반응한다.

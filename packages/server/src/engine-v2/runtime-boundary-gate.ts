@@ -35,6 +35,7 @@ export function validateCharacterDraft(input: {
   currentTurn: number;
   userInput?: string;
   userPersonaName?: string;
+  userPersonaNames?: string[];
   userNameIntroduced?: boolean;
   privateLeakTexts?: string[];
 }): BoundaryGateResult {
@@ -59,7 +60,7 @@ export function validateCharacterDraft(input: {
   if (hasUnsupportedUserProposalAttribution(draft, input.userInput)) {
     violations.push("unsupported_user_proposal");
   }
-  if (containsUnintroducedUserName(draft, input.userPersonaName, input.userNameIntroduced ?? false)) {
+  if (containsUnintroducedPersonaName(draft, input)) {
     violations.push("unintroduced_user_name");
   }
   if (mentionsHiddenTruth(draft, input.hiddenTruthIds, input.caseFacts)) {
@@ -89,7 +90,7 @@ export function validateCharacterDraft(input: {
   if (violations.includes("unintroduced_user_name")) {
     return {
       status: "replace_with_deflection",
-      finalText: maskUnintroducedUserName(draft, input.userPersonaName, false, "당신"),
+      finalText: maskUnintroducedPersonaNames(draft, input),
       violations,
     };
   }
@@ -118,6 +119,38 @@ export function validateCharacterDraft(input: {
     violations,
     ...(registeredClaim ? { registeredClaim } : {}),
   };
+}
+
+function containsUnintroducedPersonaName(
+  draft: string,
+  input: { userPersonaName?: string; userPersonaNames?: string[]; userNameIntroduced?: boolean },
+): boolean {
+  const names = personaNames(input);
+  return names.some((name) => containsUnintroducedUserName(draft, name, input.userNameIntroduced ?? false));
+}
+
+function maskUnintroducedPersonaNames(
+  draft: string,
+  input: { userPersonaName?: string; userPersonaNames?: string[] },
+): string {
+  return personaNames(input).reduce(
+    (text, name) => maskUnintroducedUserName(text, name, false, "당신"),
+    draft,
+  );
+}
+
+function personaNames(input: { userPersonaName?: string; userPersonaNames?: string[] }): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const value of [input.userPersonaName, ...(input.userPersonaNames ?? [])]) {
+    const name = value?.trim();
+    if (!name || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
 }
 
 function hasSpeakerLabel(text: string): boolean {

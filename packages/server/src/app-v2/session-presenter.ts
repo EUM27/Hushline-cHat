@@ -46,9 +46,11 @@ export function toClientSession(session: SessionStateV2, scenarioPack?: Scenario
     },
     persona: {
       ...session.persona,
-      role: "",
+      role: session.persona.role ?? "",
       mbti: "unspecified",
-      relationshipTags: [],
+      relationshipTags: session.persona.relationshipTags ?? [],
+      ...(session.persona.description ? { description: session.persona.description } : {}),
+      ...(session.persona.appearance ? { appearance: session.persona.appearance } : {}),
     },
     characters: session.characters.map((character) => ({
       id: character.id,
@@ -64,6 +66,8 @@ export function toClientSession(session: SessionStateV2, scenarioPack?: Scenario
       ocean: character.ocean,
       systemPrompt: character.systemPrompt,
       relationshipTags: character.relationshipTags ?? character.handout.surfacePersonality ?? [],
+      ...(character.spriteSetId ? { spriteSetId: character.spriteSetId } : {}),
+      ...(character.avatarId ? { avatarId: character.avatarId } : {}),
     })),
   };
 }

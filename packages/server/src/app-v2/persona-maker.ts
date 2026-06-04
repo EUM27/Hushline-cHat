@@ -29,9 +29,13 @@ export async function generatePersonaDraft(
     return {
       persona: {
         name: result.data.name,
-        ...(result.data.shortName ? { shortName: result.data.shortName } : {}),
+        shortName: result.data.shortName ?? fallback.shortName ?? result.data.name,
         role: result.data.role,
-        relationshipTags: uniqueStrings(result.data.relationshipTags),
+        description: result.data.description ?? fallback.description ?? "",
+        appearance: result.data.appearance ?? fallback.appearance ?? "",
+        relationshipTags: uniqueStrings(result.data.relationshipTags.length > 0
+          ? result.data.relationshipTags
+          : fallback.relationshipTags),
       },
       source: "api",
     };
@@ -105,6 +109,8 @@ function buildPersonaMakerPrompt(prompt: string): string {
     '    "name": "short display name",',
     '    "shortName": "optional shorter label",',
     '    "role": "one or two sentences about stance and narrative pressure",',
+    '    "description": "public identity/background other characters may know",',
+    '    "appearance": "observable appearance, clothing, posture, or visible habit",',
     '    "relationshipTags": ["user-persona", "scenario-participant", "..."]',
     "  }",
     "}",
@@ -152,6 +158,8 @@ function createFallbackPersonaDraft(prompt: string): PersonaDraft {
     name,
     shortName: name,
     role: `${truncateForPrompt(prompt, 120)}. 이상공간 단톡방에 끌려온 참여자이며, 사람을 버리지 않으면서도 규칙의 허점을 확인하려 한다.`,
+    description: `${truncateForPrompt(prompt, 120)}라는 정체성을 가진 인물. 사람을 쉽게 못 버리는 성향 때문에 위험한 상황에서도 주변 반응을 먼저 살핀다.`,
+    appearance: "관찰 가능한 외형은 시작 장면에 맞게 비워 둔다. 필요하면 젖은 소매, 낡은 가방, 굳은 표정처럼 눈에 보이는 단서로 구체화한다.",
     relationshipTags: ["user-persona", "scenario-participant", "scene-driver"],
   };
 }

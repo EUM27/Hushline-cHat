@@ -154,6 +154,27 @@ describe("runtime boundary gate", () => {
     expect(result.finalText).not.toContain("정해윤");
   });
 
+  test("masks persona aliases that were not introduced in scene", () => {
+    const result = validateCharacterDraft({
+      draft: "\"해윤 씨, 지금은 움직이지 마.\"",
+      npcId: "kang-mujin",
+      userInput: "\"전화선이 완전히 죽었네요.\"",
+      userPersonaName: "정해윤",
+      userPersonaNames: ["정해윤", "해윤"],
+      userNameIntroduced: false,
+      allowedFactIds: [],
+      blockedFactIds: [],
+      hiddenTruthIds: ["truth_killer_identity"],
+      knownClaimIds: [],
+      caseFacts: [...caseFacts],
+      currentTurn: 6,
+    });
+
+    expect(result.violations).toContain("unintroduced_user_name");
+    expect(result.finalText).toBe("\"당신, 지금은 움직이지 마.\"");
+    expect(result.finalText).not.toContain("해윤");
+  });
+
   test("allows persona names after an explicit in-scene introduction", () => {
     const result = validateCharacterDraft({
       draft: "\"정해윤 씨, 그 말은 맞는 것 같습니다.\"",

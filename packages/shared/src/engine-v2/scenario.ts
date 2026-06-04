@@ -19,6 +19,7 @@ export interface ScenarioOpeningBeatV2 {
   role: "narrator" | "system";
   speakerKind: "scenario-crowd" | "room-master" | "named-actor";
   speakerLabel: string;
+  characterId?: string;
   content: string;
   delay?: number; // ms before showing
 }

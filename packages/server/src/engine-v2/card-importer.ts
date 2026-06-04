@@ -6,16 +6,34 @@
 // ──────────────────────────────────────────────
 
 import type { CharacterDefinition, CharacterHandoutDefinition } from "@hushline/shared";
+import {
+  characterCardSchema,
+  characterCardSourceMetadataSchema,
+  type CharacterCardSourceFormat,
+  type CharacterCardSourceMetadata,
+} from "./schemas.js";
+import { extractCardFromPng } from "./png-card.js";
+
+const MAX_CHARACTER_ID_LENGTH = 120;
+const MAX_IMPORTED_SYSTEM_PROMPT_LENGTH = 100_000;
+const MAX_SOURCE_FILE_NAME_LENGTH = 200;
+const MAX_CARD_SPEC_LENGTH = 120;
+const MAX_CARD_SPEC_VERSION_LENGTH = 80;
+const MAX_CREATOR_LENGTH = 200;
+const MAX_SOURCE_URL_LENGTH = 2048;
+const MAX_EXTENSION_KEY_LENGTH = 120;
 
 /**
  * Minimal chara_card_v3 shape we care about.
  * Full spec has more fields but we only extract what maps to our system.
  */
 export interface CharaCardV3 {
-  spec: string; // "chara_card_v3"
-  spec_version: string;
+  spec?: string; // "chara_card_v3"
+  spec_version?: string;
   data: {
     name: string;
+    creator?: string;
+    source_url?: string;
     description: string;
     personality: string;
     scenario?: string;
@@ -24,6 +42,7 @@ export interface CharaCardV3 {
     post_history_instructions?: string;
     tags?: string[];
     alternate_greetings?: string[];
+    character_book?: unknown;
     extensions?: Record<string, unknown>;
   };
 }
@@ -65,7 +84,10 @@ export function cardToCharacterDefinition(
     data.personality ? `[성격] ${data.personality}` : null,
     data.post_history_instructions,
   ].filter(Boolean);
-  const systemPrompt = promptParts.join("\n\n") || `너는 ${name}이다. ${data.description?.slice(0, 200) ?? ""}`;
+  const systemPrompt = limitText(
+    promptParts.join("\n\n") || `너는 ${name}이다. ${data.description?.slice(0, 200) ?? ""}`,
+    MAX_IMPORTED_SYSTEM_PROMPT_LENGTH,
+  );
 
   const extHandout = ext.handout ?? {};
   const handout: CharacterHandoutDefinition = {
@@ -79,7 +101,7 @@ export function cardToCharacterDefinition(
   };
 
   return {
-    id: ext.id ?? fallbackId,
+    id: normalizeCharacterId(ext.id ?? fallbackId),
     name,
     shortName,
     role: ext.role ?? data.description?.slice(0, 100) ?? "",
@@ -144,7 +166,10 @@ export function importCharaCard(
     data.post_history_instructions,
   ].filter(Boolean);
 
-  const systemPrompt = promptParts.join("\n\n") || `너는 ${name}이다. ${data.description?.slice(0, 200) ?? ""}`;
+  const systemPrompt = limitText(
+    promptParts.join("\n\n") || `너는 ${name}이다. ${data.description?.slice(0, 200) ?? ""}`,
+    MAX_IMPORTED_SYSTEM_PROMPT_LENGTH,
+  );
 
   // Try to extract handout from description
   const handout = extractHandoutFromDescription(data.description ?? "");
@@ -153,7 +178,7 @@ export function importCharaCard(
   const ocean = inferOcean(data.personality ?? "");
 
   const character: CharacterDefinition = {
-    id: slotId,
+    id: normalizeCharacterId(slotId),
     name,
     shortName,
     role: data.description?.slice(0, 100) ?? "",
@@ -211,8 +236,12 @@ export function replaceCharacterSlot(
   characters: CharacterDefinition[],
   slotId: string,
   imported: CharacterDefinition,
+  options: {
+    preserveOriginalCharacterization?: boolean;
+  } = {},
 ): CharacterDefinition[] {
   const original = characters.find((c) => c.id === slotId);
+  const preserveOriginalCharacterization = options.preserveOriginalCharacterization ?? true;
 
   // Merge: imported card takes priority, but fill empty handout fields from original
   const mergedHandout: CharacterHandoutDefinition = {
@@ -222,17 +251,17 @@ export function replaceCharacterSlot(
     initialRelationshipToUser: imported.handout.initialRelationshipToUser || original?.handout.initialRelationshipToUser || 0,
     ...(imported.handout.surfacePersonality?.length
       ? { surfacePersonality: imported.handout.surfacePersonality }
-      : original?.handout.surfacePersonality?.length
+      : preserveOriginalCharacterization && original?.handout.surfacePersonality?.length
         ? { surfacePersonality: original.handout.surfacePersonality }
         : {}),
     ...(imported.handout.fear
       ? { fear: imported.handout.fear }
-      : original?.handout.fear
+      : preserveOriginalCharacterization && original?.handout.fear
         ? { fear: original.handout.fear }
         : {}),
     ...(imported.handout.behaviorRules?.length
       ? { behaviorRules: imported.handout.behaviorRules }
-      : original?.handout.behaviorRules?.length
+      : preserveOriginalCharacterization && original?.handout.behaviorRules?.length
         ? { behaviorRules: original.handout.behaviorRules }
         : {}),
   };
@@ -247,4 +276,150 @@ export function replaceCharacterSlot(
   };
 
   return characters.map((c) => (c.id === slotId ? merged : c));
+}
+
+// ──────────────────────────────────────────────
+// Unified card import (strict, schema-validated)
+// ──────────────────────────────────────────────
+
+export type ImportedCardResult =
+  | { ok: true; character: CharacterDefinition; metadata: CharacterCardSourceMetadata }
+  | { ok: false; error: string };
+
+/**
+ * Import a character from raw card JSON text.
+ * Validates against characterCardSchema, then converts via cardToCharacterDefinition.
+ */
+export function importCardJson(
+  jsonText: string,
+  fallbackId: string,
+  sourceFileName?: string,
+  options: {
+    sourceFormat?: CharacterCardSourceFormat;
+  } = {},
+): ImportedCardResult {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(jsonText);
+  } catch {
+    return { ok: false, error: "카드 JSON 파싱에 실패했습니다." };
+  }
+
+  const parsed = characterCardSchema.safeParse(raw);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      ok: false,
+      error: `카드 형식 검증 실패: ${issue ? `[${issue.path.join(".")}] ${issue.message}` : "unknown"}`,
+    };
+  }
+
+  const card = parsed.data as CharaCardV3;
+  const character = cardToCharacterDefinition(card, fallbackId);
+  const metadata = buildCardSourceMetadata(
+    card,
+    options.sourceFormat ?? getJsonSourceFormat(card.spec),
+    sourceFileName,
+  );
+  return { ok: true, character, metadata };
+}
+
+/**
+ * Import a character from PNG bytes (extract embedded card → importCardJson).
+ */
+export function importCardPng(bytes: Uint8Array, fallbackId: string, sourceFileName?: string): ImportedCardResult {
+  const extracted = extractCardFromPng(bytes);
+  if (!extracted.ok) {
+    return { ok: false, error: extracted.error };
+  }
+  return importCardJson(extracted.json, fallbackId, sourceFileName, {
+    sourceFormat: extracted.keyword === "ccv3" ? "png-ccv3" : "png-chara-v2",
+  });
+}
+
+function getJsonSourceFormat(spec: string | undefined): CharacterCardSourceFormat {
+  if (spec === "chara_card_v3") return "json-v3";
+  if (spec === "chara_card_v2") return "json-v2";
+  return "json-unknown";
+}
+
+function buildCardSourceMetadata(
+  card: CharaCardV3,
+  sourceFormat: CharacterCardSourceFormat,
+  sourceFileName?: string,
+): CharacterCardSourceMetadata {
+  const data = card.data;
+  const extensions = data.extensions ?? {};
+  const normalizedSourceFileName = cleanText(sourceFileName, MAX_SOURCE_FILE_NAME_LENGTH);
+  const cardSpec = cleanText(card.spec, MAX_CARD_SPEC_LENGTH);
+  const cardSpecVersion = cleanText(card.spec_version, MAX_CARD_SPEC_VERSION_LENGTH);
+  const creator = findCreator(data);
+  const sourceUrl = findSourceUrl(data);
+  const metadata = {
+    ...(normalizedSourceFileName ? { sourceFileName: normalizedSourceFileName } : {}),
+    sourceFormat,
+    ...(cardSpec ? { cardSpec } : {}),
+    ...(cardSpecVersion ? { cardSpecVersion } : {}),
+    ...(creator ? { creator } : {}),
+    ...(sourceUrl ? { sourceUrl } : {}),
+    extensionKeys: normalizeExtensionKeys(Object.keys(extensions)),
+    hasFirstMessage: Boolean(cleanText(data.first_mes)),
+    alternateGreetingCount: data.alternate_greetings?.length ?? 0,
+    hasScenario: Boolean(cleanText(data.scenario)),
+    hasCharacterBook: data.character_book !== undefined && data.character_book !== null,
+  };
+  return characterCardSourceMetadataSchema.parse(metadata);
+}
+
+function findCreator(data: CharaCardV3["data"]): string | undefined {
+  const extensions = data.extensions ?? {};
+  const janitor = getRecord(extensions.janitor);
+  const chub = getRecord(extensions.chub);
+  return cleanText(janitor?.creator, MAX_CREATOR_LENGTH)
+    ?? cleanText(chub?.creator, MAX_CREATOR_LENGTH)
+    ?? cleanText(data.creator, MAX_CREATOR_LENGTH);
+}
+
+function findSourceUrl(data: CharaCardV3["data"]): string | undefined {
+  const extensions = data.extensions ?? {};
+  const janitor = getRecord(extensions.janitor);
+  const chub = getRecord(extensions.chub);
+  return (
+    cleanText(janitor?.source_url, MAX_SOURCE_URL_LENGTH) ??
+    cleanText(janitor?.sourceUrl, MAX_SOURCE_URL_LENGTH) ??
+    cleanText(janitor?.url, MAX_SOURCE_URL_LENGTH) ??
+    cleanText(chub?.source_url, MAX_SOURCE_URL_LENGTH) ??
+    cleanText(chub?.sourceUrl, MAX_SOURCE_URL_LENGTH) ??
+    cleanText(chub?.url, MAX_SOURCE_URL_LENGTH) ??
+    cleanText(chub?.full_path, MAX_SOURCE_URL_LENGTH) ??
+    cleanText(data.source_url, MAX_SOURCE_URL_LENGTH)
+  );
+}
+
+function getRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function cleanText(value: unknown, maxLength = Number.POSITIVE_INFINITY): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? limitText(value.trim(), maxLength) : undefined;
+}
+
+function limitText(value: string, maxLength: number): string {
+  return value.length > maxLength ? value.slice(0, maxLength).trimEnd() : value;
+}
+
+function normalizeCharacterId(value: string): string {
+  const normalized = value
+    .normalize("NFKC")
+    .trim()
+    .slice(0, MAX_CHARACTER_ID_LENGTH)
+    .replace(/-+$/g, "");
+  return normalized || "imported-character";
+}
+
+function normalizeExtensionKeys(keys: string[]): string[] {
+  const normalized = keys
+    .map((key) => cleanText(key, MAX_EXTENSION_KEY_LENGTH))
+    .filter((key): key is string => Boolean(key));
+  return [...new Set(normalized)].sort((a, b) => a.localeCompare(b));
 }

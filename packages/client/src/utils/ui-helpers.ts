@@ -16,8 +16,9 @@ export {
   activeConnections,
   getSharedProviderApiKey,
 } from "./connections";
-export { createAdvisorDrafts, advisorDraftsFromSession } from "./advisors";
-export { formatKoreanTime, findBackgroundUrl, findSpriteUrl } from "./assets";
+export { createAdvisorDrafts, advisorDraftsFromSession, characterOverridesFromSession } from "./advisors";
+export { formatKoreanTime, findBackgroundUrl, findCharacterSpriteUrl, findSpriteUrl } from "./assets";
+export { getSessionShellMode, type SessionShellMode } from "./session-shell";
 export {
   isPhoneChannelMessage,
   isStageMessage,

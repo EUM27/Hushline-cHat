@@ -4,6 +4,8 @@
 
 import { z } from "zod";
 
+const MAX_IMPORTED_CARD_TEXT_FIELD_LENGTH = 100_000;
+
 // ── Scenario Manifest ──
 
 export const scenarioGenreSchema = z.enum([
@@ -27,6 +29,7 @@ export const scenarioOpeningBeatSchema = z.object({
   role: z.enum(["narrator", "system"]),
   speakerKind: z.enum(["scenario-crowd", "room-master", "named-actor"]),
   speakerLabel: z.string().min(1).max(60),
+  characterId: z.string().min(1).max(80).optional(),
   content: z.string().min(1).max(2000),
   delay: z.number().int().min(0).max(10000).optional(),
 });
@@ -123,19 +126,47 @@ export const characterCardSchema = z.object({
   spec_version: z.string().optional(),
   data: z.object({
     name: z.string().min(1).max(80),
-    description: z.string().max(8000).default(""),
-    personality: z.string().max(4000).default(""),
-    scenario: z.string().max(4000).optional(),
-    first_mes: z.string().max(8000).optional(),
-    system_prompt: z.string().max(8000).optional(),
-    post_history_instructions: z.string().max(8000).optional(),
+    creator: z.string().max(200).optional(),
+    source_url: z.string().max(2048).optional(),
+    description: z.string().max(MAX_IMPORTED_CARD_TEXT_FIELD_LENGTH).default(""),
+    personality: z.string().max(MAX_IMPORTED_CARD_TEXT_FIELD_LENGTH).default(""),
+    scenario: z.string().max(MAX_IMPORTED_CARD_TEXT_FIELD_LENGTH).optional(),
+    first_mes: z.string().max(MAX_IMPORTED_CARD_TEXT_FIELD_LENGTH).optional(),
+    system_prompt: z.string().max(MAX_IMPORTED_CARD_TEXT_FIELD_LENGTH).optional(),
+    post_history_instructions: z.string().max(MAX_IMPORTED_CARD_TEXT_FIELD_LENGTH).optional(),
     tags: z.array(z.string()).optional(),
     alternate_greetings: z.array(z.string()).optional(),
+    character_book: z.unknown().optional(),
     extensions: z.object({
       hushline: hushlineCardExtensionSchema.optional(),
     }).passthrough().optional(),
   }),
 });
+
+export const characterCardSourceFormatSchema = z.enum([
+  "png-chara-v2",
+  "png-ccv3",
+  "json-v2",
+  "json-v3",
+  "json-unknown",
+]);
+
+export const characterCardSourceMetadataSchema = z.object({
+  sourceFileName: z.string().trim().max(200).optional(),
+  sourceFormat: characterCardSourceFormatSchema,
+  cardSpec: z.string().trim().max(120).optional(),
+  cardSpecVersion: z.string().trim().max(80).optional(),
+  creator: z.string().trim().max(200).optional(),
+  sourceUrl: z.string().trim().max(2048).optional(),
+  extensionKeys: z.array(z.string().trim().min(1).max(120)),
+  hasFirstMessage: z.boolean(),
+  alternateGreetingCount: z.number().int().min(0),
+  hasScenario: z.boolean(),
+  hasCharacterBook: z.boolean(),
+});
+
+export type CharacterCardSourceFormat = z.infer<typeof characterCardSourceFormatSchema>;
+export type CharacterCardSourceMetadata = z.infer<typeof characterCardSourceMetadataSchema>;
 
 // ── Event Triggers ──
 

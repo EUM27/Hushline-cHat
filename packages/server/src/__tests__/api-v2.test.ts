@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { createAppV2 } from "../app-v2";
+import { createMemoryCortexStore } from "../store/memory-cortex-store";
+import { createMemoryProfileLibraryStore } from "../store/profile-library-store";
 import { createSqliteStoreV2 } from "../store/sqlite-store-v2";
 
 const scenariosDir = resolve(import.meta.dir, "../../scenarios");
@@ -70,6 +72,132 @@ describe("Hushline API v2", () => {
     expect(openingText.indexOf("1층 라운지로 내려왔다")).toBeLessThan(openingText.indexOf("전화도 안 됩니다"));
   });
 
+  test("creates romance sessions with first-screen scene metadata and opening speaker ids", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "shared-house-romance",
+        persona: { name: "이서연" },
+      }),
+    });
+
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.session.scenario.uiMode).toBe("scene-first");
+    expect(created.session.scene.hasEnteredScene).toBe(true);
+    expect(created.session.scene.backgroundId).toBe("sharehouse-living-room");
+
+    const messagesByLabel = new Map(
+      created.session.messages.map((message: { speakerLabel?: string; characterId?: string }) => [
+        message.speakerLabel,
+        message.characterId,
+      ]),
+    );
+    expect(messagesByLabel.get("서유진")).toBe("seo-yujin");
+    expect(messagesByLabel.get("한도윤")).toBe("kang-minjae");
+    expect(messagesByLabel.get("강민재")).toBe("han-doyun");
+  });
+
+  test("persists expanded persona fields on session creation", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "school-life-anomaly",
+        persona: {
+          name: "정해윤",
+          shortName: "해윤",
+          role: "전학 온 2학년",
+          description: "낯선 교실 규칙을 의심하는 학생.",
+          appearance: "젖은 교복 소매를 계속 만지작거린다.",
+          relationshipTags: ["transfer-student", "skeptical"],
+        },
+      }),
+    });
+
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    expect(created.session.persona).toMatchObject({
+      id: "user",
+      name: "정해윤",
+      shortName: "해윤",
+      role: "전학 온 2학년",
+      description: "낯선 교실 규칙을 의심하는 학생.",
+      appearance: "젖은 교복 소매를 계속 만지작거린다.",
+      relationshipTags: ["transfer-student", "skeptical"],
+    });
+  });
+
+  test("saves and loads reusable persona profiles through the v2 API", async () => {
+    const app = createAppV2({
+      store: createSqliteStoreV2(":memory:"),
+      profileLibraryStore: createMemoryProfileLibraryStore(),
+      scenariosDir,
+    });
+
+    const saveResponse = await app.request("/api/v2/personas", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        label: "비 오는 밤 새 입주자",
+        persona: {
+          name: "정해윤",
+          shortName: "해윤",
+          role: "공유주택에 막 들어온 새 입주자",
+          description: "경계심이 있지만 사람을 밀어내지는 않는다.",
+          appearance: "비에 젖은 회색 후드와 낡은 운동화를 신고 있다.",
+          portraitUrl: "https://example.test/haeyoon.png",
+          relationshipTags: ["new-tenant", "keeps-distance"],
+        },
+      }),
+    });
+    expect(saveResponse.status).toBe(201);
+    const saved = await saveResponse.json() as { persona: { id: string } };
+
+    const listResponse = await app.request("/api/v2/personas");
+    expect(listResponse.status).toBe(200);
+    const listed = await listResponse.json() as {
+      personas: Array<{
+        id: string;
+        label: string;
+        createdAt: string;
+        updatedAt: string;
+        persona: {
+          name: string;
+          shortName?: string;
+          role?: string;
+          description?: string;
+          appearance?: string;
+          portraitUrl?: string;
+          relationshipTags: string[];
+        };
+      }>;
+    };
+
+    expect(listed.personas).toEqual([
+      {
+        id: saved.persona.id,
+        label: "비 오는 밤 새 입주자",
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+        persona: {
+          name: "정해윤",
+          shortName: "해윤",
+          role: "공유주택에 막 들어온 새 입주자",
+          description: "경계심이 있지만 사람을 밀어내지는 않는다.",
+          appearance: "비에 젖은 회색 후드와 낡은 운동화를 신고 있다.",
+          portraitUrl: "https://example.test/haeyoon.png",
+          relationshipTags: ["new-tenant", "keeps-distance"],
+        },
+      },
+    ]);
+  });
+
   test("keeps v1-compatible session shape after create advance reroll and undo", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
 
@@ -127,6 +255,39 @@ describe("Hushline API v2", () => {
     const undone = await undoResponse.json();
     expect(undone.session.scene.sessionId).toBe(created.session.id);
     expect(undone.session.messages.some((message: { role: string }) => message.role === "user")).toBe(false);
+  });
+
+  test("ingests opening and accepted turn messages when memory store is configured", async () => {
+    const memoryStore = createMemoryCortexStore(":memory:");
+    const app = createAppV2({
+      store: createSqliteStoreV2(":memory:"),
+      memoryStore,
+      scenariosDir,
+    });
+
+    const createdResponse = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "윤서", shortName: "서" },
+      }),
+    });
+
+    expect(createdResponse.status).toBe(201);
+    const created = await createdResponse.json();
+    const sessionId = created.session.id;
+    expect(memoryStore.listChunks(sessionId).some((chunk) => chunk.role === "narrator")).toBe(true);
+    expect(memoryStore.listEntities(sessionId).map((entity) => entity.canonicalName)).toContain("윤서");
+
+    const advancedResponse = await app.request(`/api/v2/sessions/${sessionId}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "유진에게 열쇠를 보여준다.", inputMode: "action" }),
+    });
+
+    expect(advancedResponse.status).toBe(200);
+    expect(memoryStore.listChunks(sessionId).some((chunk) => chunk.content.includes("열쇠"))).toBe(true);
   });
 
   test("restores the full world state checkpoint when rerolling and undoing a turn", async () => {
@@ -719,6 +880,66 @@ describe("Hushline API v2", () => {
     expect(payload.session.characters.some((character: { name: string }) => character.name === "[익명 22]")).toBe(false);
   });
 
+  test("lets scenario selection character overrides replace fixed-cast characters", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    const response = await app.request("/api/v2/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scenarioPackId: "locked-room-mystery",
+        persona: { name: "한서윤" },
+        characterOverrides: [
+          {
+            targetId: "kang-mujin",
+            character: {
+              id: "imported-card",
+              name: "백이현",
+              shortName: "이현",
+              role: "폭설 속 산장에 늦게 도착한 법의학자",
+              mbti: "INTJ",
+              ocean: {
+                openness: 61,
+                conscientiousness: 83,
+                extraversion: 28,
+                agreeableness: 39,
+                neuroticism: 55,
+              },
+              autonomy: 0.72,
+              systemPrompt: "너는 백이현이다. 감정보다 증거를 먼저 본다.",
+              handout: {
+                secret: "피해자를 오래전부터 알고 있었다.",
+                desire: "사건 현장의 훼손을 막고 싶다.",
+                objective: "시신 주변의 단서를 보존한다.",
+                initialRelationshipToUser: -1,
+              },
+              relationships: [],
+            },
+          },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    const payload = await response.json();
+    const character = payload.session.characters.find((candidate: { id: string }) => candidate.id === "kang-mujin");
+    expect(character).toMatchObject({
+      id: "kang-mujin",
+      name: "백이현",
+      shortName: "이현",
+      role: "폭설 속 산장에 늦게 도착한 법의학자",
+      profileKind: "named-actor",
+      systemPrompt: "너는 백이현이다. 감정보다 증거를 먼저 본다.",
+      relationshipTags: [],
+    });
+    expect(payload.session.handouts["kang-mujin"]).toMatchObject({
+      secret: "피해자를 오래전부터 알고 있었다.",
+      objective: "시신 주변의 단서를 보존한다.",
+      relationshipToUser: -1,
+      autonomy: 0.72,
+    });
+  });
+
   test("turns onboarding advisor drafts into canonical v2 session characters", async () => {
     const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
 
@@ -791,6 +1012,8 @@ describe("Hushline API v2", () => {
     const personaPayload = await personaResponse.json();
     expect(personaPayload.persona.name).toBe("전학생");
     expect(personaPayload.persona.role).toContain("규칙을 의심하지만");
+    expect(personaPayload.persona.description).toContain("사람을 쉽게 못 버리는");
+    expect(personaPayload.persona.appearance).toContain("관찰 가능한");
     expect(personaPayload.source).toBe("fallback");
 
     const advisorResponse = await app.request("/api/v2/advisor-maker/generate", {
@@ -809,5 +1032,52 @@ describe("Hushline API v2", () => {
     expect(advisorPayload.advisors[0].role).toContain("소리를 무서워해서");
     expect(advisorPayload.advisors[0].handout.objective).toContain("소리를 무서워해서");
     expect(advisorPayload.source).toBe("fallback");
+  });
+
+  test("keeps generated persona description and appearance populated when provider omits optional fields", async () => {
+    const app = createAppV2({ store: createSqliteStoreV2(":memory:"), scenariosDir });
+
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  persona: {
+                    name: "이한결",
+                    shortName: "한결",
+                    role: "공유주택 규칙을 의심하는 전학생.",
+                    relationshipTags: ["user-persona", "scenario-participant"],
+                  },
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const response = await app.request("/api/v2/persona-maker/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        prompt: "규칙을 의심하지만 사람을 쉽게 못 버리는 전학생",
+        connection: {
+          providerId: "openrouter",
+          apiKey: "test-key",
+          model: "test/model",
+        },
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.source).toBe("api");
+    expect(payload.persona.name).toBe("이한결");
+    expect(payload.persona.role).toBe("공유주택 규칙을 의심하는 전학생.");
+    expect(payload.persona.description).toContain("사람을 쉽게 못 버리는");
+    expect(payload.persona.appearance).toContain("관찰 가능한");
+    expect(payload.persona.relationshipTags).toEqual(["user-persona", "scenario-participant"]);
   });
 });

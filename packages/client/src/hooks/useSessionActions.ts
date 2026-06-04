@@ -9,7 +9,14 @@ import type {
   ModelConnection,
   StateLawSnapshot,
 } from "@hushline/shared";
-import { advanceV2, createSessionV2, rerollV2, undoV2 } from "../api-v2";
+import {
+  advanceV2,
+  createSessionV2,
+  rerollV2,
+  undoV2,
+  type CharacterOverrideInput,
+  type SessionPersonaInput,
+} from "../api-v2";
 import { sessionStorageKey } from "../constants/theme-presets";
 import {
   appendOptimisticUserMessage,
@@ -18,6 +25,7 @@ import {
 import {
   activeConnections,
   advisorDraftsFromSession,
+  characterOverridesFromSession,
 } from "../utils/ui-helpers";
 
 export interface SessionActionsState {
@@ -34,8 +42,9 @@ export interface SessionActionsState {
   restoreSession: (nextSession: ClientSessionState) => void;
   startSession: (
     scenarioId: string,
-    personaName?: string,
+    persona?: string | SessionPersonaInput,
     advisorDrafts?: AdvisorDraft[],
+    characterOverrides?: CharacterOverrideInput[],
   ) => Promise<boolean>;
   submitEngineInput: (content: string, mode: InputMode) => Promise<boolean>;
   reroll: () => Promise<void>;
@@ -86,8 +95,9 @@ export function useSessionActions(
 
   async function startSession(
     scenarioId: string,
-    personaName?: string,
+    persona?: string | SessionPersonaInput,
     advisorDrafts?: AdvisorDraft[],
+    characterOverrides?: CharacterOverrideInput[],
   ): Promise<boolean> {
     setIsStarting(true);
     setError(null);
@@ -95,9 +105,10 @@ export function useSessionActions(
     try {
       const nextSession = await createSessionV2(
         scenarioId,
-        personaName || undefined,
+        persona,
         advisorDrafts,
         activeConnections(connections, connectionAuth),
+        characterOverrides,
       );
       setSession(nextSession);
       setLastBoundaryReport(null);
@@ -191,11 +202,13 @@ export function useSessionActions(
     setError(null);
     try {
       const restartAdvisors = advisorDraftsFromSession(session);
+      const restartCharacterOverrides = characterOverridesFromSession(session);
       const nextSession = await createSessionV2(
         session.scenario.id,
-        session.persona.name || undefined,
+        session.persona,
         restartAdvisors.length > 0 ? restartAdvisors : undefined,
         activeConnections(connections, connectionAuth),
+        restartCharacterOverrides.length > 0 ? restartCharacterOverrides : undefined,
       );
       setSession(nextSession);
       setLastBoundaryReport(null);

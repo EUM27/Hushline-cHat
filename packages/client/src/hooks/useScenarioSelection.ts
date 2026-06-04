@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getScenarioDetail, listScenarios, type V2ScenarioDetailResponse } from "../api-v2";
 
-export type SetupStep = "scenario" | "persona" | "advisors";
+export type SetupStep = "scenario" | "persona";
 
 export interface ScenarioSelectionState {
   setupStep: SetupStep;
@@ -32,6 +32,7 @@ export function useScenarioSelection(onDetailError?: (message: string | null) =>
       .then((scenarios) => {
         if (!cancelled) {
           setScenarioList(scenarios);
+          setSelectedScenario((current) => current || scenarios[0] || "");
         }
       })
       .catch((reason: unknown) => {

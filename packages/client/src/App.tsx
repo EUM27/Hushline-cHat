@@ -1,21 +1,30 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  AdvisorDraft,
-  InputMode,
-} from "@hushline/shared";
+import type { InputMode } from "@hushline/shared";
 import { resolveCharacterExpressionPose } from "./character-expression";
-import type { ConnectionSlot, VisualThemeId } from "./types/ui";
+import type { ConnectionSlot, PersonaDraft, VisualThemeId } from "./types/ui";
 import {
   visualThemeOrder,
   visualThemePresets,
 } from "./constants/theme-presets";
 import {
   buildConnectionSlots,
-  createAdvisorDrafts,
   findBackgroundUrl,
+  getSessionShellMode,
   getConnectionStatus,
   loadEnterToSend,
+  activeConnections,
 } from "./utils/ui-helpers";
+import {
+  generatePersonaDraftV2,
+  listCharacterCards,
+  listPersonaProfiles,
+  savePersonaProfile,
+  type CharacterCardLibraryEntry,
+  type CharacterOverrideInput,
+  type ImportedCharacterCard,
+  type PersonaLibraryEntry,
+  type ReusablePersonaProfile,
+} from "./api-v2";
 import { PhoneSubScreen } from "./components/PhoneSubScreen";
 import { VisualNovelMainScreen } from "./components/VisualNovelMainScreen";
 import { ConnectionPanel } from "./components/ConnectionPanel";
@@ -25,7 +34,6 @@ import { AppToolStrip } from "./components/AppToolStrip";
 import { ScenarioShell } from "./components/ScenarioShell";
 import { ScenarioSetupPanel } from "./components/setup/ScenarioSetupPanel";
 import { PersonaSetupPanel } from "./components/setup/PersonaSetupPanel";
-import { AdvisorSetupPanel } from "./components/setup/AdvisorSetupPanel";
 import { useBootData } from "./hooks/useBootData";
 import { useScenarioSelection } from "./hooks/useScenarioSelection";
 import { useModelConnections } from "./hooks/useModelConnections";
@@ -33,9 +41,28 @@ import { useSessionActions } from "./hooks/useSessionActions";
 
 const defaultInputMode: InputMode = "chat";
 
+function createEmptyPersonaDraft(): PersonaDraft {
+  return {
+    name: "",
+    shortName: "",
+    role: "",
+    description: "",
+    appearance: "",
+    relationshipTags: [],
+  };
+}
+
 export function App() {
-  const [personaDraft, setPersonaDraft] = useState({ name: "" });
-  const [advisorDrafts, setAdvisorDrafts] = useState<AdvisorDraft[]>(() => createAdvisorDrafts());
+  const [personaDraft, setPersonaDraft] = useState<PersonaDraft>(() => createEmptyPersonaDraft());
+  const [personaPrompt, setPersonaPrompt] = useState("");
+  const [relationshipTagText, setRelationshipTagText] = useState("");
+  const [isGeneratingPersona, setIsGeneratingPersona] = useState(false);
+  const [personaGenerationError, setPersonaGenerationError] = useState<string | null>(null);
+  const [characterOverrides, setCharacterOverrides] = useState<Record<string, ImportedCharacterCard>>({});
+  const [savedPersonaProfiles, setSavedPersonaProfiles] = useState<PersonaLibraryEntry[]>([]);
+  const [savedCharacterCards, setSavedCharacterCards] = useState<CharacterCardLibraryEntry[]>([]);
+  const [isSavingPersona, setIsSavingPersona] = useState(false);
+  const [libraryStatus, setLibraryStatus] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [actionInput, setActionInput] = useState("");
   const [enterToSend, setEnterToSend] = useState(() => loadEnterToSend());
@@ -104,6 +131,10 @@ export function App() {
   }, [bootError]);
 
   useEffect(() => {
+    void refreshProfileLibraries();
+  }, []);
+
+  useEffect(() => {
     if (!restoredSession) {
       return;
     }
@@ -127,11 +158,9 @@ export function App() {
     [session, selectedScenarioDetail],
   );
 
-  const isSceneOpen = Boolean(session?.scene.hasEnteredScene);
   const backgroundUrl = findBackgroundUrl(assets, session?.scene.backgroundId);
   const visibleMessages = session?.messages.slice(0, revealedMessageCount) ?? [];
   const messageRevealInProgress = Boolean(session && revealedMessageCount < session.messages.length);
-  const isOpeningSequence = Boolean(session && session.scene.turnNumber === 0);
   const activeCharacter = session?.characters.find(
     (character) => character.id === session.scene.activeSpeakerId,
   );
@@ -146,11 +175,7 @@ export function App() {
     activeCharacter?.anonymousLabel ?? activeCharacter?.name ?? latestSpeakerLabel ?? "단톡방";
   const visualTheme = visualThemePresets[visualThemeId];
   const shellMode = session
-    ? isOpeningSequence
-      ? "invitation-open"
-      : isSceneOpen
-        ? "scene-open"
-        : "messenger-open"
+    ? getSessionShellMode(session)
     : `setup-open ${setupStep}-step`;
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, _mode: "chat" | "action") {
@@ -170,26 +195,115 @@ export function App() {
     event.preventDefault();
     if (!selectedScenario) return;
 
-    const hasAdvisors = (selectedScenarioDetail?.characters.length ?? 0) > 0;
-    if (!hasAdvisors) {
-      setSetupStep("advisors");
-      return;
-    }
-
-    void startSession(selectedScenario, personaDraft.name || undefined);
+    void startSession(selectedScenario, personaDraft, undefined, buildCharacterOverrides(characterOverrides));
   }
 
-  async function handleStart(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isStarting) {
+  function handleScenarioSelect(scenarioId: string) {
+    if (scenarioId !== selectedScenario) {
+      setCharacterOverrides({});
+    }
+    setSelectedScenario(scenarioId);
+  }
+
+  function handleCharacterOverride(targetId: string, character: ImportedCharacterCard) {
+    setCharacterOverrides((current) => ({
+      ...current,
+      [targetId]: character,
+    }));
+    void refreshProfileLibraries();
+  }
+
+  function handleCharacterOverrideClear(targetId: string) {
+    setCharacterOverrides((current) => {
+      const next = { ...current };
+      delete next[targetId];
+      return next;
+    });
+  }
+
+  async function refreshProfileLibraries() {
+    const [personas, characterCards] = await Promise.all([
+      listPersonaProfiles(),
+      listCharacterCards(),
+    ]);
+    setSavedPersonaProfiles(personas);
+    setSavedCharacterCards(characterCards);
+  }
+
+  function handlePersonaDraftChange(patch: Partial<PersonaDraft>) {
+    setPersonaDraft((current) => ({ ...current, ...patch }));
+    if (patch.relationshipTags) {
+      setRelationshipTagText(patch.relationshipTags.join(", "));
+    }
+  }
+
+  function handleRelationshipTagTextChange(value: string) {
+    setRelationshipTagText(value);
+    setPersonaDraft((current) => ({
+      ...current,
+      relationshipTags: parseRelationshipTagText(value),
+    }));
+  }
+
+  async function handleGeneratePersona() {
+    const prompt = personaPrompt.trim();
+    if (!prompt || isGeneratingPersona) {
       return;
     }
 
-    await startSession(
-      selectedScenario || "school-life-anomaly",
-      personaDraft.name || undefined,
-      advisorDrafts,
-    );
+    setIsGeneratingPersona(true);
+    setPersonaGenerationError(null);
+    try {
+      const active = activeConnections(connections, {
+        chatGptOAuthConnected: oauthAccount?.connected === true,
+      });
+      const result = await generatePersonaDraftV2(prompt, active.default);
+      const generatedDraft: PersonaDraft = {
+        name: result.persona.name,
+        shortName: result.persona.shortName ?? result.persona.name,
+        role: result.persona.role,
+        description: result.persona.description ?? "",
+        appearance: result.persona.appearance ?? "",
+        ...(personaDraft.portraitUrl ? { portraitUrl: personaDraft.portraitUrl } : {}),
+        relationshipTags: result.persona.relationshipTags,
+      };
+      setPersonaDraft(generatedDraft);
+      setRelationshipTagText(generatedDraft.relationshipTags.join(", "));
+    } catch (reason: unknown) {
+      setPersonaGenerationError(reason instanceof Error ? reason.message : "페르소나 초안 생성 실패");
+    } finally {
+      setIsGeneratingPersona(false);
+    }
+  }
+
+  async function handleSavePersonaProfile() {
+    const name = personaDraft.name.trim();
+    if (!name || isSavingPersona) {
+      setLibraryStatus("표시 이름을 입력한 뒤 저장할 수 있습니다.");
+      return;
+    }
+
+    setIsSavingPersona(true);
+    setLibraryStatus(null);
+    try {
+      await savePersonaProfile({
+        label: name,
+        persona: personaDraftToReusableProfile(personaDraft),
+      });
+      await refreshProfileLibraries();
+      setLibraryStatus("페르소나 저장됨");
+    } catch (reason: unknown) {
+      setLibraryStatus(reason instanceof Error ? reason.message : "페르소나 저장 실패");
+    } finally {
+      setIsSavingPersona(false);
+    }
+  }
+
+  function handleApplyPersonaProfile(profile: ReusablePersonaProfile) {
+    const nextDraft = reusableProfileToPersonaDraft(profile);
+    setPersonaDraft(nextDraft);
+    setRelationshipTagText(nextDraft.relationshipTags.join(", "));
+    setLibraryStatus("페르소나 불러옴");
   }
 
   async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
@@ -232,6 +346,7 @@ export function App() {
     setIsConnectionPanelOpen(false);
     setIsDevPanelOpen(false);
     resetScenarioSelection();
+    setCharacterOverrides({});
   }
 
   const connectionPanel = (
@@ -400,28 +515,34 @@ export function App() {
             scenarioListError={scenarioListError}
             selectedScenario={selectedScenario}
             selectedScenarioDetail={selectedScenarioDetail}
+            characterOverrides={characterOverrides}
+            characterLibrary={savedCharacterCards}
             error={error}
-            onSelectScenario={setSelectedScenario}
+            onSelectScenario={handleScenarioSelect}
+            onCharacterOverride={handleCharacterOverride}
+            onCharacterOverrideClear={handleCharacterOverrideClear}
             onNext={() => setSetupStep("persona")}
           />
-        ) : setupStep === "persona" ? (
+        ) : (
           <PersonaSetupPanel
-            personaName={personaDraft.name}
-            hasScenarioAdvisors={(selectedScenarioDetail?.characters.length ?? 0) > 0}
+            personaDraft={personaDraft}
+            personaPrompt={personaPrompt}
+            relationshipTagText={relationshipTagText}
+            savedPersonaProfiles={savedPersonaProfiles}
             isStarting={isStarting}
+            isGeneratingPersona={isGeneratingPersona}
+            isSavingPersona={isSavingPersona}
             error={error}
-            onNameChange={(name) => setPersonaDraft((current) => ({ ...current, name }))}
+            personaGenerationError={personaGenerationError}
+            libraryStatus={libraryStatus}
+            onDraftChange={handlePersonaDraftChange}
+            onPersonaPromptChange={setPersonaPrompt}
+            onRelationshipTagTextChange={handleRelationshipTagTextChange}
+            onGeneratePersona={handleGeneratePersona}
+            onSavePersona={handleSavePersonaProfile}
+            onApplyPersonaProfile={handleApplyPersonaProfile}
             onBack={() => setSetupStep("scenario")}
             onSubmit={handlePersonaContinue}
-          />
-        ) : (
-          <AdvisorSetupPanel
-            advisors={advisorDrafts}
-            isStarting={isStarting}
-            error={error}
-            onBack={() => setSetupStep("persona")}
-            onRegenerate={() => setAdvisorDrafts(createAdvisorDrafts())}
-            onSubmit={handleStart}
           />
         )}
 
@@ -450,4 +571,47 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function parseRelationshipTagText(value: string): string[] {
+  return value
+    .split(/[,\n]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function buildCharacterOverrides(
+  overrides: Record<string, ImportedCharacterCard>,
+): CharacterOverrideInput[] | undefined {
+  const entries = Object.entries(overrides);
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return entries.map(([targetId, character]) => ({ targetId, character }));
+}
+
+function personaDraftToReusableProfile(draft: PersonaDraft): ReusablePersonaProfile {
+  return {
+    name: draft.name.trim(),
+    ...(draft.shortName.trim() ? { shortName: draft.shortName.trim() } : {}),
+    ...(draft.role.trim() ? { role: draft.role.trim() } : {}),
+    ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+    ...(draft.appearance.trim() ? { appearance: draft.appearance.trim() } : {}),
+    ...(draft.portraitUrl?.trim() ? { portraitUrl: draft.portraitUrl.trim() } : {}),
+    relationshipTags: [...draft.relationshipTags],
+  };
+}
+
+function reusableProfileToPersonaDraft(profile: ReusablePersonaProfile): PersonaDraft {
+  return {
+    name: profile.name,
+    shortName: profile.shortName ?? profile.name,
+    role: profile.role ?? "",
+    description: profile.description ?? "",
+    appearance: profile.appearance ?? "",
+    ...(profile.portraitUrl ? { portraitUrl: profile.portraitUrl } : {}),
+    relationshipTags: [...profile.relationshipTags],
+  };
 }

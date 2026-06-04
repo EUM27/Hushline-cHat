@@ -5,7 +5,9 @@ import type {
   PrivateHandout,
   PublicContext,
   ScenarioPack,
+  SessionStateV2,
 } from "@hushline/shared";
+import { buildCharacterPersonaBrief } from "../context-builder";
 import { invokeCharacter } from "../character";
 
 describe("character prompt boundaries", () => {
@@ -186,8 +188,10 @@ describe("character prompt boundaries", () => {
       connection(),
     );
 
-    expect(capturedSystemPrompt).toContain("[사용자/플레이어]");
-    expect(capturedSystemPrompt).toContain("{{user}}는 사용자/플레이어다.");
+    expect(capturedSystemPrompt).toContain("[상대 인물 정보]");
+    expect(capturedSystemPrompt).toContain("표시: 상대 인물");
+    expect(capturedSystemPrompt).not.toContain("[사용자/플레이어]");
+    expect(capturedSystemPrompt).not.toContain("{{user}}는 사용자/플레이어다.");
     expect(capturedSystemPrompt).toContain("[그룹 인물 목록]");
     expect(capturedSystemPrompt).toContain("강무진: 현재 API 호출 대상");
     expect(capturedSystemPrompt).toContain("윤서하: 독립 캐릭터");
@@ -231,10 +235,10 @@ describe("character prompt boundaries", () => {
       connection(),
     );
 
-    expect(capturedSystemPrompt).toContain("사용자 표시명은 시스템/UI용 메타 정보다.");
-    expect(capturedSystemPrompt).toContain("사용자 표시명(메타/UI): 정해윤");
-    expect(capturedSystemPrompt).toContain("이 캐릭터는 정해윤이라는 이름을 아직 소개받지 않았다.");
-    expect(capturedSystemPrompt).toContain("미소개 상태에서는 정해윤을 발화에 쓰지 않는다.");
+    expect(capturedSystemPrompt).toContain("[상대 인물 정보]");
+    expect(capturedSystemPrompt).toContain("표시: 상대 인물");
+    expect(capturedSystemPrompt).toContain("이름 공개 상태: 미소개. 이름을 추측하거나 발화하지 않는다.");
+    expect(capturedSystemPrompt).not.toContain("정해윤");
     expect(capturedSystemPrompt).not.toContain("현재 사용자 표시명: 정해윤");
     expect(capturedUserPayload).toContain("[{{user}}]: ……정말 골치 아프네요. 전화도 안 됩니다.");
     expect(capturedUserPayload).not.toContain("정해윤");
@@ -260,8 +264,50 @@ describe("character prompt boundaries", () => {
       connection(),
     );
 
-    expect(capturedSystemPrompt).toContain("사용자 표시명(메타/UI): 정해윤");
-    expect(capturedSystemPrompt).toContain("이 캐릭터는 정해윤이라는 이름을 들어 알고 있다.");
+    expect(capturedSystemPrompt).toContain("[상대 인물 정보]");
+    expect(capturedSystemPrompt).toContain("표시: 정해윤");
+    expect(capturedSystemPrompt).toContain("이름 공개 상태: 장면 안에서 호칭을 들은 상태다.");
+  });
+
+  test("frames expanded persona as a scene counterpart without meta labels", async () => {
+    let capturedSystemPrompt = "";
+    globalThis.fetch = captureSystemPrompt((prompt) => {
+      capturedSystemPrompt = prompt;
+      return "처음 보는 얼굴이네.";
+    });
+    const persona: SessionStateV2["persona"] = {
+      id: "user",
+      name: "정해윤",
+      shortName: "해윤",
+      role: "공유주택에 막 들어온 새 입주자",
+      description: "경계심이 있지만 사람을 밀어내지는 않는다.",
+      appearance: "비에 젖은 회색 후드와 낡은 운동화를 신고 있다.",
+      relationshipTags: ["new-tenant", "keeps-distance"],
+    };
+
+    await invokeCharacter(
+      character("kang-minjae", "강민재", "민재"),
+      handout("kang-minjae", "전 세입자와의 다툼을 숨기고 있다."),
+      "낯선 새 입주자를 경계하되 대화를 끊지는 않는다.",
+      "chat",
+      "여기가 2층 방 맞나요?",
+      publicContext(),
+      [],
+      "정해윤",
+      pack([character("kang-minjae", "강민재", "민재")]),
+      connection(),
+      undefined,
+      buildCharacterPersonaBrief(persona, false),
+    );
+
+    const personaSection = sectionBetween(capturedSystemPrompt, "[상대 인물 정보]", "[그룹 인물 목록]");
+    expect(personaSection).toContain("표시: 상대 인물");
+    expect(personaSection).toContain("공개 역할: 공유주택에 막 들어온 새 입주자");
+    expect(personaSection).toContain("공개 설명: 경계심이 있지만 사람을 밀어내지는 않는다.");
+    expect(personaSection).toContain("관찰 가능한 외형: 비에 젖은 회색 후드와 낡은 운동화를 신고 있다.");
+    expect(personaSection).toContain("관계 태그: new-tenant, keeps-distance");
+    expect(personaSection).not.toContain("정해윤");
+    expect(personaSection).not.toMatch(/사용자|플레이어|유저|User Persona/);
   });
 });
 
@@ -294,6 +340,15 @@ function capturePayload(reply: (payload: { systemPrompt: string; userPayload: st
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }) as typeof fetch;
+}
+
+function sectionBetween(text: string, start: string, end: string): string {
+  const startIndex = text.indexOf(start);
+  const endIndex = text.indexOf(end, startIndex + start.length);
+  if (startIndex < 0 || endIndex < 0) {
+    return "";
+  }
+  return text.slice(startIndex, endIndex);
 }
 
 function connection(): ModelConnection {
