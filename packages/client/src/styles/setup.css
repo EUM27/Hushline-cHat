@@ -772,6 +772,17 @@
   margin: 0;
 }
 
+.character-import-status,
+.card-import-status {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--setup-accent, var(--color-brand-emerald-500)) 36%, var(--setup-border, var(--color-border-default)));
+  border-radius: var(--radius-sm);
+  background: var(--setup-accent-soft, var(--color-brand-emerald-100));
+  color: var(--setup-text, var(--color-text-primary));
+  font: var(--font-label-xs);
+}
+
 .character-library-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--space-8) * 4)), 1fr));

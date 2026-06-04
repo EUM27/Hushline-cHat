@@ -1,6 +1,6 @@
 # Hushline cHat Project Plan
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
 이 문서는 여러 Codex 스레드가 동시에 열려 있을 때 가장 먼저 읽는 상태판이다. 상세 설계와 보드가 따로 있어도, 현재 프로젝트가 어디까지 왔고 다음에 무엇을 해야 하는지는 여기서 확인한다.
 
@@ -20,7 +20,7 @@ Last updated: 2026-06-03
 - Workspace: `D:\Hushline cHat`
 - Branch: `codex/shared-house-romance-visuals`
 - Root `plan.md`: newly created on 2026-05-31
-- Latest feature commit on branch: `de3423b feat: add reusable character card imports`
+- Latest feature area on branch: reusable character-card/persona library, including `de3423b feat: add reusable character card imports` and import-status feedback follow-up.
 - Staged files at snapshot time: none
 - Merge conflicts at snapshot time: none
 - Dirty files at snapshot time: present; this checkout contains mixed local WIP, so inspect `git status --short` before staging and avoid bulk staging. Current leftover WIP includes OAuth/login files, untracked audit output, and untracked asset test work.
@@ -64,10 +64,11 @@ Observed done or in progress:
 - [x] Session restart rebuilds fixed-cast character overrides from the current session snapshot so imported characters survive restart flow.
 - [x] Product Design re-audit captured the scenario setup, character-card import controls, persona preview, and mobile setup layout after the UI pass.
 - [x] Real PNG card imports were verified against the user-provided Antonio, Nikolai, and Eduardo sample cards.
+- [x] Character-card import/apply states now expose visible, polite live status feedback in the standalone import preview and scenario cast setup flow.
 
 Remaining:
 
-- [ ] Add an import-success status or `aria-live` confirmation so saved-card feedback is visible without watching the network panel.
+- [x] Add an import-success status or `aria-live` confirmation so saved-card feedback is visible without watching the network panel.
 - [ ] Review the populated library state with several saved cards, not only the empty-library state.
 - [ ] Add library rename/delete/export UX if this becomes a managed library rather than a simple reusable cache.
 - [ ] Decide whether local persona portrait uploads should become durable assets; current durable path stores URL fields, not uploaded image binaries.
@@ -80,6 +81,8 @@ Verification:
 - `corepack pnpm --filter @hushline/client check` - pass.
 - `corepack pnpm --filter @hushline/client build` - pass.
 - `git diff --check` - pass.
+- `corepack pnpm --filter @hushline/client exec bun test src/__tests__/scenario-character-import.test.ts tests/app-shell-components.test.tsx` - pass, 10 tests.
+- `git diff --check -- packages/client/src/components/setup/CharacterCardImport.tsx packages/client/src/components/setup/ScenarioSetupPanel.tsx packages/client/src/styles/setup.css packages/client/tests/app-shell-components.test.tsx` - pass.
 - Product Design re-audit report: `output/product-design-audits/2026-06-03-hushline-character-card-re-audit/audit-report.md`.
 - Browser capture on `http://127.0.0.1:4187/` with API health on `http://127.0.0.1:7871/api/health`: scenario setup shows saved character-card load controls and empty state; persona setup shows saved-persona selector and current-persona save button. Native file picker automation was not available, so PNG import compatibility was verified through route-level test data and saved JSON evidence in the audit output.
 
@@ -206,7 +209,7 @@ Remaining:
 1. Push the updated `codex/shared-house-romance-visuals` branch and update PR #1 so the reusable character-card/persona library work is visible to reviewers.
 2. Do not mix the remaining OAuth/login WIP into the reusable-library PR unless that separate slice is explicitly selected and verified.
 3. If review wants more runtime confidence, browser-smoke persona setup, scene-first opening, and the no-user-echo phone messenger case on the active local app.
-4. Next product slice: pick one bounded follow-up, preferably import-success feedback, populated library-state review, library rename/delete/export UX, durable uploaded portrait assets, `ThemeProvider` / `data-theme`, Glass Messenger default, or persona setup tag-chip UX.
+4. Next product slice: pick one bounded follow-up, preferably populated library-state review, library rename/delete/export UX, durable uploaded portrait assets, `ThemeProvider` / `data-theme`, Glass Messenger default, or persona setup tag-chip UX.
 5. If user asks "현상황의 잔여 과제와 다음 작업", answer from this `Priority Queue` plus fresh `git status --short`.
 6. Theme next task: pick the next bounded slice from `.kiro/specs/multi-agent-turn-engine/theme-concepts-plan.md` instead of expanding all 8 themes at once.
 

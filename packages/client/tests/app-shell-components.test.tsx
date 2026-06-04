@@ -113,6 +113,30 @@ describe("app shell component modules", () => {
     expect(html).toContain("강무진 슬롯에 적용");
   });
 
+  test("character card import preview announces a loaded card", () => {
+    const html = renderToStaticMarkup(
+      <CharacterCardImport
+        targetLabel="강무진"
+        preview={{
+          character: makeImportedCharacterCard({ name: "Antonio", role: "Retired consigliere" }),
+          metadata: makeSourceMetadata({
+            sourceFileName: "Antonio.png",
+            sourceFormat: "png-chara-v2",
+            cardSpec: "chara_card_v2",
+            creator: "darkmountain",
+            extensionKeys: ["janitor"],
+            hasFirstMessage: true,
+          }),
+        }}
+        onApply={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain("Antonio 카드를 불러왔습니다.");
+  });
+
   test("scenario setup shows imported card state for a cast slot", () => {
     const html = renderToStaticMarkup(
       <ScenarioSetupPanel
@@ -136,6 +160,30 @@ describe("app shell component modules", () => {
     expect(html).toContain("Antonio");
     expect(html).toContain("외부 카드 적용됨");
     expect(html).toContain("기본값으로 되돌리기");
+  });
+
+  test("scenario setup announces applied external card count", () => {
+    const html = renderToStaticMarkup(
+      <ScenarioSetupPanel
+        scenarioList={["locked-room-mystery"]}
+        isScenarioListLoading={false}
+        scenarioListError={null}
+        selectedScenario="locked-room-mystery"
+        selectedScenarioDetail={makeScenarioDetail()}
+        characterOverrides={{
+          "kang-mujin": makeImportedCharacterCard({ name: "Antonio", role: "Imported Janitor card" }),
+        }}
+        characterLibrary={[]}
+        error={null}
+        onSelectScenario={() => undefined}
+        onCharacterOverride={() => undefined}
+        onCharacterOverrideClear={() => undefined}
+        onNext={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain("외부 캐릭터 카드 1개 적용됨");
   });
 
   test("scenario setup explains empty reusable character-card library", () => {

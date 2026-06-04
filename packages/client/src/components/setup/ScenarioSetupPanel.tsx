@@ -41,11 +41,22 @@ export function ScenarioSetupPanel({
   const pendingCharacterIdRef = useRef<string | null>(null);
   const [importingCharacterId, setImportingCharacterId] = useState<string | null>(null);
   const [characterImportError, setCharacterImportError] = useState<string | null>(null);
+  const [characterImportStatus, setCharacterImportStatus] = useState<string | null>(null);
   const [libraryTargetId, setLibraryTargetId] = useState("");
   const [libraryCardId, setLibraryCardId] = useState("");
+  const appliedOverrideCount = Object.keys(characterOverrides).length;
+  const displayedImportStatus =
+    characterImportStatus ?? (appliedOverrideCount > 0 ? `외부 캐릭터 카드 ${appliedOverrideCount}개 적용됨` : null);
+
+  function handleScenarioSelect(packId: string) {
+    setCharacterImportError(null);
+    setCharacterImportStatus(null);
+    onSelectScenario(packId);
+  }
 
   function handleCharacterClick(characterId: string) {
     setCharacterImportError(null);
+    setCharacterImportStatus(null);
     beginCharacterCardImport(pendingCharacterIdRef, characterId, () => cardInputRef.current?.click());
   }
 
@@ -60,8 +71,12 @@ export function ScenarioSetupPanel({
     try {
       const imported = await importCharacterCard(file);
       onCharacterOverride(targetId, imported.character);
+      setCharacterImportStatus(
+        `${imported.character.name} 카드를 ${formatTargetLabel(selectedScenarioDetail, targetId)} 슬롯에 적용했습니다.`,
+      );
     } catch (reason) {
       setCharacterImportError(reason instanceof Error ? reason.message : "캐릭터 카드를 불러오지 못했습니다.");
+      setCharacterImportStatus(null);
     } finally {
       setImportingCharacterId(null);
       pendingCharacterIdRef.current = null;
@@ -74,7 +89,15 @@ export function ScenarioSetupPanel({
     if (!targetId || !selected) return;
 
     onCharacterOverride(targetId, selected.character);
+    setCharacterImportStatus(
+      `${selected.name} 카드를 ${formatTargetLabel(selectedScenarioDetail, targetId)} 슬롯에 적용했습니다.`,
+    );
     setLibraryCardId("");
+  }
+
+  function handleClearCharacterOverride(targetId: string) {
+    onCharacterOverrideClear(targetId);
+    setCharacterImportStatus(`${formatTargetLabel(selectedScenarioDetail, targetId)} 슬롯을 기본 인물로 되돌렸습니다.`);
   }
 
   return (
@@ -103,7 +126,7 @@ export function ScenarioSetupPanel({
                 key={packId}
                 type="button"
                 className={`scenario-choice-card ${selectedScenario === packId ? "selected" : ""}`}
-                onClick={() => onSelectScenario(packId)}
+                onClick={() => handleScenarioSelect(packId)}
               >
                 <span className="scenario-choice-no">{String(index + 1).padStart(2, "0")}</span>
                 <strong>{formatScenarioLabel(packId)}</strong>
@@ -154,7 +177,7 @@ export function ScenarioSetupPanel({
                           {isImporting ? "불러오는 중..." : "카드 가져오기"}
                         </button>
                         {override ? (
-                          <button type="button" onClick={() => onCharacterOverrideClear(char.id)}>
+                          <button type="button" onClick={() => handleClearCharacterOverride(char.id)}>
                             기본값으로 되돌리기
                           </button>
                         ) : null}
@@ -219,6 +242,11 @@ export function ScenarioSetupPanel({
                 hidden
                 onChange={(event) => void handleCharacterFileChange(event)}
               />
+              {displayedImportStatus ? (
+                <p className="character-import-status" role="status" aria-live="polite">
+                  {displayedImportStatus}
+                </p>
+              ) : null}
               {characterImportError ? <p className="error-line setup-error">{characterImportError}</p> : null}
             </>
           ) : (
@@ -255,4 +283,8 @@ function formatLibrarySource(entry: CharacterCardLibraryEntry): string {
   const creator = entry.sourceMetadata?.creator;
   const source = entry.sourceMetadata?.sourceFormat ?? "saved";
   return creator ? `${creator} · ${source}` : source;
+}
+
+function formatTargetLabel(detail: V2ScenarioDetailResponse | null, targetId: string): string {
+  return detail?.characters.find((character) => character.id === targetId)?.name ?? targetId;
 }

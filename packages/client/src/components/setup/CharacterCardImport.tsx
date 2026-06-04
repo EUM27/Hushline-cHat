@@ -16,6 +16,11 @@ export function CharacterCardImport({ targetLabel, preview, onImported, onApply 
   const [error, setError] = useState<string | null>(null);
   const [localPreview, setLocalPreview] = useState<ImportedCharacterCardResult | null>(null);
   const activePreview = preview ?? localPreview;
+  const importStatus = activePreview
+    ? `${activePreview.character.name} 카드를 불러왔습니다.${
+        activePreview.characterCard ? " 저장된 카드 목록에도 추가됐습니다." : ""
+      }`
+    : null;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -59,6 +64,11 @@ export function CharacterCardImport({ targetLabel, preview, onImported, onApply 
       />
 
       {error ? <p className="error-line card-import-error">{error}</p> : null}
+      {importStatus ? (
+        <p className="card-import-status" role="status" aria-live="polite">
+          {importStatus}
+        </p>
+      ) : null}
 
       {activePreview ? (
         <article className="card-import-preview">
